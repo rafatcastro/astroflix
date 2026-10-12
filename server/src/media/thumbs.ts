@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { hasFfmpeg, probeDurationSec, extractFrame } from './ffmpeg';
@@ -25,6 +25,21 @@ export function courseCoverPath(config: AppConfig, courseId: string): string {
 }
 
 
+// Escreve em arquivo temporário na mesma pasta e renomeia: duas gravações da
+// mesma capa (segundo plano + sob demanda) ou uma leitura no meio nunca veem
+// um JPEG pela metade.
+export function gravarCapaAtomico(destino: string, bytes: Buffer): void {
+  mkdirSync(path.dirname(destino), { recursive: true });
+  const tmp = `${destino}.${process.pid}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    writeFileSync(tmp, bytes);
+    renameSync(tmp, destino);
+  } catch (e) {
+    rmSync(tmp, { force: true });
+    throw e;
+  }
+}
+
 // Duas requisições da mesma capa (estante + página do curso) não baixam duas vezes.
 const capasDriveEmAndamento = new Map<string, Promise<string | null>>();
 
@@ -36,8 +51,7 @@ async function capaDoDrive(db: Db, drive: ServicosDrive, row: any, lessonId: str
     if (!arquivo.thumbnailLink) return null;
     const bytes = await baixarImagemDoGoogle(deps, arquivo.thumbnailLink);
     if (!bytes) return null;
-    mkdirSync(path.dirname(out), { recursive: true });
-    writeFileSync(out, bytes);
+    gravarCapaAtomico(out, bytes);
     db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?').run(out, lessonId);
     return out;
   } catch {

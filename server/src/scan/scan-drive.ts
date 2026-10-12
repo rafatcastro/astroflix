@@ -4,7 +4,7 @@ import type { AppConfig } from '../config';
 import type { ClienteDrive } from '../drive/api';
 import type { Fetch, LinkDrive } from '../drive/tipos';
 import { walkDrive } from '../drive/walk';
-import { lessonThumbPath } from '../media/thumbs';
+import { gravarCapaAtomico, lessonThumbPath } from '../media/thumbs';
 import { deriveCourse } from './derive';
 import { aplicarReconcile, planReconcile, type ExistingLesson, type ReconcileResult } from './reconcile';
 import { inserirCursoDerivado, type ExtraRemoto } from './scan-course';
@@ -125,8 +125,7 @@ export async function baixarCapasFaltando(
       const bytes = await baixarImagemDoGoogle(deps, capas.get(aula.rel_path)!);
       if (!bytes) return;
       const destino = lessonThumbPath(deps.config, aula.id, aula.mtime);
-      fs.mkdirSync(deps.config.thumbsDir, { recursive: true });
-      fs.writeFileSync(destino, bytes);
+      gravarCapaAtomico(destino, bytes);
       gravar.run(destino, aula.id);
     } catch {
       // Uma capa que falha (link expirado, rede, disco) não pode bloquear o
