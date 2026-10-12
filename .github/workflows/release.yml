@@ -19,12 +19,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: npm }
-      - run: npm ci
-      - run: npm test
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
       - name: Build
-        run: npm run build
+        run: pnpm build
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
@@ -44,16 +45,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: npm }
-      - run: npm ci
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
       - name: Build
-        run: npm run build
+        run: pnpm build
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-      - run: npm run build:binario
+      - run: pnpm build:binario
 
       # O executável sai sempre com o mesmo nome; renomear aqui é o que permite
       # o instalador escolher o arquivo certo pelo nome.
@@ -77,10 +79,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
+          cache: pnpm
           registry-url: https://registry.npmjs.org
 
       # Antes de qualquer trabalho: se o segredo não estiver lá, é melhor saber
@@ -118,9 +121,9 @@ jobs:
             gh release create "${GITHUB_REF_NAME}" artefatos/* --generate-notes --title "${GITHUB_REF_NAME}"
           fi
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - name: Build
-        run: npm run build
+        run: pnpm build
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

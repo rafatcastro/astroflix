@@ -2,7 +2,7 @@
 // Define (ou audita) o repositório do projeto no GitHub.
 //
 //   npm run repo                       # mostra onde o nome aparece e se batem
-//   npm run repo -- usuario/projeto    # troca em todos os lugares de uma vez
+//   pnpm repo usuario/projeto    # troca em todos os lugares de uma vez
 //
 // O nome precisa aparecer em quatro arquivos por natureza: a metadata do npm, os
 // dois instaladores (que baixam das releases) e o README (que mostra o comando
@@ -62,10 +62,10 @@ if (!novo) {
   }
   for (const [repo, arquivos] of porRepo) console.log(`${repo}  →  ${[...arquivos].join(', ')}`);
   if (porRepo.size > 1) {
-    console.error('\nOs arquivos discordam entre si. Rode: npm run repo -- usuario/projeto');
+    console.error('\nOs arquivos discordam entre si. Rode: pnpm repo usuario/projeto');
     process.exit(1);
   }
-  console.log('\nconsistente. Para trocar: npm run repo -- usuario/projeto');
+  console.log('\nconsistente. Para trocar: pnpm repo usuario/projeto');
   process.exit(0);
 }
 
