@@ -14,6 +14,7 @@ export interface LessonDTO {
   orderIndex: number; durationSec: number | null; container: string;
   playable: boolean; missing: boolean;
   position: number; furthest: number; completed: boolean;
+  progressUpdatedAt: string | null;
 }
 export interface LessonFull extends LessonDTO {
   courseId: string; courseTitle: string; courseSource: 'local' | 'drive';
