@@ -65,7 +65,53 @@ export async function walkDrive(cliente: ClienteDrive, pastaId: string): Promise
   // faria a recursão nunca terminar; cada pasta é listada uma única vez.
   const visitadas = new Set<string>([raiz.id]);
 
-  const visitar = async (id: string, prefixo: string): Promise<void> => {
+  // Listar é a parte lenta (uma ida ao Google por pasta). As listagens correm
+  // em paralelo, mas só a LISTAGEM: a montagem do resultado e a decisão de
+  // "pasta já visitada" seguem a visita sequencial abaixo, na mesma ordem de
+  // sempre. Se a deduplicação dependesse de qual listagem termina primeiro, o
+  // relPath de uma pasta alcançável por real + atalho mudaria entre
+  // re-escaneamentos e levaria o progresso junto.
+  const SIMULTANEAS = 6;
+  let ativas = 0;
+  const espera: Array<() => void> = [];
+  const vaga = async (): Promise<void> => {
+    if (ativas < SIMULTANEAS) { ativas++; return; }
+    await new Promise<void>((ok) => espera.push(ok));
+  };
+  const liberar = (): void => {
+    const proximo = espera.shift();
+    if (proximo) proximo(); // a vaga passa direto para quem esperava
+    else ativas--;
+  };
+
+  interface Listagem { arquivos: Item[]; pastas: Item[] }
+  const listagens = new Map<string, Promise<Listagem>>();
+
+  const listar = async (id: string): Promise<Listagem> => {
+    await vaga();
+    try {
+      return await listarEResolver(id);
+    } finally {
+      liberar();
+    }
+  };
+
+  // Idempotente; ao terminar, já agenda as subpastas (fora da vaga, para a
+  // recursão não prender um slot). Pasta que a visita sequencial acabar
+  // pulando por duplicata é listada à toa, mas isso é só uma chamada a mais.
+  const agendar = (id: string): Promise<Listagem> => {
+    let p = listagens.get(id);
+    if (!p) {
+      p = listar(id);
+      listagens.set(id, p);
+      // Quem vai observar o erro é a visita; aqui só evita rejeição solta
+      // quando a pasta nunca chega a ser visitada (outro erro abortou antes).
+      p.then((l) => { for (const sub of l.pastas) agendar(sub.id); }, () => {});
+    }
+    return p;
+  };
+
+  const listarEResolver = async (id: string): Promise<Listagem> => {
     const filhos = await cliente.listarFilhos(id);
     const arquivos: Item[] = [];
     const pastas: Item[] = [];
@@ -92,6 +138,11 @@ export async function walkDrive(cliente: ClienteDrive, pastaId: string): Promise
       };
       (alvo.mimeType === PASTA ? pastas : arquivos).push(item);
     }
+    return { arquivos, pastas };
+  };
+
+  const visitar = async (id: string, prefixo: string): Promise<void> => {
+    const { arquivos, pastas } = await agendar(id);
 
     // Pasta alcançável por dois caminhos (real + atalho): quem chega primeiro
     // ganha o conteúdo, então a ordem de visita tem de ser determinística, ou o
