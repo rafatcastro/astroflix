@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type ImportPlan } from '../api/client';
+import { api, type CredencialDrive, type ImportPlan } from '../api/client';
 import { getPref, setPref } from '../lib/prefs';
 import DirPicker from '../components/DirPicker';
 import TextField from '../components/TextField';
@@ -60,6 +60,97 @@ function PreviaDoImport({ plan }: { plan: ImportPlan }) {
         </li>
       )}
     </ul>
+  );
+}
+
+const CAMPOS_DRIVE: { chave: CredencialDrive; rotulo: string; segredo?: boolean }[] = [
+  { chave: 'clientId', rotulo: 'ID do cliente OAuth' },
+  { chave: 'clientSecret', rotulo: 'Segredo do cliente OAuth', segredo: true },
+  { chave: 'apiKey', rotulo: 'Chave de API', segredo: true },
+];
+
+function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
+  const qc = useQueryClient();
+  const { data: status } = useQuery({ queryKey: ['driveStatus'], queryFn: api.driveStatus });
+  const [campos, setCampos] = useState<Record<CredencialDrive, string>>({ clientId: '', clientSecret: '', apiKey: '' });
+  const [salvando, setSalvando] = useState(false);
+
+  const desconectar = async () => {
+    try {
+      await api.driveDesconectar();
+      qc.invalidateQueries({ queryKey: ['driveStatus'] });
+      onNotice('Conta do Google desconectada.');
+    } catch {
+      onNotice('Falha ao desconectar. Tente novamente.');
+    }
+  };
+
+  const salvar = async () => {
+    // Campo vazio na API APAGA o valor; como os campos nascem vazios (o segredo nunca volta do
+    // servidor), mandamos só o que a pessoa digitou para não apagar o resto sem querer.
+    const preenchidos = Object.fromEntries(
+      Object.entries(campos).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, v.trim()]),
+    );
+    if (Object.keys(preenchidos).length === 0) return;
+    setSalvando(true);
+    try {
+      await api.driveSalvarCredenciais(preenchidos);
+      setCampos({ clientId: '', clientSecret: '', apiKey: '' });
+      qc.invalidateQueries({ queryKey: ['driveStatus'] });
+      onNotice('Credenciais do Google salvas.');
+    } catch {
+      onNotice('Falha ao salvar as credenciais. Tente novamente.');
+    }
+    setSalvando(false);
+  };
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Google Drive</h2>
+      <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        {status?.conectado ? (
+          <>
+            <span className="truncate">Conectado como {status.email}</span>
+            <button
+              type="button"
+              onClick={() => void desconectar()}
+              className="min-h-[44px] shrink-0 rounded px-3 text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              Desconectar
+            </button>
+          </>
+        ) : (
+          <span className="py-2 text-neutral-400">{status ? 'Nenhuma conta conectada' : 'Carregando…'}</span>
+        )}
+      </div>
+      <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        <summary className="min-h-[44px] cursor-pointer py-2 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+          Usar um app próprio do Google Cloud
+        </summary>
+        <div className="space-y-3 pb-2 pt-1">
+          {CAMPOS_DRIVE.map((c) => (
+            <label key={c.chave} className="block">
+              <span className="mb-1 block text-neutral-400">{c.rotulo}</span>
+              <TextField
+                type={c.segredo ? 'password' : 'text'}
+                autoComplete="off"
+                value={campos[c.chave]}
+                placeholder={status?.credenciais[c.chave] ? 'configurado' : ''}
+                onChange={(e) => setCampos((prev) => ({ ...prev, [c.chave]: e.target.value }))}
+              />
+            </label>
+          ))}
+          <button
+            type="button"
+            onClick={() => void salvar()}
+            disabled={salvando}
+            className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+          >
+            Salvar
+          </button>
+        </div>
+      </details>
+    </section>
   );
 }
 
@@ -209,6 +300,8 @@ export default function Settings() {
           </span>
         </label>
       </section>
+
+      <SecaoDrive onNotice={setNotice} />
 
       <section className="mb-8">
         <h2 className="mb-1 text-sm font-semibold text-neutral-300">Backup e migração</h2>

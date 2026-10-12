@@ -3,6 +3,7 @@ export interface CourseSummary {
   totalLessons: number; completedLessons: number; inProgressLessons: number;
   posterLessonId: string | null; lastActivityAt: string | null;
   collectionId: string | null;
+  source: 'local' | 'drive';
 }
 export interface LessonDTO {
   id: string; title: string; module: string | null; relPath: string;
@@ -11,7 +12,7 @@ export interface LessonDTO {
   position: number; furthest: number; completed: boolean;
 }
 export interface LessonFull extends LessonDTO {
-  courseId: string; courseTitle: string;
+  courseId: string; courseTitle: string; courseSource: 'local' | 'drive';
   prevLessonId: string | null; nextLessonId: string | null;
 }
 export interface ModuleDTO { name: string | null; lessons: LessonDTO[]; }
@@ -23,6 +24,7 @@ export interface CourseDetail {
   modules: ModuleDTO[];
   materials: MaterialDTO[];
   collectionId: string | null;
+  source: 'local' | 'drive';
 }
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
@@ -81,6 +83,37 @@ async function migrationFetch(url: string, init?: RequestInit): Promise<RepointS
   return (await res.json()) as RepointSummary;
 }
 
+export type CredencialDrive = 'clientId' | 'clientSecret' | 'apiKey';
+export interface DriveStatus { conectado: boolean; email: string | null; credenciais: Record<CredencialDrive, boolean>; }
+export type RespostaDrive =
+  | { tipo: 'criado'; id: string; existente: boolean }
+  | { tipo: 'autorizar'; url: string }
+  | { tipo: 'erro'; erro: string };
+
+// Falhas do Drive (sem acesso, cota, sem credenciais…) são resultados esperados que a interface
+// explica à pessoa; por isso voltam como valor em vez de exceção do jsonFetch.
+async function driveCriarCurso(link: string): Promise<RespostaDrive> {
+  let res: Response;
+  try {
+    res = await fetch('/api/drive/courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link }),
+    });
+  } catch {
+    return { tipo: 'erro', erro: 'sem-conexao' };
+  }
+  let corpo: { id?: string; existente?: boolean; precisaAutorizar?: boolean; url?: string; error?: string } = {};
+  try {
+    corpo = (await res.json()) as typeof corpo;
+  } catch {
+    // corpo ilegível: cai no erro genérico abaixo
+  }
+  if (res.ok && corpo.id) return { tipo: 'criado', id: corpo.id, existente: !!corpo.existente };
+  if (res.status === 401 && corpo.precisaAutorizar && corpo.url) return { tipo: 'autorizar', url: corpo.url };
+  return { tipo: 'erro', erro: corpo.error ?? 'google' };
+}
+
 export const api = {
   listCourses: (archived?: boolean) => jsonFetch<CourseSummary[]>(`/api/courses${archived ? '?archived=1' : ''}`),
   getCourse: (id: string) => jsonFetch<CourseDetail>(`/api/courses/${id}`),
@@ -131,6 +164,12 @@ export const api = {
   exportLibraryUrl: '/api/library/export',
   importPreview: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import/preview', { method: 'POST', body: JSON.stringify(data) }),
+  driveCriarCurso,
+  driveStatus: () => jsonFetch<DriveStatus>('/api/drive/status'),
+  driveDesconectar: () => jsonFetch<void>('/api/drive/auth', { method: 'DELETE' }),
+  driveSalvarCredenciais: (c: Partial<Record<CredencialDrive, string>>) =>
+    jsonFetch<void>('/api/drive/credenciais', { method: 'PUT', body: JSON.stringify(c) }),
+  driveIniciarAuth: () => jsonFetch<{ url: string }>('/api/drive/auth/iniciar', { method: 'POST' }),
   importLibrary: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import', { method: 'POST', body: JSON.stringify(data) }),
 };

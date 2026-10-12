@@ -5,6 +5,7 @@ import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
 import { percent } from '../lib/format';
 import DirPicker from '../components/DirPicker';
 import CourseCardMenu from '../components/CourseCardMenu';
+import DriveLinkModal from '../components/DriveLinkModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TextField from '../components/TextField';
 import { api, type BatchImportResult, type Collection, type CourseRoot, type CourseSummary } from '../api/client';
@@ -453,7 +454,7 @@ export default function Library() {
   };
   const { data: courses, isLoading, isError } = useCourses(tab === 'archived');
   const { data: collections } = useCollections();
-  const [picking, setPicking] = useState<null | 'single' | 'batch'>(null);
+  const [picking, setPicking] = useState<null | 'single' | 'batch' | 'drive'>(null);
   const [addMenu, setAddMenu] = useState(false);
   const [creatingCol, setCreatingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
@@ -608,6 +609,10 @@ export default function Library() {
             <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('batch'); }}>
               Pasta de cursos
               <div className="text-xs text-neutral-500">Cada subpasta com vídeos vira um curso</div>
+            </button>
+            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('drive'); }}>
+              Do Google Drive
+              <div className="text-xs text-neutral-500">Cole o link de uma pasta compartilhada</div>
             </button>
             <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setNewColName(''); setCreatingCol(true); }}>
               Nova coleção
@@ -966,6 +971,7 @@ export default function Library() {
       {picking === 'single' && (
         <DirPicker onClose={() => setPicking(null)} onPick={(path) => { setPicking(null); void doAddCourse(path); }} />
       )}
+      {picking === 'drive' && <DriveLinkModal onClose={() => setPicking(null)} />}
       {picking === 'batch' && (
         <DirPicker
           title="Escolha a pasta que contém os cursos"

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, type ReactNode, type PointerE
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PlaybackVerdict } from '../api/client';
+import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
 import { getPref, setPref } from '../lib/prefs';
 import PlaylistSidebar from '../components/PlaylistSidebar';
 import EndOfLessonCountdown from '../components/EndOfLessonCountdown';
@@ -84,6 +85,11 @@ export default function Lesson() {
   const [confirmCover, setConfirmCover] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Falha de vídeo do Drive explicada pelo servidor (autorização, cota, rede) e a chave que
+  // força o <video> a recarregar depois de reautorizar.
+  const [driveErro, setDriveErro] = useState<{ erro: string; texto: string } | null>(null);
+  const [videoKey, setVideoKey] = useState(0);
+  const [reautorizando, setReautorizando] = useState(false);
 
   const { data: lesson } = useQuery({ queryKey: ['lesson', id], queryFn: () => api.getLesson(id) });
 
@@ -392,9 +398,47 @@ export default function Lesson() {
 
   // O <video> falhou em algo que o flag dizia tocável — descobre o motivo real
   // e troca a tela preta por um estado acionável.
+  const ehDrive = lesson?.courseSource === 'drive';
   const onVideoError = useCallback(() => {
-    if (!verdict) void verifyPlayback();
-  }, [verdict, verifyPlayback]);
+    if (!ehDrive) {
+      if (!verdict) void verifyPlayback();
+      return;
+    }
+    // No Drive o <video> só vê "falhou"; o motivo real (autorização, cota, rede) vem no JSON do
+    // stream. Se não vier JSON, o arquivo chegou e o problema é o formato: segue o fluxo normal.
+    void (async () => {
+      try {
+        const r = await fetch(`/api/lessons/${id}/stream`, { headers: { Range: 'bytes=0-0' } });
+        if (!(r.headers.get('content-type') ?? '').includes('application/json')) throw new Error('sem-json');
+        const j = (await r.json()) as { error?: string };
+        if (j.error) {
+          if (mountedRef.current) setDriveErro({ erro: j.error, texto: mensagemErroDrive(j.error) });
+          return;
+        }
+      } catch {
+        // cai no veredito de formato abaixo
+      }
+      if (!verdict) void verifyPlayback();
+    })();
+  }, [ehDrive, id, verdict, verifyPlayback]);
+
+  const reautorizar = async () => {
+    setReautorizando(true);
+    try {
+      const { url } = await api.driveIniciarAuth();
+      const ok = await autorizarNoGoogle(url);
+      if (!mountedRef.current) return;
+      if (ok) {
+        setDriveErro(null);
+        setVideoKey((k) => k + 1);
+      } else {
+        showNotice('error', 'A autorização do Google não foi concluída.');
+      }
+    } catch (e) {
+      showNotice('error', mensagemErroDrive(e instanceof Error ? e.message : ''));
+    }
+    if (mountedRef.current) setReautorizando(false);
+  };
 
   // Flag já dizia não-tocável (selo do curso): busca o veredito com o motivo
   // e se é remuxável, para oferecer o botão certo.
@@ -493,13 +537,45 @@ export default function Lesson() {
     );
   }
 
+  if (driveErro) {
+    return (
+      <div className="grid h-screen place-items-center p-6 text-center">
+        <div className="max-w-md">
+          <div className="mb-2 text-lg font-medium" role="alert">{driveErro.texto}</div>
+          {notice && (
+            <p className="mb-4 text-sm text-amber-200" role="status">{notice.text}</p>
+          )}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            {driveErro.erro === 'nao-autorizado' && (
+              <button
+                type="button"
+                onClick={() => void reautorizar()}
+                disabled={reautorizando}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+              >
+                Autorizar de novo
+              </button>
+            )}
+            <button
+              type="button"
+              className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-neutral-800 px-4 text-neutral-200 transition-colors motion-reduce:transition-none hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              onClick={() => navigate(`/course/${lesson.courseId}`)}
+            >
+              <ArrowLeft size={18} /> Voltar ao curso
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!lesson.playable || (verdict && !verdict.playable)) {
     const remuxable = verdict && !verdict.playable ? verdict.remuxable : null;
     return (
       <div className="grid h-screen place-items-center p-6 text-center">
         <div className="max-w-md">
           <div className="mb-2 text-lg font-medium">Este vídeo está num formato que o navegador não reproduz</div>
-          {remuxable === true && (
+          {remuxable === true && !ehDrive && (
             <>
               <p className="mb-4 text-sm text-neutral-400">
                 Dá para corrigir sem recodificar: um remux rápido e sem perda de qualidade. O arquivo original não é alterado.
@@ -567,6 +643,7 @@ export default function Lesson() {
       }}
     >
       <video
+        key={videoKey}
         ref={videoRef}
         src={`/api/lessons/${id}/stream`}
         className="w-full h-screen object-contain bg-black"
@@ -666,11 +743,13 @@ export default function Lesson() {
             {/* Ferramentas */}
             <div className="flex items-center gap-1">
               {/* Definir capa — ação ocasional, ocultada no celular para caber a barra */}
-              <div className="hidden sm:block">
-                <IconButton label="Usar este frame como capa do curso" onClick={() => setConfirmCover(true)}>
-                  <Camera />
-                </IconButton>
-              </div>
+              {!ehDrive && (
+                <div className="hidden sm:block">
+                  <IconButton label="Usar este frame como capa do curso" onClick={() => setConfirmCover(true)}>
+                    <Camera />
+                  </IconButton>
+                </div>
+              )}
               <IconButton
                 label={autoplay ? 'Auto-avançar ao fim: ligado' : 'Auto-avançar ao fim: desligado'}
                 onClick={toggleAutoplay}

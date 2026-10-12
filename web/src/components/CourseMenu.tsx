@@ -169,8 +169,9 @@ export default function CourseMenu({
         <>
           <div className="fixed inset-0 z-10" onClick={close} />
           <div className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1">
-            <button className={item} onClick={() => { close(); onEditCover(); }}>Editar capa</button>
-            <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>
+            {/* Curso do Drive: capa é automática (o servidor recusa com 409) e não há pasta local para re-apontar. */}
+            {course.source !== 'drive' && <button className={item} onClick={() => { close(); onEditCover(); }}>Editar capa</button>}
+            {course.source !== 'drive' && <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
             <button className={item} onClick={doRescan}>Re-escanear agora</button>
             <button className={item} onClick={() => { setTitle(course.title); setFlow('rename'); }}>Renomear…</button>
             <button className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Coleção…</button>
