@@ -15,7 +15,7 @@ const plural = (n: number) => (n === 1 ? '' : 's');
 // frase corrida, e diz o que acontece com cada grupo — principalmente com os
 // cursos que já existem, que é onde mora o medo de perder progresso.
 function PreviaDoImport({ plan }: { plan: ImportPlan }) {
-  const nada = plan.created === 0 && plan.merged === 0 && plan.collectionsCreated === 0;
+  const nada = plan.created === 0 && plan.merged === 0 && plan.collectionsCreated === 0 && plan.newRoots.length === 0;
   if (nada) return <>Este arquivo não traz nada que você já não tenha. Importar não mudaria nada.</>;
 
   return (
@@ -44,6 +44,12 @@ function PreviaDoImport({ plan }: { plan: ImportPlan }) {
           {plan.missingFolderTitles.slice(0, 3).join(', ')}
           {plan.missingFolderTitles.length > 3 ? '…' : ''}) — entra{plan.missingFolder === 1 ? '' : 'm'} assim mesmo, com
           o progresso; depois use “Re-apontar pasta…” no menu do curso
+        </li>
+      )}
+      {plan.newRoots.length > 0 && (
+        <li>
+          libera o app para ler {plan.newRoots.length === 1 ? 'a pasta' : 'as pastas'}{' '}
+          <strong className="text-neutral-200">{plan.newRoots.join(', ')}</strong> — só importe se este arquivo for seu
         </li>
       )}
     </ul>

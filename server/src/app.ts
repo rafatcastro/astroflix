@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import type { Db } from './db';
 import { registrarSpa } from './spa';
+import { registrarGuarda } from './guarda';
 import { WEB_ASSETS } from './bundled';
 import type { AppConfig } from './config';
 import { healthRoutes } from './routes/health';
@@ -21,6 +22,9 @@ import { backupRoutes } from './routes/backup';
 
 export function buildApp(config: AppConfig, db: Db): FastifyInstance {
   const app = Fastify({ logger: false });
+
+  // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
+  registrarGuarda(app);
 
   // Tolera corpo vazio em application/json: um POST/DELETE sem corpo (ex.: rescan, excluir)
   // não deve falhar com FST_ERR_CTP_EMPTY_JSON_BODY — trata corpo vazio como indefinido.
@@ -49,7 +53,7 @@ export function buildApp(config: AppConfig, db: Db): FastifyInstance {
   app.register(resetRoutes, { db, config });
   app.register(materialsRoutes, { db, config });
   app.register(swRoutes);
-  app.register(backupRoutes, { db });
+  app.register(backupRoutes, { db, config });
   // [ROUTES]
 
   // A interface vem embutida no build, não do disco — ver spa.ts.

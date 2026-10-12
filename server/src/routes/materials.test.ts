@@ -56,3 +56,19 @@ describe('materials route', () => {
     expect((await app.inject({ method: 'GET', url: '/api/materials/nao-existe' })).statusCode).toBe(404);
   });
 });
+
+describe('materials route — SVG', () => {
+  // Servido na mesma origem da API: aberto direto na aba, o <script> de um SVG
+  // baixado de qualquer lugar rodaria com acesso a tudo.
+  it('serve SVG com CSP sandbox e nosniff', async () => {
+    fs.writeFileSync(path.join(root, 'curso', 'diagrama.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const db = openDb(':memory:');
+    createCourseFromPath(db, path.join(root, 'curso'));
+    const svg = db.prepare("SELECT id FROM materials WHERE rel_path='diagrama.svg'").get() as { id: string };
+
+    const r = await makeApp(db).inject({ method: 'GET', url: `/api/materials/${svg.id}` });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-security-policy']).toContain('sandbox');
+    expect(r.headers['x-content-type-options']).toBe('nosniff');
+  });
+});

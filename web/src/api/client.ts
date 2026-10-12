@@ -48,6 +48,7 @@ export interface ImportPlan {
   missingFolderTitles: string[];
   collectionsCreated: number;
   lessonsWithProgress: number;
+  newRoots: string[];           // pastas que o arquivo libera para o app ler
 }
 export type PlaybackVerdict = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean };
 export type ConvertResult = { status: 'converted' | 'already_playable' | 'transcode_required'; reason?: 'container' | 'codec' };

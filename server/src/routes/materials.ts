@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { allowedRootsFor } from './settings';
-import { isWithinRoots } from './fs';
+import { arquivoDoCurso, isWithinRoots } from './fs';
 import { parseRange } from './stream';
 
 // Content-types dos materiais adicionais. PDF/imagem servem INLINE (para o leitor
@@ -34,8 +34,8 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
       | { rel_path: string; root_path: string }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'not_found' });
-    const filePath = path.join(row.root_path, row.rel_path.split('/').join(path.sep));
-    if (!isWithinRoots(filePath, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
+    const filePath = arquivoDoCurso(row.root_path, row.rel_path);
+    if (!filePath || !isWithinRoots(filePath, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
     let stat: fs.Stats;
     try {
       stat = fs.statSync(filePath);
@@ -53,6 +53,11 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
     reply.header('Content-Type', type);
     reply.header('Accept-Ranges', 'bytes');
     reply.header('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`);
+    // O material vem de pastas baixadas sabe-se lá de onde e é servido na MESMA
+    // origem da API. Um SVG aberto direto na aba rodaria o <script> dele com
+    // acesso a tudo; nosniff impede o navegador de "adivinhar" HTML num .txt.
+    reply.header('X-Content-Type-Options', 'nosniff');
+    if (ext === 'svg') reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
 
     const range = parseRange(req.headers.range, size);
     if (range) {

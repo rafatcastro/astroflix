@@ -156,3 +156,16 @@ describe('planImport', () => {
     db.close();
   });
 });
+
+describe('planImport — raízes novas', () => {
+  // Ampliar o que o app lê é decisão da pessoa: a prévia lista o que o arquivo libera.
+  it('lista as raízes extras que ainda não estão liberadas aqui', () => {
+    const db = openDb(':memory:');
+    db.prepare("INSERT INTO settings (key, value) VALUES ('allowed_roots_extra', ?)").run(JSON.stringify(['/Volumes/A']));
+
+    const plano = planImport(db, arquivo({ settings: { allowedRootsExtra: ['/Volumes/A', '/etc'] } }));
+
+    expect(plano.newRoots).toEqual(['/etc']);
+    db.close();
+  });
+});
