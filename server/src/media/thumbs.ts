@@ -29,7 +29,7 @@ export async function getOrCreateLessonThumb(
 ): Promise<string | null> {
   const row = db
     .prepare(
-      `SELECT l.rel_path, l.mtime, l.playable, l.missing, l.duration_sec, c.root_path
+      `SELECT l.rel_path, l.mtime, l.playable, l.missing, l.duration_sec, c.root_path, c.source
        FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?`,
     )
     .get(lessonId) as any;
@@ -40,6 +40,8 @@ export async function getOrCreateLessonThumb(
     db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?').run(out, lessonId);
     return out;
   }
+  // Sem arquivo local no curso do Drive: só serve capa já em cache, nunca ffmpeg.
+  if (row.source === 'drive') return null;
   if (!hasFfmpeg()) return null;
 
   const videoPath = arquivoDoCurso(row.root_path, row.rel_path);

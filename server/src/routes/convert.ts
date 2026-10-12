@@ -26,6 +26,14 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     return file ? { file, courseId: row.course_id } : null;
   };
 
+  // Curso do Drive não tem arquivo local para probar nem converter.
+  const aulaDoDrive = (id: string): { playable: boolean } | null => {
+    const r = db
+      .prepare("SELECT l.playable FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source = 'drive'")
+      .get(id) as { playable: number } | undefined;
+    return r ? { playable: !!r.playable } : null;
+  };
+
   const setPlayable = db.prepare('UPDATE lessons SET playable=? WHERE id=?');
 
   // Proba o arquivo e sincroniza o flag playable com a realidade. Retorna o
@@ -39,6 +47,8 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
   };
 
   app.post('/api/lessons/:id/verify-playback', async (req, reply) => {
+    const noDrive = aulaDoDrive((req.params as { id: string }).id);
+    if (noDrive) return { playable: noDrive.playable, reason: noDrive.playable ? null : 'formato', remuxable: false };
     if (!hasFfmpeg()) return reply.code(503).send({ error: 'ffmpeg_unavailable' });
     const id = (req.params as { id: string }).id;
     const loc = lessonPath(id);
@@ -50,6 +60,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
   });
 
   app.post('/api/lessons/:id/convert', async (req, reply) => {
+    if (aulaDoDrive((req.params as { id: string }).id)) return reply.code(409).send({ error: 'curso-do-drive' });
     if (!hasFfmpeg()) return reply.code(503).send({ error: 'ffmpeg_unavailable' });
     const id = (req.params as { id: string }).id;
     const loc = lessonPath(id);

@@ -37,6 +37,10 @@ export async function thumbsRoutes(app: FastifyInstance, opts: { db: Db; config:
     const id = (req.params as { id: string }).id;
     const b = req.body as { lessonId?: string; atSec?: number };
     if (!b?.lessonId || typeof b.atSec !== 'number') return reply.code(400).send({ error: 'bad_request' });
+    // Escolher um quadro exige arquivo local e ffmpeg.
+    if ((db.prepare('SELECT source FROM courses WHERE id=?').get(id) as { source: string } | undefined)?.source === 'drive') {
+      return reply.code(409).send({ error: 'curso-do-drive' });
+    }
     const r = await setCourseCover(db, config, id, b.lessonId, b.atSec);
     if (r === 'not_found') return reply.code(404).send({ error: 'not_found' });
     if (r === 'no_ffmpeg') return reply.code(503).send({ error: 'ffmpeg_required' });
