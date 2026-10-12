@@ -24,20 +24,33 @@ export function autorizarNoGoogle(
   return new Promise((resolve) => {
     const popup = window.open(url, 'learnflix-drive', 'width=500,height=650');
     let fechamento = 0;
+    let sondagem = 0;
+    // O link de fallback abre numa aba que pode não ter opener (postMessage some); o
+    // callback também avisa por aqui, que alcança qualquer aba da mesma origem.
+    let canal: BroadcastChannel | null = null;
+    try {
+      canal = new BroadcastChannel('learnflix-drive');
+    } catch {
+      canal = null;
+    }
     const fim = (ok: boolean) => {
       window.removeEventListener('message', onMessage);
+      canal?.close();
       window.clearInterval(fechamento);
+      window.clearInterval(sondagem);
       opts.signal?.removeEventListener('abort', onAbort);
       resolve(ok);
     };
     const onMessage = (e: MessageEvent) => {
-      if (e.origin !== window.location.origin) return;
+      // BroadcastChannel não tem origin (e já é só da mesma origem); `message` tem.
+      if (e.origin && e.origin !== window.location.origin) return;
       const d = e.data as { tipo?: string; ok?: boolean } | null;
       if (!d || d.tipo !== 'learnflix-drive') return;
       fim(!!d.ok);
     };
     const onAbort = () => fim(false);
     window.addEventListener('message', onMessage);
+    if (canal) canal.onmessage = onMessage;
     opts.signal?.addEventListener('abort', onAbort);
     if (popup) {
       // Fechar o popup sem concluir não manda mensagem; sem isto o botão ficaria preso em "Lendo…".
@@ -51,6 +64,15 @@ export function autorizarNoGoogle(
       // Popup bloqueado: quem chamou mostra um link para abrir a autorização em outra aba; a
       // mensagem de volta continua sendo ouvida.
       opts.onBloqueado?.();
+      // Último recurso se nem mensagem nem canal chegarem: perguntar ao servidor se a conta conectou.
+      sondagem = window.setInterval(() => {
+        void fetch('/api/drive/status')
+          .then((r) => (r.ok ? (r.json() as Promise<{ conectado?: boolean }>) : null))
+          .then((st) => {
+            if (st?.conectado) fim(true);
+          })
+          .catch(() => {});
+      }, 1500);
     }
   });
 }

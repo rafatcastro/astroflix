@@ -116,7 +116,7 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
           )}
           {urlBloqueada && (
             <p className="mt-2 text-sm text-neutral-300">
-              <a href={urlBloqueada} target="_blank" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
+              <a href={urlBloqueada} target="_blank" rel="opener" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
                 Abrir a autorização do Google
               </a>
             </p>

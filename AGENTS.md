@@ -61,7 +61,7 @@ Lidas em `server/src/config.ts`:
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
 - `OPEN_BROWSER`.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
-  Drive. Precedência: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
+  Drive. Precedência, campo a campo: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
   `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
   `.google-oauth.local.json`. Esse arquivo é ignorado pelo git e **nunca** é commitado (o repositório
   é público e o push protection do GitHub barra segredos do Google). No CI vêm dos secrets.

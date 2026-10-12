@@ -130,8 +130,8 @@ vieram junto ficam logo abaixo das aulas.*
 
 ## Cursos do Google Drive
 
-Também dá para assistir a uma pasta que está no Google Drive. Clique em **Adicionar curso → Do Google
-Drive** e cole o link da pasta.
+Também dá para assistir a uma pasta que está no Google Drive. Clique em **Adicionar ▾ → Do Google
+Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pasta.
 
 - **Pasta pública**: abre direto, sem login.
 - **Pasta privada**: o app pede a autorização do Google num popup. A permissão é só de leitura

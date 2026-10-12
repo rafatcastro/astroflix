@@ -845,6 +845,13 @@ export default function Library() {
                 >
                   Importar pasta de cursos
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setPicking('drive')}
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
+                >
+                  Do Google Drive
+                </button>
                 <HelpLink topico="primeiros-passos" className="mt-1 text-sm text-neutral-500 hover:text-neutral-300">
                   Como isso funciona?
                 </HelpLink>

@@ -104,13 +104,27 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
     setSalvando(false);
   };
 
+  // Único jeito de apagar o que foi salvo: '' nos três campos devolve tudo à env/padrão do app.
+  const restaurar = async () => {
+    setSalvando(true);
+    try {
+      await api.driveSalvarCredenciais({ clientId: '', clientSecret: '', apiKey: '' });
+      setCampos({ clientId: '', clientSecret: '', apiKey: '' });
+      qc.invalidateQueries({ queryKey: ['driveStatus'] });
+      onNotice('Credenciais padrão restauradas.');
+    } catch {
+      onNotice('Falha ao restaurar as credenciais. Tente novamente.');
+    }
+    setSalvando(false);
+  };
+
   return (
     <section className="mb-8">
       <h2 className="mb-3 text-sm font-semibold text-neutral-300">Google Drive</h2>
       <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
         {status?.conectado ? (
           <>
-            <span className="truncate">Conectado como {status.email}</span>
+            <span className="truncate">{status.email ? `Conectado como ${status.email}` : 'Conectado'}</span>
             <button
               type="button"
               onClick={() => void desconectar()}
@@ -147,6 +161,14 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
             className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
           >
             Salvar
+          </button>
+          <button
+            type="button"
+            onClick={() => void restaurar()}
+            disabled={salvando}
+            className="ml-2 min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+          >
+            Restaurar padrão
           </button>
         </div>
       </details>
