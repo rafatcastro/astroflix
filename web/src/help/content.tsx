@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 // Conteúdo da ajuda como DADO, não como marcação solta.
 //
 // Cada tópico é uma lista de blocos tipados, renderizados por um componente só
-// (components/HelpDrawer.tsx). Assim a tipografia e o espaçamento do DESIGN.md
+// (components/HelpDrawer.tsx). Assim a tipografia e o espaçamento do docs/design.md
 // valem por construção: um tópico novo não consegue inventar estilo próprio, e o
 // texto continua legível aqui, separado do JSX.
 

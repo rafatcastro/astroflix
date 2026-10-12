@@ -19,7 +19,7 @@ export default {
           'sans-serif',
         ],
       },
-      // Tokens semânticos do DESIGN.md — mesmos valores dos shades stock já em uso,
+      // Tokens semânticos do docs/design.md — mesmos valores dos shades stock já em uso,
       // agora com fonte-única. NÃO altera nenhuma cor; só nomeia.
       colors: {
         'studio-black': '#0a0a0a', // neutral-950 — palco/app
