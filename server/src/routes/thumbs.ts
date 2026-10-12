@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
+import type { ServicosDrive } from '../drive/servicos';
 import { getOrCreateLessonThumb, setCourseCover } from '../media/thumbs';
 
 function sendImage(reply: FastifyReply, filePath: string) {
@@ -11,12 +12,12 @@ function sendImage(reply: FastifyReply, filePath: string) {
   return reply.send(fs.createReadStream(filePath));
 }
 
-export async function thumbsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function thumbsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
 
   app.get('/api/lessons/:id/thumb', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    const out = await getOrCreateLessonThumb(db, config, id);
+    const out = await getOrCreateLessonThumb(db, config, id, drive);
     if (!out) return reply.code(404).send({ error: 'no_thumb' });
     return sendImage(reply, out);
   });
@@ -27,7 +28,7 @@ export async function thumbsRoutes(app: FastifyInstance, opts: { db: Db; config:
     if (!course) return reply.code(404).send({ error: 'not_found' });
     if (course.cover_path && existsSync(course.cover_path)) return sendImage(reply, course.cover_path);
     if (course.poster_lesson_id) {
-      const out = await getOrCreateLessonThumb(db, config, course.poster_lesson_id);
+      const out = await getOrCreateLessonThumb(db, config, course.poster_lesson_id, drive);
       if (out) return sendImage(reply, out);
     }
     return reply.code(404).send({ error: 'no_cover' });
