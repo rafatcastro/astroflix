@@ -1,13 +1,13 @@
 # Instalador do Learnflix para Windows.
 #
-#   irm https://raw.githubusercontent.com/OnaitsirC-MiromA/learnflix-v2/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.ps1 | iex
 #
 # Baixa o executável, confere a soma SHA-256 e põe no PATH do usuário.
 # Não precisa de Node, nem de npm, nem de conta de administrador.
 
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'OnaitsirC-MiromA/learnflix-v2'
+$Repo = 'rafatcastro/learnflix-v2'
 # Sobrescrevível para testar contra uma release local antes de publicar.
 $BaseUrl = if ($env:LEARNFLIX_BASE_URL) { $env:LEARNFLIX_BASE_URL } else { "https://github.com/$Repo/releases/latest/download" }
 

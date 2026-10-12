@@ -7,11 +7,11 @@
   "author": "OnaitsirC-MiromA",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OnaitsirC-MiromA/learnflix-v2.git"
+    "url": "git+https://github.com/rafatcastro/learnflix-v2.git"
   },
-  "homepage": "https://github.com/OnaitsirC-MiromA/learnflix-v2#readme",
+  "homepage": "https://github.com/rafatcastro/learnflix-v2#readme",
   "bugs": {
-    "url": "https://github.com/OnaitsirC-MiromA/learnflix-v2/issues"
+    "url": "https://github.com/rafatcastro/learnflix-v2/issues"
   },
   "keywords": [
     "cursos",

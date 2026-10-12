@@ -6,6 +6,10 @@ Você aponta uma pasta, ela vira um curso: o Learnflix encontra as aulas, respei
 módulos, gera as capas e lembra exatamente onde você parou em cada aula. Tudo roda na sua máquina —
 nada é enviado para lugar nenhum, nenhuma conta, nenhum login.
 
+> Este repositório é um fork do **[Learnflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2)**,
+> criado por [OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA). Todo o crédito pelo app
+> original é desse projeto; aqui ficam as mudanças feitas por cima dele.
+
 **Instalar é uma linha no terminal** — igual no macOS, no Windows e no Linux. Não precisa clonar
 este repositório, nem descompactar nada, nem compilar: é colar o comando e o app abre.
 
@@ -27,12 +31,12 @@ Se não tem — e não quer instalar nada antes:
 
 ```bash
 # macOS e Linux
-curl -fsSL https://raw.githubusercontent.com/OnaitsirC-MiromA/learnflix-v2/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.sh | sh
 ```
 
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/OnaitsirC-MiromA/learnflix-v2/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.ps1 | iex
 ```
 
 O navegador abre sozinho em `http://localhost:7777`. **Sem clonar repositório, sem extrair ZIP, sem
@@ -271,7 +275,7 @@ nenhuma.
 Monorepo com dois workspaces: `server` (Fastify + SQLite) e `web` (React + Vite).
 
 ```bash
-git clone https://github.com/OnaitsirC-MiromA/learnflix-v2 && cd learnflix-v2 && npm install
+git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && npm install
 npm run dev        # Vite em :5173 com hot reload, API em :7777
 npm test           # testes dos dois workspaces
 npm run build      # tipos + interface + dist/learnflix.cjs (o arquivo único)
@@ -293,7 +297,7 @@ O código e os comentários estão em português.
 
 ## Dúvidas, problemas ou ideias
 
-Fale comigo — **[abra uma issue aqui](https://github.com/OnaitsirC-MiromA/learnflix-v2/issues/new)**.
+Fale comigo — **[abra uma issue aqui](https://github.com/rafatcastro/learnflix-v2/issues/new)**.
 Não precisa saber programar nem formatar nada: diga o que aconteceu, em que sistema, e eu respondo.
 
 Se o app não abriu, ajuda muito colar **o que apareceu no terminal** — é ali que ele diz o motivo.
@@ -324,6 +328,10 @@ foi tudo o que ficava entre você e a primeira aula.
 
 ---
 
-## Licença
+## Créditos e licença
+
+Fork do [Learnflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2), de
+[OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA), distribuído sob a licença MIT. O aviso de
+copyright original está mantido em [LICENSE](LICENSE).
 
 MIT — use, modifique e compartilhe à vontade.
