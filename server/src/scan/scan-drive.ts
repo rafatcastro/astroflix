@@ -59,12 +59,44 @@ export async function createCourseFromDrive(
     extras,
   );
 
-  // Fora da transação: o curso já existe e é utilizável, e capa é enfeite que
-  // não pode derrubar a criação (falhas são engolidas em baixarCapasFaltando).
-  // O await é deliberado: a resposta sai com as capas já prontas, para a
-  // biblioteca não aparecer cheia de placeholders.
-  await baixarCapasFaltando(db, deps, id, capas);
+  // Fora da transação e SEM await: o curso já existe e é utilizável, e capa é
+  // enfeite. Esperar o download (uma ida ao Google por aula) deixava o
+  // "Lendo a pasta…" por minutos em cursos grandes; as que faltarem na estante
+  // são buscadas sob demanda pela rota de thumb.
+  dispararCapas(db, deps, id, capas);
   return { id, existente: false };
+}
+
+// Guarda as promessas em andamento só para os testes poderem esperar o fim
+// (aguardarCapas); em produção ninguém espera por elas.
+const capasEmAndamento = new Set<Promise<void>>();
+
+function dispararCapas(db: Db, deps: DepsIngestao, courseId: string, capas: Map<string, string>): void {
+  const p = baixarCapasFaltando(db, deps, courseId, capas).catch(() => {});
+  capasEmAndamento.add(p);
+  void p.finally(() => capasEmAndamento.delete(p));
+}
+
+export async function aguardarCapas(): Promise<void> {
+  while (capasEmAndamento.size) await Promise.all([...capasEmAndamento]);
+}
+
+// Baixa uma imagem de capa; null em qualquer falha. Compartilhada com a capa
+// sob demanda (media/thumbs.ts) para a regra do Bearer existir num lugar só.
+export async function baixarImagemDoGoogle(
+  deps: Pick<DepsIngestao, 'fetch' | 'token'>,
+  url: string,
+): Promise<Buffer | null> {
+  try {
+    // O thumbnailLink vem de um campo que o dono da pasta controla: o token só
+    // pode ir para hosts do Google, nunca para um endereço arbitrário.
+    const token = hostDoGoogle(url) ? await deps.token() : null;
+    const res = await deps.fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!res.ok) return null;
+    return Buffer.from(await res.arrayBuffer());
+  } catch {
+    return null;
+  }
 }
 
 function hostDoGoogle(url: string): boolean {
@@ -90,17 +122,11 @@ export async function baixarCapasFaltando(
 
   async function baixarUma(aula: { id: string; rel_path: string; mtime: number }): Promise<void> {
     try {
-      const url = capas.get(aula.rel_path)!;
-      // O thumbnailLink vem de um campo que o dono da pasta controla: o token só
-      // pode ir para hosts do Google, nunca para um endereço arbitrário.
-      const token = hostDoGoogle(url) ? await deps.token() : null;
-      const res = await deps.fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) return;
+      const bytes = await baixarImagemDoGoogle(deps, capas.get(aula.rel_path)!);
+      if (!bytes) return;
       const destino = lessonThumbPath(deps.config, aula.id, aula.mtime);
       fs.mkdirSync(deps.config.thumbsDir, { recursive: true });
-      fs.writeFileSync(destino, Buffer.from(await res.arrayBuffer()));
+      fs.writeFileSync(destino, bytes);
       gravar.run(destino, aula.id);
     } catch {
       // Uma capa que falha (link expirado, rede, disco) não pode bloquear o
@@ -155,6 +181,6 @@ export async function reconcileDriveCourse(
       .map((a) => a.rel_path),
   );
   for (const rel of comCapa) capas.delete(rel);
-  await baixarCapasFaltando(db, deps, courseId, capas);
+  dispararCapas(db, deps, courseId, capas);
   return resultado;
 }
