@@ -27,10 +27,14 @@ const limpar = (nome: string): string => nome.replace(/[/\\]/g, '-');
 // progresso é preso ao relPath: sem sufixo, duas aulas colidiriam. A ordem
 // (createdTime, id) é estável entre re-escaneamentos, então cada aula mantém
 // o mesmo relPath e o histórico não troca de dono.
-function nomear<T extends { nome: string; criado: string; id: string }>(itens: T[]): Map<T, string> {
-  const ordenados = [...itens].sort(
-    (a, b) => a.criado.localeCompare(b.criado) || a.id.localeCompare(b.id),
-  );
+// Comparação por code unit, não localeCompare: a ordem não pode depender do
+// idioma da máquina nem da ordem em que a API devolveu a listagem.
+const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const ordem = (a: Item, b: Item): number =>
+  cmp(a.criado, b.criado) || cmp(a.id, b.id) || cmp(a.nome, b.nome);
+
+function nomear<T extends Item>(itens: T[]): Map<T, string> {
+  const ordenados = [...itens].sort(ordem);
   const usados = new Set<string>();
   const saida = new Map<T, string>();
   for (const item of ordenados) {
@@ -89,6 +93,10 @@ export async function walkDrive(cliente: ClienteDrive, pastaId: string): Promise
       (alvo.mimeType === PASTA ? pastas : arquivos).push(item);
     }
 
+    // Pasta alcançável por dois caminhos (real + atalho): quem chega primeiro
+    // ganha o conteúdo, então a ordem de visita tem de ser determinística, ou o
+    // relPath trocaria entre re-escaneamentos e levaria o progresso junto.
+    pastas.sort(ordem);
     const nomesPastas = nomear(pastas);
     for (const p of pastas) {
       if (visitadas.has(p.id)) continue;
