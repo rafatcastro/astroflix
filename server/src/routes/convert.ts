@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
+import { arquivoDoCurso } from './fs';
 import { classifyPlayback, hasFfmpeg, probeFormat, remuxToMp4, validateConverted } from '../media/ffmpeg';
 
 // Verificação e conversão de reprodução. A extensão .mp4 mente no acervo real
@@ -21,7 +22,8 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
       .prepare('SELECT l.rel_path, l.course_id, c.root_path FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?')
       .get(id) as any;
     if (!row) return null;
-    return { file: path.join(row.root_path, row.rel_path.split('/').join(path.sep)), courseId: row.course_id };
+    const file = arquivoDoCurso(row.root_path, row.rel_path);
+    return file ? { file, courseId: row.course_id } : null;
   };
 
   const setPlayable = db.prepare('UPDATE lessons SET playable=? WHERE id=?');

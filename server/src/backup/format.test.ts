@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseExport, FORMAT, VERSION } from './format';
+import path from 'node:path';
 
 const valido = {
   format: FORMAT,
@@ -55,5 +56,37 @@ describe('parseExport', () => {
       expect(r.data.courseRoots).toEqual([]);
       expect(r.data.settings).toEqual({ allowedRootsExtra: [] });
     }
+  });
+});
+
+describe('parseExport — caminhos vindos do arquivo', () => {
+  const comAulas = (relPaths: string[], extras: unknown[] = []) =>
+    parseExport({
+      format: FORMAT,
+      version: VERSION,
+      courses: [
+        {
+          title: 'C',
+          rootPath: '/cursos/c',
+          lessons: relPaths.map((relPath) => ({ relPath })),
+          posterLessonRelPath: '../fora.mp4',
+        },
+      ],
+      settings: { allowedRootsExtra: extras },
+    });
+
+  // Um backup pode vir de outra pessoa: aula que aponta para fora da pasta do
+  // curso faria o stream servir qualquer arquivo do disco.
+  it('descarta aulas que escapam da pasta do curso', () => {
+    const r = comAulas(['ok.mp4', 'Mod 1\\aula.mp4', '../../.ssh/id_rsa', '/etc/passwd', 'C:\\x.mp4', 'a/../../b.mp4']);
+    if (!r.ok) throw new Error('deveria ler');
+    expect(r.data.courses[0].lessons.map((l) => l.relPath)).toEqual(['ok.mp4', 'Mod 1\\aula.mp4']);
+    expect(r.data.courses[0].posterLessonRelPath).toBeNull();
+  });
+
+  it('só aceita raízes extras absolutas', () => {
+    const r = comAulas([], ['relativa/pasta', 42, '/Volumes/Cursos']);
+    if (!r.ok) throw new Error('deveria ler');
+    expect(r.data.settings.allowedRootsExtra).toEqual([path.resolve('/Volumes/Cursos')]);
   });
 });
