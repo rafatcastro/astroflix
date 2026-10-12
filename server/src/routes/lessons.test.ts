@@ -36,6 +36,7 @@ describe('lessons routes', () => {
     expect(l.furthest).toBe(50);
     expect(l.nextLessonId).toBe(ids[1]);
     expect(l.prevLessonId).toBeNull();
+    expect(l.courseSource).toBe('local');
   });
 
   it('POST complete marca e desmarca', async () => {
