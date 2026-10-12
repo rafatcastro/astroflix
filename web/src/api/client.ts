@@ -4,6 +4,10 @@ export interface CourseSummary {
   posterLessonId: string | null; lastActivityAt: string | null;
   collectionId: string | null;
   source: 'local' | 'drive';
+  // Onde a pessoa parou (aula mexida mais recentemente e não concluída).
+  ultimaAula: { id: string; titulo: string; posicaoSec: number; duracaoSec: number | null } | null;
+  // 0–100 por tempo assistido; null se nenhuma aula tem duração conhecida.
+  progressoReal: number | null;
 }
 export interface LessonDTO {
   id: string; title: string; module: string | null; relPath: string;
