@@ -48,6 +48,27 @@ function listar(dir, base = '') {
 const versao = JSON.parse(fs.readFileSync(path.join(raiz, 'package.json'), 'utf8')).version;
 const arquivos = fs.existsSync(webDist) ? listar(webDist) : [];
 
+// Credenciais do app do Google embutidas como padrão. NÃO vão para o git: o
+// segredo de um cliente OAuth e a chave de API de um projeto pessoal não podem
+// vazar no repositório público. Vêm das envs GOOGLE_* ou, na falta delas, de
+// .google-oauth.local.json (ignorado pelo git); o build de release as injeta.
+// Sem nenhuma fonte, ficam null e o app pede as credenciais nas Configurações.
+function lerCredenciaisPadrao() {
+  let local = {};
+  try {
+    local = JSON.parse(fs.readFileSync(path.join(raiz, '.google-oauth.local.json'), 'utf8'));
+  } catch {
+    // arquivo ausente ou ilegível: segue só com as envs
+  }
+  const pegar = (env, chave) => process.env[env] || local[chave] || null;
+  return {
+    clientId: pegar('GOOGLE_CLIENT_ID', 'clientId'),
+    clientSecret: pegar('GOOGLE_CLIENT_SECRET', 'clientSecret'),
+    apiKey: pegar('GOOGLE_API_KEY', 'apiKey'),
+  };
+}
+const google = lerCredenciaisPadrao();
+
 const entradas = arquivos.map(({ rel, completo }) => {
   const tipo = TIPOS[path.extname(rel).toLowerCase()] ?? 'application/octet-stream';
   const base64 = fs.readFileSync(completo).toString('base64');
@@ -66,6 +87,8 @@ export interface AssetEmbutido {
 }
 
 export const APP_VERSION = ${JSON.stringify(versao)};
+
+export const GOOGLE_PADRAO: { clientId: string | null; clientSecret: string | null; apiKey: string | null } = ${JSON.stringify(google)};
 
 export const WEB_ASSETS: Record<string, AssetEmbutido> = {
 ${entradas.join('\n')}
