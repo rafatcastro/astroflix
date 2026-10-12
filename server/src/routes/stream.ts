@@ -3,6 +3,8 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
+import { allowedRootsFor } from './settings';
+import { arquivoDoCurso, isWithinRoots } from './fs';
 
 const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -41,9 +43,15 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config:
     `).get(id) as any;
     if (!row) return reply.code(404).send({ error: 'not_found' });
 
+    // Mesma fronteira dos materiais: o arquivo precisa estar dentro da pasta do
+    // curso E dentro das raízes permitidas — o caminho vem do banco, e o banco
+    // também é escrito pelo import de backup.
+    const original = arquivoDoCurso(row.root_path, row.rel_path);
+    if (!original || !isWithinRoots(original, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
+
     // Se existe uma versão convertida (remux TS→MP4 etc.), ela tem prioridade —
     // o acervo original nunca é tocado; o convertido vive em DATA_DIR/converted.
-    let filePath = path.join(row.root_path, row.rel_path.split('/').join(path.sep));
+    let filePath = original;
     let type = CONTENT_TYPES[row.container] ?? 'application/octet-stream';
     const converted = path.join(config.convertedDir, `${id}.mp4`);
     if (fs.existsSync(converted)) {

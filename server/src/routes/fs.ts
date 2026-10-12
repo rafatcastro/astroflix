@@ -23,6 +23,20 @@ export function isWithinRoots(target: string, roots: string[]): boolean {
   });
 }
 
+/**
+ * Caminho absoluto de um arquivo do curso, ou null se o rel_path escapa da pasta.
+ *
+ * O rel_path normalmente vem do scan, mas o import de backup grava o que o
+ * arquivo trouxer — e um "../../.ssh/id_rsa" transformaria o stream num leitor
+ * de qualquer arquivo do disco. Toda rota que abre um arquivo do acervo passa
+ * por aqui.
+ */
+export function arquivoDoCurso(rootPath: string, relPath: string): string | null {
+  const raiz = path.resolve(rootPath);
+  const alvo = path.resolve(raiz, relPath.split('/').join(path.sep));
+  return alvo.startsWith(raiz.endsWith(path.sep) ? raiz : raiz + path.sep) ? alvo : null;
+}
+
 export async function fsRoutes(app: FastifyInstance, opts: { config: AppConfig; db: Db }): Promise<void> {
   const { config, db } = opts;
   const roots = () => allowedRootsFor(config, db);

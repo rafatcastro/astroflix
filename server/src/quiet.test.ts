@@ -25,6 +25,13 @@ function rodarIsolado(nome: string, codigo: string) {
   }
 }
 
+// O node:sqlite deixou de ser experimental em versões recentes do Node (o 26 já
+// não avisa). Sem o aviso, o teste de controle abaixo não tem o que provar — e
+// falharia por causa do Node, não do app. O guarda do caminho normal continua
+// valendo em qualquer versão.
+const nodeAvisaSqlite = (spawnSync(process.execPath, ['-e', "require('node:sqlite')"], { encoding: 'utf8' }).stderr ?? '')
+  .includes('ExperimentalWarning');
+
 describe('aviso de feature experimental', () => {
   // Guarda de regressão com história: node:sqlite é experimental no Node 22 e o
   // Node grita isso em toda inicialização. Trocar o require() de db/index.ts por
@@ -42,7 +49,7 @@ describe('aviso de feature experimental', () => {
     expect(stderr).not.toMatch(/ExperimentalWarning/);
   });
 
-  it('apareceria sem o filtro — é isso que o quiet.ts evita', () => {
+  it.skipIf(!nodeAvisaSqlite)('apareceria sem o filtro — é isso que o quiet.ts evita', () => {
     const { stdout, stderr } = rodarIsolado('sem-quiet', `await import('node:sqlite');`);
 
     expect(stdout).toContain('PROBE-OK');

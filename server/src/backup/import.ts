@@ -5,6 +5,7 @@ import { transaction, type Db } from '../db';
 import { PLAYABLE_EXTS } from '../scan/derive';
 import { createCourseFromPath } from '../scan/scan-course';
 import { getAllowedRootsExtra } from '../routes/settings';
+import { isWithinRoots } from '../routes/fs';
 import { matchCourse } from './identify';
 import { mergeProgress } from './merge';
 import type { ExportedCourse, ExportedLesson, LibraryExport, ProgressState } from './format';
@@ -49,6 +50,11 @@ export interface ImportPlan {
   missingFolderTitles: string[];
   collectionsCreated: number;
   lessonsWithProgress: number;
+  /**
+   * Pastas que o arquivo libera para o seletor e que ainda não estão liberadas
+   * aqui. Ampliar o que o app pode ler é decisão da pessoa: a prévia mostra.
+   */
+  newRoots: string[];
 }
 
 /**
@@ -69,6 +75,7 @@ export function planImport(db: Db, data: LibraryExport): ImportPlan {
     missingFolderTitles: [],
     collectionsCreated: 0,
     lessonsWithProgress: 0,
+    newRoots: data.settings.allowedRootsExtra.filter((r) => !getAllowedRootsExtra(db).includes(r)),
   };
 
   for (const col of data.collections) {
@@ -112,7 +119,7 @@ export function planImport(db: Db, data: LibraryExport): ImportPlan {
  * regra do mais avançado, e escolhas locais (capa, biblioteca, título renomeado)
  * têm precedência sobre as do arquivo — quem está na máquina decidiu por último.
  */
-export function applyImport(db: Db, data: LibraryExport): void {
+export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): void {
   const now = new Date().toISOString();
 
   const insertCourse = db.prepare(`
@@ -190,6 +197,13 @@ export function applyImport(db: Db, data: LibraryExport): void {
     return courseId;
   };
 
+  // Escanear é ler o disco: só dentro das raízes permitidas (somadas às que o
+  // arquivo libera e a pessoa confirmou na prévia). Fora delas o curso entra sem
+  // pasta, como se o disco estivesse desconectado — um rootPath "/" no arquivo
+  // não pode virar uma varredura do disco inteiro.
+  const permitidas = raizes && [...raizes, ...data.settings.allowedRootsExtra];
+  const podeEscanear = (p: string): boolean => !permitidas || isWithinRoots(p, permitidas);
+
   transaction(db, () => {
     // Biblioteca é um rótulo que a pessoa deu, não um id: duas máquinas com uma
     // "Programação" cada têm a MESMA biblioteca, ainda que os ids não batam.
@@ -217,7 +231,7 @@ export function applyImport(db: Db, data: LibraryExport): void {
       // vezes o mesmo arquivo tem de dar no mesmo que importar uma.
       const candidato = matchCourse(db, c);
       const jaExiste = candidato && !reivindicados.has(candidato) ? candidato : null;
-      const courseId = jaExiste ?? (pastaExiste(c.rootPath) ? criarComScan(c) : criarSemPasta(c));
+      const courseId = jaExiste ?? (pastaExiste(c.rootPath) && podeEscanear(c.rootPath) ? criarComScan(c) : criarSemPasta(c));
       reivindicados.add(courseId);
 
       for (const l of c.lessons) {

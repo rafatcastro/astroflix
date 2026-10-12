@@ -1,5 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
+import type { AppConfig } from '../config';
+import { allowedRootsFor } from './settings';
 import { buildExport } from '../backup/export';
 import { applyImport, planImport } from '../backup/import';
 import { parseExport } from '../backup/format';
@@ -10,8 +12,8 @@ import { APP_VERSION } from './info';
 // tem centenas de cursos) é justamente quem seria barrado.
 const LIMITE_DO_ARQUIVO = 64 * 1024 * 1024;
 
-export async function backupRoutes(app: FastifyInstance, opts: { db: Db }): Promise<void> {
-  const { db } = opts;
+export async function backupRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
+  const { db, config } = opts;
 
   app.get('/api/library/export', async (_req, reply) => {
     const data = buildExport(db, APP_VERSION);
@@ -33,7 +35,7 @@ export async function backupRoutes(app: FastifyInstance, opts: { db: Db }): Prom
     // O resumo é calculado ANTES de aplicar: depois, todo curso já existiria e a
     // contagem de "novos" viraria zero.
     const resumo = planImport(db, lido.data);
-    applyImport(db, lido.data);
+    applyImport(db, lido.data, allowedRootsFor(config, db));
     return resumo;
   });
 }

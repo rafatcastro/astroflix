@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { hasFfmpeg, probeDurationSec, extractFrame } from './ffmpeg';
+import { arquivoDoCurso } from '../routes/fs';
 
 export function pickFrameTimestamp(durationSec: number | null): number {
   if (durationSec && durationSec > 0) return Math.max(1, durationSec * 0.1);
@@ -20,9 +21,6 @@ export function courseCoverPath(config: AppConfig, courseId: string): string {
   return path.join(config.thumbsDir, `course-${courseId}.jpg`);
 }
 
-function videoAbsPath(rootPath: string, relPath: string): string {
-  return path.join(rootPath, relPath.split('/').join(path.sep));
-}
 
 export async function getOrCreateLessonThumb(
   db: Db,
@@ -44,8 +42,8 @@ export async function getOrCreateLessonThumb(
   }
   if (!hasFfmpeg()) return null;
 
-  const videoPath = videoAbsPath(row.root_path, row.rel_path);
-  if (!existsSync(videoPath)) return null;
+  const videoPath = arquivoDoCurso(row.root_path, row.rel_path);
+  if (!videoPath || !existsSync(videoPath)) return null;
 
   let duration = row.duration_sec as number | null;
   if (duration == null) {
@@ -73,7 +71,8 @@ export async function setCourseCover(
     .get(lessonId, courseId) as any;
   if (!row) return 'not_found';
   if (!hasFfmpeg()) return 'no_ffmpeg';
-  const videoPath = videoAbsPath(row.root_path, row.rel_path);
+  const videoPath = arquivoDoCurso(row.root_path, row.rel_path);
+  if (!videoPath) return 'not_found';
   const out = courseCoverPath(config, courseId);
   await extractFrame(videoPath, Math.max(0, atSec), out);
   db.prepare('UPDATE courses SET cover_path=? WHERE id=?').run(out, courseId);

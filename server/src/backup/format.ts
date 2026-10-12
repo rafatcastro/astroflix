@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { Structure } from '../types';
 
 // Marca do formato: é o que separa um arquivo do Learnflix de um JSON qualquer
@@ -59,6 +60,29 @@ export interface ExportedCourse {
   lessons: ExportedLesson[];
 }
 
+/**
+ * rel_path seguro: relativo e sem ".." — nunca aponta para fora da pasta do curso.
+ * Aceita "/" e "\" como separador porque o arquivo pode ter vindo do Windows.
+ */
+export function relPathSeguro(rel: unknown): rel is string {
+  if (typeof rel !== 'string' || rel === '') return false;
+  if (/^[\\/]/.test(rel) || /^[a-zA-Z]:/.test(rel)) return false;
+  return !rel.split(/[\\/]/).includes('..');
+}
+
+// Um arquivo de backup pode ter vindo de outra pessoa. O que nele vira caminho no
+// disco passa pela mesma régua das rotas: aula fora da pasta do curso é
+// descartada, e raiz extra só entra absoluta, como no PATCH /api/settings.
+function saneiaCursos(cursos: unknown[]): ExportedCourse[] {
+  return cursos
+    .filter((c): c is ExportedCourse => !!c && typeof c === 'object' && typeof (c as any).rootPath === 'string')
+    .map((c) => ({
+      ...c,
+      lessons: Array.isArray(c.lessons) ? c.lessons.filter((l) => relPathSeguro(l?.relPath)) : [],
+      posterLessonRelPath: relPathSeguro(c.posterLessonRelPath) ? c.posterLessonRelPath : null,
+    }));
+}
+
 export type ParseResult = { ok: true; data: LibraryExport } | { ok: false; error: string };
 
 /**
@@ -97,11 +121,13 @@ export function parseExport(raw: unknown): ParseResult {
       exportedAt: typeof o.exportedAt === 'string' ? o.exportedAt : '',
       app: (o.app ?? { version: 'desconhecida', platform: 'desconhecida' }) as LibraryExport['app'],
       collections: Array.isArray(o.collections) ? (o.collections as ExportedCollection[]) : [],
-      courses: o.courses as ExportedCourse[],
+      courses: saneiaCursos(o.courses),
       courseRoots: Array.isArray(o.courseRoots) ? (o.courseRoots as ExportedCourseRoot[]) : [],
       settings: {
         allowedRootsExtra: Array.isArray(extras.allowedRootsExtra)
-          ? extras.allowedRootsExtra.filter((p): p is string => typeof p === 'string')
+          ? extras.allowedRootsExtra
+              .filter((p): p is string => typeof p === 'string' && path.isAbsolute(p))
+              .map((p) => path.resolve(p))
           : [],
       },
     },

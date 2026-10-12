@@ -378,3 +378,21 @@ describe('applyImport, organização da estante', () => {
     db.close();
   });
 });
+
+describe('applyImport — fora das raízes permitidas', () => {
+  // Escanear é ler o disco. Um rootPath fora das raízes entra como curso sem
+  // pasta, em vez de virar uma varredura de onde o arquivo mandar.
+  it('não escaneia pasta fora das raízes; o curso entra com as aulas ausentes', () => {
+    const pasta = fs.mkdtempSync(path.join(os.tmpdir(), 'fora-'));
+    fs.writeFileSync(path.join(pasta, 'segredo.mp4'), 'x');
+    const db = openDb(':memory:');
+
+    applyImport(db, arquivo({ courses: [curso({ rootPath: pasta, lessons: [aula('aula-01.mp4')] })] }), ['/outro-lugar']);
+
+    const aulas = db.prepare('SELECT rel_path, missing FROM lessons').all() as any[];
+    expect(aulas).toEqual([{ rel_path: 'aula-01.mp4', missing: 1 }]);
+
+    db.close();
+    fs.rmSync(pasta, { recursive: true, force: true });
+  });
+});
