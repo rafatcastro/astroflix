@@ -4,7 +4,7 @@ Assista aos cursos em vídeo que já estão nas suas pastas, com o progresso gua
 
 Você aponta uma pasta, ela vira um curso: o Learnflix encontra as aulas, respeita a ordem e os
 módulos, gera as capas e lembra exatamente onde você parou em cada aula. Tudo roda na sua máquina —
-nada é enviado para lugar nenhum, nenhuma conta, nenhum login.
+usando pastas locais, nada é enviado para lugar nenhum, sem conta e sem login.
 
 > Este repositório é um fork do **[Learnflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2)**,
 > criado por [OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA). Todo o crédito pelo app
@@ -125,6 +125,27 @@ exatamente onde estão.
 
 *Dentro do curso: o cartão do topo leva direto ao ponto onde você parou, e os PDFs e anexos que
 vieram junto ficam logo abaixo das aulas.*
+
+---
+
+## Cursos do Google Drive
+
+Também dá para assistir a uma pasta que está no Google Drive. Clique em **Adicionar curso → Do Google
+Drive** e cole o link da pasta.
+
+- **Pasta pública**: abre direto, sem login.
+- **Pasta privada**: o app pede a autorização do Google num popup. A permissão é só de leitura
+  (`drive.readonly`); o Learnflix nunca cria, altera nem apaga nada no seu Drive.
+- **Nada é baixado**: os vídeos são transmitidos na hora em que você abre a aula. Só as capas são
+  geradas e guardadas na sua máquina.
+
+**O Google mostra um aviso na autorização.** O app ainda não foi verificado pelo Google, então
+aparece "O Google não verificou este app": clique em **Avançado → Continuar**. Enquanto não for
+verificado há também um teto de 100 usuários. Se esbarrar nele, use o seu próprio app do Google Cloud
+em **Configurações → Google Drive**.
+
+Quem usa só pastas locais não percebe diferença: nada disso é configurado, pedido ou acessado. Os
+detalhes do que o app lê estão na [política de privacidade](PRIVACY.md).
 
 ---
 

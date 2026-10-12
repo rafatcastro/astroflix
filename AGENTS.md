@@ -60,6 +60,11 @@ Lidas em `server/src/config.ts`:
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
 - `OPEN_BROWSER`.
+- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
+  Drive. Precedência: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
+  `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
+  `.google-oauth.local.json`. Esse arquivo é ignorado pelo git e **nunca** é commitado (o repositório
+  é público e o push protection do GitHub barra segredos do Google). No CI vêm dos secrets.
 
 ## Arquitetura
 
@@ -93,6 +98,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
 - `backup/`: export/import da biblioteca. `format` (envelope + validação), `export`, `identify`
   (mesmo curso por caminho ou por impressão digital das aulas), `merge` (vence quem foi mais longe)
   e `import` (`planImport` puro + `applyImport`). Exposto por `routes/backup.ts`.
+- `drive/`: cursos do Google Drive (rede opcional, sempre `fetch` injetável nos testes). `link`
+  extrai o ID da pasta, `api` é o cliente da Drive API com retry, `auth` faz OAuth com PKCE pelo
+  popup, `walk` lista a pasta, `stream` repassa o `Range` do vídeo, `status`/`tipos` mapeiam os
+  erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
+  `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
+  local.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `abrir-navegador.ts`: porta ocupada, mensagem de boot e abrir o
   navegador sem depender de pacote externo (o `open` não sobrevive ao empacotamento).
@@ -116,6 +127,9 @@ O schema fica em `server/src/db/schema.ts` e os tipos de linha em `server/src/ty
 interno estável e a aula é identificada pelo `rel_path` dentro do curso. Mover a pasta de origem e
 re-apontar preserva o histórico.
 
+- `courses.source` (`'local'` | `'drive'`) distingue a origem; aulas do Drive guardam o ID do
+  arquivo em `lessons.remote_id`. O progresso continua preso ao `rel_path`, nunca ao ID do Drive,
+  então re-escanear depois de o dono reenviar o arquivo preserva o histórico.
 - `progress` é uma tabela por aula, com `position_sec`, `furthest_sec` e
   `completed`/`auto_completed`.
 - As aulas são apagadas em cascata.
