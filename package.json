@@ -30,18 +30,12 @@
   "files": [
     "dist"
   ],
-  "workspaces": [
-    "server",
-    "web"
-  ],
   "scripts": {
-    "predev": "node scripts/gerar-bundled.mjs",
-    "dev": "concurrently -k -n server,web -c blue,green \"npm run dev --workspace=server\" \"npm run dev --workspace=web\"",
-    "build": "npm run build --workspace=web && node scripts/gerar-bundled.mjs && npm run build --workspace=server && node scripts/empacotar.mjs",
+    "dev": "node scripts/gerar-bundled.mjs && concurrently -k -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+    "build": "pnpm --filter web build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",
     "start": "node dist/learnflix.cjs",
     "build:binario": "node scripts/build-binario.mjs",
-    "pretest": "node scripts/gerar-bundled.mjs",
-    "test": "npm run test --workspace=server && npm run test --workspace=web",
+    "test": "node scripts/gerar-bundled.mjs && pnpm --filter server test && pnpm --filter web test",
     "repo": "node scripts/definir-repo.mjs"
   },
   "devDependencies": {
@@ -49,5 +43,6 @@
     "esbuild": "^0.28.2",
     "postject": "^1.0.0-alpha.6",
     "typescript": "^5.6.3"
-  }
+  },
+  "packageManager": "pnpm@12.11.2"
 }
