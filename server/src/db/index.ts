@@ -96,6 +96,21 @@ export function migrate(db: Db): void {
     db.exec(SCHEMA_V1);
     pragma(db, 'user_version = 1');
   }
+  if (version < 2) {
+    // Cursos do Google Drive. `source` com DEFAULT 'local' deixa todo curso
+    // existente como estava; o progresso segue preso ao rel_path, e o remote_id
+    // é só o endereço da aula no Drive, nunca a identidade dela.
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE courses   ADD COLUMN source TEXT NOT NULL DEFAULT 'local' CHECK (source IN ('local','drive'));
+        ALTER TABLE courses   ADD COLUMN drive_folder_id TEXT;
+        ALTER TABLE courses   ADD COLUMN drive_resource_key TEXT;
+        ALTER TABLE lessons   ADD COLUMN remote_id TEXT;
+        ALTER TABLE materials ADD COLUMN remote_id TEXT;
+      `);
+      pragma(db, 'user_version = 2');
+    });
+  }
 }
 
 export function openDb(dbPath: string): Db {

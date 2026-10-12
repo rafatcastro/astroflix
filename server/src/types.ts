@@ -12,6 +12,9 @@ export interface CourseRow {
   created_at: string;
   updated_at: string;
   last_scanned_at: string | null;
+  source?: 'local' | 'drive';
+  drive_folder_id?: string | null;
+  drive_resource_key?: string | null;
 }
 
 export interface LessonRow {
@@ -29,6 +32,7 @@ export interface LessonRow {
   playable: number;
   thumb_path: string | null;
   missing: number;
+  remote_id?: string | null;
 }
 
 export interface MaterialRow {
@@ -38,6 +42,7 @@ export interface MaterialRow {
   rel_path: string;
   kind: string;
   size_bytes: number;
+  remote_id?: string | null;
 }
 
 export interface ProgressRow {

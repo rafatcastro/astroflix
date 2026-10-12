@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { openDb, pragma } from './index';
+import { DatabaseSync } from 'node:sqlite';
+import { openDb, pragma, migrate } from './index';
+import { SCHEMA_V1 } from './schema';
 
 describe('openDb', () => {
   it('cria as tabelas e é idempotente', () => {
@@ -11,7 +13,7 @@ describe('openDb', () => {
     expect(tables).toEqual(
       expect.arrayContaining(['collections', 'course_roots', 'courses', 'lessons', 'materials', 'progress', 'settings']),
     );
-    expect(pragma(db, 'user_version')).toBe(1);
+    expect(pragma(db, 'user_version')).toBe(2);
     const cols = db.prepare('PRAGMA table_info(courses)').all().map((r: any) => r.name);
     expect(cols).toContain('cover_path');
     expect(cols).toContain('collection_id');
@@ -34,6 +36,34 @@ describe('openDb', () => {
   it('aplica FK on e WAL', () => {
     const db = openDb(':memory:');
     expect(pragma(db, 'foreign_keys')).toBe(1);
+    db.close();
+  });
+
+  it('v1 → v2 preserva dados e marca cursos como local', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(SCHEMA_V1);
+    pragma(db, 'user_version = 1');
+    const now = new Date().toISOString();
+    db.prepare(
+      "INSERT INTO courses (id, title, root_path, structure, archived, created_at, updated_at) VALUES ('c1','X','/x','flat',0,?,?)",
+    ).run(now, now);
+    db.prepare(
+      "INSERT INTO lessons (id, course_id, rel_path, title, order_index, module_order, size_bytes, mtime, container, playable, missing) VALUES ('l1','c1','a.mp4','A',0,0,1,1,'mp4',1,0)",
+    ).run();
+    migrate(db);
+    expect(pragma(db, 'user_version')).toBe(2);
+    const c = db.prepare('SELECT source, drive_folder_id FROM courses WHERE id=?').get('c1') as any;
+    expect(c.source).toBe('local');
+    expect(c.drive_folder_id).toBeNull();
+    const l = db.prepare('SELECT remote_id FROM lessons WHERE id=?').get('l1') as any;
+    expect(l.remote_id).toBeNull();
+    db.close();
+  });
+
+  it('migrate é idempotente em v2', () => {
+    const db = openDb(':memory:');
+    expect(() => migrate(db)).not.toThrow();
+    expect(pragma(db, 'user_version')).toBe(2);
     db.close();
   });
 });
