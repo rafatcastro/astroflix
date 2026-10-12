@@ -24,8 +24,8 @@ server/data/
 .vscode/*
 !.vscode/extensions.json
 
-# Ferramentas locais do agente. Os artefatos de design ficam versionados na
-# raiz: PRODUCT.md e DESIGN.md.
+# Ferramentas locais do agente. Os artefatos de design ficam versionados em
+# docs/: product.md e design.md.
 .claude/settings.local.json
 .claude/skills/
 .impeccable/
@@ -37,3 +37,6 @@ server/src/bundled.ts
 
 # Executável gerado por scripts/build-binario.mjs
 build/
+
+# Credenciais do app do Google criadas no console, até irem para o config.ts
+.google-oauth.local.json

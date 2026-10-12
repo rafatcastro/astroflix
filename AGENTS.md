@@ -151,6 +151,13 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 
 ## Design da interface
 
+O design é governado por dois documentos em `docs/`. **Leia os dois antes de mexer na UI.**
+
+- [`docs/product.md`](docs/product.md): estratégia, público e voz do produto.
+- [`docs/design.md`](docs/design.md): o sistema visual, com cores, tipografia, componentes e estados.
+
+Resumo do que eles definem:
+
 - **Registro `product`**: o design serve à tarefa. O conteúdo (vídeo, capas) é o protagonista e a
   interface recua.
 - **Personalidade "cinema pessoal"**: imersivo, confiável, sem ruído. Espírito Plex/Jellyfin, nunca
