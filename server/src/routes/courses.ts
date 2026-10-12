@@ -116,14 +116,42 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       FROM lessons l LEFT JOIN progress p ON p.lesson_id = l.id
       WHERE l.course_id = ?
     `);
+    // Onde a pessoa parou: a aula mexida mais recentemente que ainda não foi
+    // concluída (uma concluída não tem ponto de retomada).
+    const ultimaStmt = db.prepare(`
+      SELECT l.id, l.title, p.position_sec, COALESCE(l.duration_sec, p.duration_sec) AS dur
+      FROM progress p JOIN lessons l ON l.id = p.lesson_id
+      WHERE l.course_id = ? AND p.completed = 0 AND p.position_sec > 0
+      ORDER BY p.updated_at DESC LIMIT 1
+    `);
+    // Progresso por tempo assistido, não por aulas concluídas: 3 aulas pela
+    // metade somam 0% de "concluídas" mas a pessoa já avançou. Aulas sem
+    // duração conhecida ficam fora da conta, para não inflar nem derrubar o %.
+    const tempoStmt = db.prepare(`
+      SELECT COALESCE(l.duration_sec, p.duration_sec) AS dur, p.furthest_sec, p.completed
+      FROM lessons l LEFT JOIN progress p ON p.lesson_id = l.id
+      WHERE l.course_id = ?
+    `);
     return courses.map((c) => {
       const agg = aggStmt.get(c.id) as any;
+      const ultima = ultimaStmt.get(c.id) as any;
+      let total = 0;
+      let visto = 0;
+      for (const r of tempoStmt.all(c.id) as any[]) {
+        if (!r.dur || r.dur <= 0) continue;
+        total += r.dur;
+        visto += r.completed ? r.dur : Math.min(r.furthest_sec ?? 0, r.dur);
+      }
       return {
         id: c.id, title: c.title, structure: c.structure,
         totalLessons: agg.total, completedLessons: agg.completed, inProgressLessons: agg.inprogress,
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
         source: c.source === 'drive' ? 'drive' : 'local',
+        ultimaAula: ultima
+          ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
+          : null,
+        progressoReal: total > 0 ? Math.round((visto / total) * 100) : null,
       };
     });
   });
