@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
-import { applyImport } from './import';
+import { applyImport, planImport } from './import';
 import { FORMAT, VERSION, type ExportedCourse, type ExportedLesson, type LibraryExport, type ProgressState } from './format';
 
 export function prog(over: Partial<ProgressState> = {}): ProgressState {
@@ -394,5 +394,53 @@ describe('applyImport — fora das raízes permitidas', () => {
 
     db.close();
     fs.rmSync(pasta, { recursive: true, force: true });
+  });
+});
+
+describe('cursos do Google Drive no import', () => {
+  const LINK = 'https://drive.google.com/drive/folders/ABC';
+  const driveDoArquivo = (over: Partial<ExportedCourse> = {}) =>
+    curso({
+      title: 'Curso Drive',
+      rootPath: LINK,
+      source: 'drive',
+      driveFolderId: 'ABC',
+      lessons: [aula('a.mp4', prog({ furthestSec: 90, positionSec: 90 }))],
+      ...over,
+    });
+
+  it('import: curso drive presente funde progresso', () => {
+    const db = openDb(':memory:');
+    db.prepare(
+      `INSERT INTO courses (id, title, root_path, structure, archived, created_at, updated_at, source, drive_folder_id)
+       VALUES ('d1', 'Curso Drive', ?, 'flat', 0, 'x', 'x', 'drive', 'ABC')`,
+    ).run(LINK);
+    db.prepare(
+      `INSERT INTO lessons (id, course_id, rel_path, title, order_index, module_order, size_bytes, mtime, container, playable, missing)
+       VALUES ('l1', 'd1', 'a.mp4', 'a', 0, 0, 0, 0, 'mp4', 1, 0)`,
+    ).run();
+    const data = arquivo({ courses: [driveDoArquivo()] });
+
+    const plano = planImport(db, data);
+    applyImport(db, data);
+
+    expect(plano).toMatchObject({ merged: 1, created: 0, driveAusentes: [] });
+    expect(db.prepare('SELECT COUNT(*) n FROM courses').get()).toEqual({ n: 1 });
+    expect((db.prepare('SELECT furthest_sec f FROM progress WHERE lesson_id=?').get('l1') as any).f).toBe(90);
+    db.close();
+  });
+
+  it('import: curso drive ausente vai para driveAusentes e não é criado', () => {
+    const db = openDb(':memory:');
+    const data = arquivo({ courses: [driveDoArquivo()] });
+
+    const plano = planImport(db, data);
+    applyImport(db, data);
+
+    expect(plano).toMatchObject({ created: 0, merged: 0, missingFolder: 0, driveAusentes: ['Curso Drive'] });
+    expect(db.prepare('SELECT COUNT(*) n FROM courses').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) n FROM lessons').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT COUNT(*) n FROM progress').get()).toEqual({ n: 0 });
+    db.close();
   });
 });

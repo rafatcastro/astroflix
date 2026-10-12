@@ -24,6 +24,7 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
   const courses = db
     .prepare(
       `SELECT c.id, c.title, c.root_path, c.structure, c.archived, c.sort_index, c.collection_id,
+              c.source, c.drive_folder_id, c.drive_resource_key,
               (SELECT rel_path FROM lessons WHERE id = c.poster_lesson_id) AS poster_rel_path
        FROM courses c ORDER BY c.rowid`,
     )
@@ -57,6 +58,15 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
       sortIndex: c.sort_index,
       collectionId: c.collection_id,
       posterLessonRelPath: c.poster_rel_path ?? null,
+      // Só curso do Drive carrega os campos: o arquivo de quem só tem cursos
+      // locais fica idêntico ao de antes.
+      ...(c.source === 'drive'
+        ? {
+            source: 'drive' as const,
+            driveFolderId: c.drive_folder_id ?? undefined,
+            driveResourceKey: c.drive_resource_key ?? undefined,
+          }
+        : {}),
       lessons: (lessonsDoCurso.all(c.id) as any[]).map(
         (l): ExportedLesson => ({
           relPath: l.rel_path,

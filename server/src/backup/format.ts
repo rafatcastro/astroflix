@@ -58,6 +58,12 @@ export interface ExportedCourse {
   // nesta máquina e não quer dizer nada na de destino.
   posterLessonRelPath: string | null;
   lessons: ExportedLesson[];
+  // Opcionais de propósito: backups anteriores ao Drive não os têm e continuam
+  // válidos na mesma VERSION, e versões antigas do app simplesmente os ignoram.
+  // Em curso do Drive, rootPath guarda o link original (não é pasta do disco).
+  source?: 'local' | 'drive';
+  driveFolderId?: string;
+  driveResourceKey?: string;
 }
 
 /**
@@ -80,6 +86,10 @@ function saneiaCursos(cursos: unknown[]): ExportedCourse[] {
       ...c,
       lessons: Array.isArray(c.lessons) ? c.lessons.filter((l) => relPathSeguro(l?.relPath)) : [],
       posterLessonRelPath: relPathSeguro(c.posterLessonRelPath) ? c.posterLessonRelPath : null,
+      // Campo do Drive torto não derruba o arquivo: cai no comportamento de curso local.
+      source: c.source === 'local' || c.source === 'drive' ? c.source : undefined,
+      driveFolderId: typeof c.driveFolderId === 'string' ? c.driveFolderId : undefined,
+      driveResourceKey: typeof c.driveResourceKey === 'string' ? c.driveResourceKey : undefined,
     }));
 }
 

@@ -55,6 +55,12 @@ export interface ImportPlan {
    * aqui. Ampliar o que o app pode ler é decisão da pessoa: a prévia mostra.
    */
   newRoots: string[];
+  /**
+   * Títulos de cursos do Drive que o arquivo traz e que não existem aqui. Não são
+   * criados: sem o link e o login, não há o que escanear. A pessoa adiciona o link
+   * e importa de novo para trazer o progresso.
+   */
+  driveAusentes: string[];
 }
 
 /**
@@ -76,6 +82,7 @@ export function planImport(db: Db, data: LibraryExport): ImportPlan {
     collectionsCreated: 0,
     lessonsWithProgress: 0,
     newRoots: data.settings.allowedRootsExtra.filter((r) => !getAllowedRootsExtra(db).includes(r)),
+    driveAusentes: [],
   };
 
   for (const col of data.collections) {
@@ -89,6 +96,10 @@ export function planImport(db: Db, data: LibraryExport): ImportPlan {
   for (const c of data.courses) {
     const candidato = matchCourse(db, c);
     const funde = Boolean(candidato && !reivindicados.has(candidato));
+    if (!funde && c.source === 'drive') {
+      plano.driveAusentes.push(c.title);
+      continue;
+    }
     if (funde) {
       reivindicados.add(candidato!);
       plano.merged++;
@@ -231,6 +242,9 @@ export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): voi
       // vezes o mesmo arquivo tem de dar no mesmo que importar uma.
       const candidato = matchCourse(db, c);
       const jaExiste = candidato && !reivindicados.has(candidato) ? candidato : null;
+      // Curso do Drive sem correspondente aqui fica de fora por inteiro: rootPath é
+      // um link, não pasta, e nada dele pode virar aula, progresso ou raiz.
+      if (!jaExiste && c.source === 'drive') continue;
       const courseId = jaExiste ?? (pastaExiste(c.rootPath) && podeEscanear(c.rootPath) ? criarComScan(c) : criarSemPasta(c));
       reivindicados.add(courseId);
 
