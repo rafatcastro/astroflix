@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
-import { percent } from '../lib/format';
+import { formatDuration, percent } from '../lib/format';
 import DirPicker from '../components/DirPicker';
 import CourseCardMenu from '../components/CourseCardMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
@@ -19,6 +19,21 @@ import { Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as 
 const GRID_COLS = { gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' } as const;
 // Grade com destaque "bento" — o card em destaque ocupa 2×2.
 const BENTO_COLS = { gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))' } as const;
+
+// Mesmo valor na barra e no texto, para um não contradizer o outro. Só chega a
+// 100% quando todas as aulas estão concluídas: tempo assistido quase total
+// ainda deixa aula sem o "concluir".
+function progressoDoCurso(c: CourseSummary): number {
+  const porAulas = percent(c.completedLessons, c.totalLessons);
+  if (c.progressoReal == null) return porAulas;
+  return porAulas === 100 ? 100 : Math.min(c.progressoReal, 99);
+}
+
+// "Aula X · parou em 12:34", só no destaque "Continuar".
+function paradaEm(c: CourseSummary): string | null {
+  const u = c.ultimaAula;
+  return u ? `${u.titulo} · parou em ${formatDuration(u.posicaoSec)}` : null;
+}
 
 // Card-pôster da estante: a capa é o card; título/progresso vivem sobre o scrim.
 function CourseCard({
@@ -42,10 +57,11 @@ function CourseCard({
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
 }) {
-  const pct = percent(c.completedLessons, c.totalLessons);
+  const pct = progressoDoCurso(c);
+  const parada = eyebrow ? paradaEm(c) : null;
   return (
     <Link
-      to={`/course/${c.id}`}
+      to={parada && !selectable ? `/lesson/${c.ultimaAula!.id}` : `/course/${c.id}`}
       aria-pressed={selectable ? selected : undefined}
       onClick={selectable ? (e) => { e.preventDefault(); onToggleSelect?.(c.id); } : undefined}
       className={`group relative block aspect-video overflow-hidden rounded-xl bg-neutral-900 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${featured ? ' sm:col-span-2 sm:row-span-2' : ''}${selected ? ' ring-2 ring-blue-600' : ''}`}
@@ -79,6 +95,7 @@ function CourseCard({
         <div className="px-3">
           {eyebrow && <div className="text-xs uppercase tracking-wide text-blue-400">Continuar</div>}
           <div className={`truncate font-medium text-neutral-50${featured ? ' sm:text-lg' : ''}`}>{c.title}</div>
+          {parada && <div className="mt-0.5 truncate text-xs text-neutral-200">{parada}</div>}
           {/* Barra só quando há progresso (Regra da Barra Honesta). */}
           {pct > 0 && (
             <div className="mt-2 h-1 rounded-full bg-white/15">
@@ -124,10 +141,11 @@ function CourseRow({
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
 }) {
-  const pct = percent(c.completedLessons, c.totalLessons);
+  const pct = progressoDoCurso(c);
+  const parada = eyebrow ? paradaEm(c) : null;
   return (
     <Link
-      to={`/course/${c.id}`}
+      to={parada && !selectable ? `/lesson/${c.ultimaAula!.id}` : `/course/${c.id}`}
       aria-pressed={selectable ? selected : undefined}
       onClick={selectable ? (e) => { e.preventDefault(); onToggleSelect?.(c.id); } : undefined}
       className={`group flex items-center gap-3 rounded-xl bg-neutral-900 p-2.5 pr-3 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${selected ? ' ring-2 ring-blue-600' : ''}`}
@@ -155,6 +173,7 @@ function CourseRow({
       <div className="min-w-0 flex-1">
         {eyebrow && <div className="text-xs uppercase tracking-wide text-blue-400">Continuar</div>}
         <div className="break-words font-medium text-neutral-50">{c.title}</div>
+        {parada && <div className="mt-0.5 break-words text-xs text-neutral-300">{parada}</div>}
         <div className="mt-1 text-xs text-neutral-400">
           {pct === 100 ? <span className="text-green-400">✓ Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
         </div>
