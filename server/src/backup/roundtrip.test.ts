@@ -72,4 +72,23 @@ describe('ida e volta', () => {
     origem.close();
     destino.close();
   });
+
+  it('curso do Drive volta do mesmo jeito quando existe nos dois lados', () => {
+    const origem = openDb(':memory:');
+    origem
+      .prepare(
+        `INSERT INTO courses (id, title, root_path, structure, archived, created_at, updated_at, source, drive_folder_id, drive_resource_key)
+         VALUES ('d1', 'Drive', 'https://drive.google.com/drive/folders/ABC', 'flat', 0, 'x', 'x', 'drive', 'ABC', 'rk')`,
+      )
+      .run();
+    const arquivo = buildExport(origem, '1.0.0');
+
+    const destino = openDb(':memory:');
+    applyImport(destino, arquivo);
+
+    // Sem o curso aqui, nada é criado: o link do Drive não vira curso nem raiz.
+    expect(buildExport(destino, '1.0.0').courses).toEqual([]);
+    origem.close();
+    destino.close();
+  });
 });

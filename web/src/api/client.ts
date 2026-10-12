@@ -49,6 +49,7 @@ export interface ImportPlan {
   collectionsCreated: number;
   lessonsWithProgress: number;
   newRoots: string[];           // pastas que o arquivo libera para o app ler
+  driveAusentes: string[];      // cursos do Drive do arquivo que não existem aqui
 }
 export type PlaybackVerdict = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean };
 export type ConvertResult = { status: 'converted' | 'already_playable' | 'transcode_required'; reason?: 'container' | 'codec' };
