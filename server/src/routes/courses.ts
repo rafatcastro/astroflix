@@ -123,6 +123,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         totalLessons: agg.total, completedLessons: agg.completed, inProgressLessons: agg.inprogress,
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
+        source: c.source === 'drive' ? 'drive' : 'local',
       };
     });
   });
@@ -167,6 +168,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       id: course.id, title: course.title, structure: course.structure, rootPath: course.root_path,
       totalLessons: rows.length, completedLessons, materialsCount: materials.length, modules, materials,
       collectionId: course.collection_id ?? null,
+      source: course.source === 'drive' ? 'drive' : 'local',
     };
   });
 

@@ -20,8 +20,16 @@ import { materialsRoutes } from './routes/materials';
 import { swRoutes } from './routes/sw';
 import { backupRoutes } from './routes/backup';
 
-export function buildApp(config: AppConfig, db: Db): FastifyInstance {
+import { criarServicosDrive } from './drive/servicos';
+import type { Fetch } from './drive/tipos';
+import { driveRoutes } from './routes/drive';
+
+// `opts.fetch` existe só para os testes injetarem um Google falso.
+export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch }): FastifyInstance {
   const app = Fastify({ logger: false });
+  // Uma instância só: o auth guarda os states pendentes do login em memória, e
+  // o callback precisa enxergar os mesmos que o início do fluxo criou.
+  const drive = criarServicosDrive(db, config, opts?.fetch);
 
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
   registrarGuarda(app);
@@ -43,17 +51,18 @@ export function buildApp(config: AppConfig, db: Db): FastifyInstance {
   app.register(fsRoutes, { config, db });
   app.register(coursesRoutes, { db, config });
   app.register(lessonsRoutes, { db });
-  app.register(streamRoutes, { db, config });
+  app.register(streamRoutes, { db, config, drive });
   app.register(infoRoutes);
   app.register(thumbsRoutes, { db, config });
-  app.register(migrationRoutes, { db, config });
+  app.register(migrationRoutes, { db, config, drive });
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
   app.register(convertRoutes, { db, config });
   app.register(resetRoutes, { db, config });
-  app.register(materialsRoutes, { db, config });
+  app.register(materialsRoutes, { db, config, drive });
   app.register(swRoutes);
   app.register(backupRoutes, { db, config });
+  app.register(driveRoutes, { db, drive });
   // [ROUTES]
 
   // A interface vem embutida no build, não do disco — ver spa.ts.
