@@ -53,7 +53,7 @@ export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch }): F
   app.register(lessonsRoutes, { db });
   app.register(streamRoutes, { db, config, drive });
   app.register(infoRoutes);
-  app.register(thumbsRoutes, { db, config });
+  app.register(thumbsRoutes, { db, config, drive });
   app.register(migrationRoutes, { db, config, drive });
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
