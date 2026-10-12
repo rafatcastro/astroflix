@@ -60,7 +60,7 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
       if (!row.remote_id) return reply.code(404).send({ error: 'file_missing' });
       protegido();
       const cliente = drive.cliente(resourceKeyDoCurso(row.drive_folder_id, row.drive_resource_key));
-      return repassarDoDrive(req, reply, cliente, row.remote_id, { contentType: type, disposition });
+      return repassarDoDrive(req, reply, cliente, row.remote_id, { contentType: type, disposition }, drive);
     }
 
     const filePath = arquivoDoCurso(row.root_path, row.rel_path);

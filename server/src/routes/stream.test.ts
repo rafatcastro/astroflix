@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
 import { streamRoutes, parseRange } from './stream';
+import { FalhaDrive } from '../drive/tipos';
 import { semearCursoDrive, servicosFalsos } from '../drive/teste-helpers';
 
 let root: string;
@@ -93,6 +94,22 @@ describe('GET stream de curso do Drive', () => {
     expect(r.headers['content-type']).toBe('video/mp4');
     expect(pedidos).toEqual([['arq-video', 'bytes=0-3']]);
     expect(rk).toBe('pasta1/chaveX');
+  });
+
+  it('sem-acesso com conta desconectada (token revogado) → 401 nao-autorizado; conectada → 403', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const baixar = async () => { throw new FalhaDrive('sem-acesso', 403); };
+    for (const [conectado, status, error] of [[false, 401, 'nao-autorizado'], [true, 403, 'sem-acesso']] as const) {
+      const app = Fastify();
+      app.register(streamRoutes, {
+        db, config: { convertedDir: '/x', allowedRoots: [] } as any,
+        drive: servicosFalsos(baixar, undefined, conectado),
+      });
+      const r = await app.inject({ method: 'GET', url: '/api/lessons/ld/stream' });
+      expect(r.statusCode).toBe(status);
+      expect(r.json()).toEqual({ error });
+    }
   });
 
   it('curso drive sem serviços → 503 sem-conexao', async () => {

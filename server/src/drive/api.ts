@@ -18,7 +18,7 @@ export interface DepsCliente {
   apiKey: string | null;
   token: (opts?: { renovar?: boolean }) => Promise<string | null>;
   // Injetável para os testes não dormirem de verdade.
-  esperar?: (ms: number) => Promise<void>;
+  esperar?: (ms: number, signal?: AbortSignal) => Promise<void>;
   // Valor de X-Goog-Drive-Resource-Keys: "<id>/<chave>".
   resourceKeys?: string | null;
 }
@@ -36,7 +36,25 @@ const BASE = 'https://www.googleapis.com/drive/v3/files';
 const MAX_TENTATIVAS = 6;
 const RATE_LIMIT = new Set(['rateLimitExceeded', 'userRateLimitExceeded']);
 
-const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+// Metadados e listagem não devem prender a tela se a rede sumiu sem derrubar a conexão.
+const TIMEOUT_MS = 15_000;
+// Offline: uma nova tentativa basta. O backoff longo é para rate limit, não para rede caída.
+const ESPERA_REDE_MS = 1000;
+
+// Respeita o signal: fechar a aba durante a espera não pode deixar o pedido dormindo.
+export const dormir = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const t = setTimeout(() => {
+      signal?.removeEventListener('abort', aoAbortar);
+      resolve();
+    }, ms);
+    const aoAbortar = () => {
+      clearTimeout(t);
+      reject(signal!.reason);
+    };
+    signal?.addEventListener('abort', aoAbortar, { once: true });
+  });
 
 async function motivo(res: Response): Promise<string | undefined> {
   try {
@@ -54,12 +72,13 @@ export function criarClienteDrive(deps: DepsCliente): ClienteDrive {
   // (download), repetir reiniciaria o stream no meio do vídeo.
   async function requisitar(
     url: URL,
-    opts: { range?: string; signal?: AbortSignal; aceitar?: number[] } = {},
+    opts: { range?: string; signal?: AbortSignal; aceitar?: number[]; semTimeout?: boolean } = {},
   ): Promise<Response> {
     const aceitar = opts.aceitar ?? [];
     let renovou = false;
     let renovarAgora = false;
     let tentativa = 0;
+    let falhasDeRede = 0;
     let ultima: FalhaDrive = new FalhaDrive('google');
 
     while (tentativa < MAX_TENTATIVAS) {
@@ -75,7 +94,12 @@ export function criarClienteDrive(deps: DepsCliente): ClienteDrive {
 
       let falha: FalhaDrive | null = null;
       try {
-        const res = await deps.fetch(u, { headers, signal: opts.signal });
+        // O download não leva timeout: o corpo de um vídeo pode legitimamente levar minutos.
+        const sinais = [opts.signal, opts.semTimeout ? undefined : AbortSignal.timeout(TIMEOUT_MS)].filter(
+          (x): x is AbortSignal => !!x,
+        );
+        const signal = sinais.length > 1 ? AbortSignal.any(sinais) : sinais[0];
+        const res = await deps.fetch(u, { headers, signal });
         if (res.ok || aceitar.includes(res.status)) return res;
 
         if (res.status === 401) {
@@ -98,14 +122,19 @@ export function criarClienteDrive(deps: DepsCliente): ClienteDrive {
         }
       } catch (e) {
         if (e instanceof FalhaDrive) throw e;
-        // Só TypeError é falha de rede; AbortError e afins sobem como estão.
-        if (!(e instanceof TypeError)) throw e;
-        falha = new FalhaDrive('sem-conexao');
+        // TypeError é falha de rede e TimeoutError é o nosso prazo estourado; AbortError
+        // (quem chamou desistiu) e afins sobem como estão.
+        const timeout = (e as Error)?.name === 'TimeoutError' && !opts.signal?.aborted;
+        if (!(e instanceof TypeError) && !timeout) throw e;
+        // Offline repete uma vez só: esperar 36-72 s para dizer "sem conexão" era pior que o erro.
+        if (falhasDeRede++ >= 1) throw new FalhaDrive('sem-conexao');
+        await esperar(ESPERA_REDE_MS, opts.signal);
+        continue;
       }
 
       ultima = falha;
       tentativa++;
-      if (tentativa < MAX_TENTATIVAS) await esperar((2 ** (tentativa - 1) + 1) * 1000);
+      if (tentativa < MAX_TENTATIVAS) await esperar((2 ** (tentativa - 1) + 1) * 1000, opts.signal);
     }
     throw ultima;
   }
@@ -144,7 +173,7 @@ export function criarClienteDrive(deps: DepsCliente): ClienteDrive {
 
     // 416 volta como Response normal: a rota decide como repassá-lo ao player.
     baixar(id, range, signal) {
-      return requisitar(urlArquivos(id, { alt: 'media' }), { range, signal, aceitar: [416] });
+      return requisitar(urlArquivos(id, { alt: 'media' }), { range, signal, aceitar: [416], semTimeout: true });
     },
   };
 }
