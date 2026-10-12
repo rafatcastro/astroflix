@@ -90,3 +90,31 @@ describe('parseExport — caminhos vindos do arquivo', () => {
     expect(r.data.settings.allowedRootsExtra).toEqual([path.resolve('/Volumes/Cursos')]);
   });
 });
+
+describe('parseExport e cursos do Drive', () => {
+  it('backup antigo sem source continua válido', () => {
+    const r = parseExport({
+      ...valido,
+      courses: [{ title: 'C', rootPath: '/x', structure: 'flat', lessons: [] }],
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.courses[0].source).toBeUndefined();
+      expect(r.data.courses[0].driveFolderId).toBeUndefined();
+    }
+  });
+
+  it('descarta campos do Drive com tipo errado em vez de recusar o arquivo', () => {
+    const r = parseExport({
+      ...valido,
+      courses: [{ title: 'C', rootPath: '/x', structure: 'flat', lessons: [], source: 'ftp', driveFolderId: 5 }],
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.courses[0].source).toBeUndefined();
+      expect(r.data.courses[0].driveFolderId).toBeUndefined();
+    }
+  });
+});

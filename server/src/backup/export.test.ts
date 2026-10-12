@@ -168,3 +168,18 @@ describe('buildExport', () => {
     db.close();
   });
 });
+
+describe('buildExport com curso do Drive', () => {
+  it('export de curso drive leva source e driveFolderId', () => {
+    const db = openDb(':memory:');
+    db.prepare(
+      `INSERT INTO courses (id, title, root_path, structure, archived, created_at, updated_at, source, drive_folder_id, drive_resource_key)
+       VALUES ('d1', 'Do Drive', 'https://drive.google.com/drive/folders/ABC', 'flat', 0, 'x', 'x', 'drive', 'ABC', 'rk1')`,
+    ).run();
+
+    const out = buildExport(db);
+
+    expect(out.courses[0]).toMatchObject({ source: 'drive', driveFolderId: 'ABC', driveResourceKey: 'rk1' });
+    db.close();
+  });
+});
