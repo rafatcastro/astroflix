@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
 import { streamRoutes, parseRange } from './stream';
+import { semearCursoDrive, servicosFalsos } from '../drive/teste-helpers';
 
 let root: string;
 
@@ -66,5 +67,41 @@ describe('GET stream fora da pasta do curso', () => {
 
     const r = await app.inject({ method: 'GET', url: `/api/lessons/${lid}/stream` });
     expect(r.statusCode).toBe(403);
+  });
+});
+
+describe('GET stream de curso do Drive', () => {
+  it('curso drive repassa do Drive', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db, 'chaveX');
+    const pedidos: any[] = [];
+    let rk: string | null | undefined;
+    const drive = servicosFalsos(
+      async (id, range) => {
+        pedidos.push([id, range]);
+        return new Response('ABCD', { status: 206, headers: { 'content-range': 'bytes 0-3/10', 'content-length': '4' } });
+      },
+      (k) => { rk = k; },
+    );
+    const app = Fastify();
+    // allowedRoots vazio e sem convertido: nada de disco pode ser consultado.
+    app.register(streamRoutes, { db, config: { convertedDir: '/nonexistent-converted', allowedRoots: [] } as any, drive });
+
+    const r = await app.inject({ method: 'GET', url: '/api/lessons/ld/stream', headers: { range: 'bytes=0-3' } });
+    expect(r.statusCode).toBe(206);
+    expect(r.headers['content-range']).toBe('bytes 0-3/10');
+    expect(r.headers['content-type']).toBe('video/mp4');
+    expect(pedidos).toEqual([['arq-video', 'bytes=0-3']]);
+    expect(rk).toBe('pasta1/chaveX');
+  });
+
+  it('curso drive sem serviços → 503 sem-conexao', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = Fastify();
+    app.register(streamRoutes, { db, config: { convertedDir: '/x', allowedRoots: [] } as any });
+    const r = await app.inject({ method: 'GET', url: '/api/lessons/ld/stream' });
+    expect(r.statusCode).toBe(503);
+    expect(r.json()).toEqual({ error: 'sem-conexao' });
   });
 });

@@ -9,13 +9,7 @@ import { previewReconcile, reconcileCourse } from '../scan/reconcile';
 import { reconcileDriveCourse } from '../scan/scan-drive';
 import { FalhaDrive } from '../drive/tipos';
 import type { ServicosDrive } from '../drive/servicos';
-
-const STATUS_FALHA: Record<string, number> = {
-  'sem-acesso': 403,
-  'cota-esgotada': 429,
-  'sem-conexao': 503,
-  'nao-autorizado': 401,
-};
+import { statusDaFalha, resourceKeyDoCurso } from '../drive/status';
 
 export async function migrationRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
   const { db, config, drive } = opts;
@@ -63,11 +57,11 @@ export async function migrationRoutes(app: FastifyInstance, opts: { db: Db; conf
     if (curso?.source === 'drive') {
       if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
       // Mesmo formato do cabeçalho de resource key usado ao criar o curso.
-      const rk = curso.drive_resource_key ? `${curso.drive_folder_id}/${curso.drive_resource_key}` : null;
+      const rk = resourceKeyDoCurso(curso.drive_folder_id, curso.drive_resource_key);
       try {
         return await reconcileDriveCourse(db, drive.ingestao(rk), id);
       } catch (e) {
-        if (e instanceof FalhaDrive) return reply.code(STATUS_FALHA[e.tipo] ?? 502).send({ error: e.tipo });
+        if (e instanceof FalhaDrive) return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo });
         throw e;
       }
     }

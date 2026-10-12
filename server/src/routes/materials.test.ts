@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
 import { materialsRoutes } from './materials';
+import { semearCursoDrive, servicosFalsos } from '../drive/teste-helpers';
 
 let root: string;
 
@@ -70,5 +71,24 @@ describe('materials route — SVG', () => {
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-security-policy']).toContain('sandbox');
     expect(r.headers['x-content-type-options']).toBe('nosniff');
+  });
+});
+
+describe('materials route — Drive', () => {
+  it('material drive sai como attachment com download=1', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const drive = servicosFalsos(async () => new Response('%PDF', { status: 200, headers: { 'content-type': 'application/octet-stream' } }));
+    const app = Fastify();
+    app.register(materialsRoutes, { db, config: { allowedRoots: [] } as any, drive });
+
+    const dl = await app.inject({ method: 'GET', url: '/api/materials/md?download=1' });
+    expect(dl.statusCode).toBe(200);
+    expect(dl.headers['content-disposition']).toContain("attachment; filename*=UTF-8''apostila.pdf");
+    expect(dl.headers['content-type']).toBe('application/pdf');
+    expect(dl.headers['x-content-type-options']).toBe('nosniff');
+
+    const inline = await app.inject({ method: 'GET', url: '/api/materials/md' });
+    expect(inline.headers['content-disposition']).toContain('inline');
   });
 });

@@ -6,6 +6,9 @@ import type { AppConfig } from '../config';
 import { allowedRootsFor } from './settings';
 import { arquivoDoCurso, isWithinRoots } from './fs';
 import { parseRange } from './stream';
+import type { ServicosDrive } from '../drive/servicos';
+import { repassarDoDrive } from '../drive/stream';
+import { resourceKeyDoCurso } from '../drive/status';
 
 // Content-types dos materiais adicionais. PDF/imagem servem INLINE (para o leitor
 // embutido e o <img> renderizarem); o resto vai como download.
@@ -22,18 +25,44 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 const INLINE = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'txt', 'md']);
 
-export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
 
   // Serve o arquivo de um material. O caminho vem do BANCO (não do usuário), e
   // ainda assim é validado contra as raízes — o app nunca sai do acervo. ?download=1
   // força o "salvar como" (para zip/docs); senão inline (PDF/imagem no leitor).
-  app.get('/api/materials/:id', (req, reply) => {
+  app.get('/api/materials/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    const row = db.prepare('SELECT m.rel_path, c.root_path FROM materials m JOIN courses c ON c.id=m.course_id WHERE m.id=?').get(id) as
-      | { rel_path: string; root_path: string }
+    const row = db.prepare(
+      `SELECT m.rel_path, m.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key
+       FROM materials m JOIN courses c ON c.id=m.course_id WHERE m.id=?`,
+    ).get(id) as
+      | { rel_path: string; remote_id: string | null; root_path: string; source: string; drive_folder_id: string | null; drive_resource_key: string | null }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'not_found' });
+
+    const ext = path.extname(row.rel_path).slice(1).toLowerCase();
+    const type = CONTENT_TYPES[ext] ?? 'application/octet-stream';
+    const name = row.rel_path.split('/').pop() ?? 'arquivo';
+    const forceDownload = (req.query as { download?: string }).download === '1' || !INLINE.has(ext);
+    const disposition = `${forceDownload ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(name)}`;
+    // Mesmos cabeçalhos de segurança para qualquer origem do arquivo.
+    const protegido = () => {
+      // O material vem de pastas baixadas sabe-se lá de onde e é servido na MESMA
+      // origem da API. Um SVG aberto direto na aba rodaria o <script> dele com
+      // acesso a tudo; nosniff impede o navegador de "adivinhar" HTML num .txt.
+      reply.header('X-Content-Type-Options', 'nosniff');
+      if (ext === 'svg') reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    };
+
+    if (row.source === 'drive') {
+      if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+      if (!row.remote_id) return reply.code(404).send({ error: 'file_missing' });
+      protegido();
+      const cliente = drive.cliente(resourceKeyDoCurso(row.drive_folder_id, row.drive_resource_key));
+      return repassarDoDrive(req, reply, cliente, row.remote_id, { contentType: type, disposition });
+    }
+
     const filePath = arquivoDoCurso(row.root_path, row.rel_path);
     if (!filePath || !isWithinRoots(filePath, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
     let stat: fs.Stats;
@@ -43,21 +72,11 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
       return reply.code(404).send({ error: 'file_missing' });
     }
 
-    const ext = path.extname(row.rel_path).slice(1).toLowerCase();
-    const type = CONTENT_TYPES[ext] ?? 'application/octet-stream';
-    const name = row.rel_path.split('/').pop() ?? 'arquivo';
-    const forceDownload = (req.query as { download?: string }).download === '1' || !INLINE.has(ext);
-    const disposition = forceDownload ? 'attachment' : 'inline';
-
     const size = stat.size;
     reply.header('Content-Type', type);
     reply.header('Accept-Ranges', 'bytes');
-    reply.header('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(name)}`);
-    // O material vem de pastas baixadas sabe-se lá de onde e é servido na MESMA
-    // origem da API. Um SVG aberto direto na aba rodaria o <script> dele com
-    // acesso a tudo; nosniff impede o navegador de "adivinhar" HTML num .txt.
-    reply.header('X-Content-Type-Options', 'nosniff');
-    if (ext === 'svg') reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
+    reply.header('Content-Disposition', disposition);
+    protegido();
 
     const range = parseRange(req.headers.range, size);
     if (range) {
