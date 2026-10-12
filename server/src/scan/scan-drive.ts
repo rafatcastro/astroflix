@@ -59,10 +59,21 @@ export async function createCourseFromDrive(
     extras,
   );
 
-  // Fora da transação e sem await no chamador crítico: o curso já existe e é
-  // utilizável; capa é enfeite e não pode atrasar nem derrubar a criação.
+  // Fora da transação: o curso já existe e é utilizável, e capa é enfeite que
+  // não pode derrubar a criação (falhas são engolidas em baixarCapasFaltando).
+  // O await é deliberado: a resposta sai com as capas já prontas, para a
+  // biblioteca não aparecer cheia de placeholders.
   await baixarCapasFaltando(db, deps, id, capas);
   return { id, existente: false };
+}
+
+function hostDoGoogle(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && (u.hostname.endsWith('.googleusercontent.com') || u.hostname.endsWith('.google.com'));
+  } catch {
+    return false;
+  }
 }
 
 export async function baixarCapasFaltando(
@@ -79,8 +90,11 @@ export async function baixarCapasFaltando(
 
   async function baixarUma(aula: { id: string; rel_path: string; mtime: number }): Promise<void> {
     try {
-      const token = await deps.token();
-      const res = await deps.fetch(capas.get(aula.rel_path)!, {
+      const url = capas.get(aula.rel_path)!;
+      // O thumbnailLink vem de um campo que o dono da pasta controla: o token só
+      // pode ir para hosts do Google, nunca para um endereço arbitrário.
+      const token = hostDoGoogle(url) ? await deps.token() : null;
+      const res = await deps.fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) return;

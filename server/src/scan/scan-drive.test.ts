@@ -26,10 +26,10 @@ function montar(fetchImpl: typeof fetch, token: string | null = 'tok') {
     ],
     m1: [
       arq('v1', '01 - ola.mp4', {
-        thumbnailLink: 'http://thumb/v1',
+        thumbnailLink: 'https://lh3.googleusercontent.com/v1',
         videoMediaMetadata: { durationMillis: '90000' },
       }),
-      arq('v2', '02 - setup.mp4', { thumbnailLink: 'http://thumb/v2' }),
+      arq('v2', '02 - setup.mp4', { thumbnailLink: 'https://lh3.googleusercontent.com/v2' }),
     ],
   };
   const cliente: ClienteDrive = {
@@ -77,6 +77,19 @@ describe('createCourseFromDrive', () => {
       expect(a.thumb_path.startsWith(config.thumbsDir)).toBe(true);
       expect(fs.readFileSync(a.thumb_path, 'utf8')).toBe('jpegbytes');
     }
+  });
+
+  it('Bearer só vai para https do Google; outros hosts baixam sem credencial', async () => {
+    const chamadas: Array<[string, any]> = [];
+    const { deps, db, arvore } = montar((async (u: any, init: any) => {
+      chamadas.push([String(u), init]);
+      return new Response('img');
+    }) as typeof fetch);
+    arvore.m1[0].thumbnailLink = 'https://evil.example.com/x';
+    arvore.m1[1].thumbnailLink = 'http://lh3.googleusercontent.com/y';
+    await createCourseFromDrive(db, deps, link, 'l');
+    expect(chamadas).toHaveLength(2);
+    for (const [, init] of chamadas) expect(init.headers.Authorization).toBeUndefined();
   });
 
   it('falha de capa não impede o curso', async () => {

@@ -19,8 +19,9 @@ export function semearCursoDrive(db: Db, resourceKey: string | null = null) {
   ).run();
 }
 
-export function servicosFalsos(baixar: ClienteDrive['baixar'], chaves?: (rk?: string | null) => void): ServicosDrive {
+export function servicosFalsos(baixar: ClienteDrive['baixar'], chaves?: (rk?: string | null) => void, conectado = true): ServicosDrive {
   return {
+    auth: { status: () => ({ conectado, email: null }) },
     cliente: (rk?: string | null) => {
       chaves?.(rk);
       return { baixar } as unknown as ClienteDrive;

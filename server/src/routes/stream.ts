@@ -54,7 +54,7 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config:
       const cliente = drive.cliente(resourceKeyDoCurso(row.drive_folder_id, row.drive_resource_key));
       return repassarDoDrive(req, reply, cliente, row.remote_id, {
         contentType: CONTENT_TYPES[row.container] ?? 'application/octet-stream',
-      });
+      }, drive);
     }
 
     // Mesma fronteira dos materiais: o arquivo precisa estar dentro da pasta do

@@ -176,6 +176,20 @@ describe('criarAuthDrive', () => {
     expect(setting('drive.refresh_token')).toBe('rr');
   });
 
+  it('troca de token e revoke levam prazo (AbortSignal)', async () => {
+    const sinais: unknown[] = [];
+    const db = openDb(':memory:');
+    const fetch = (async (_u: any, init?: any) => {
+      sinais.push(init?.signal);
+      return json({ access_token: 'a', expires_in: 3600, refresh_token: 'r' });
+    }) as typeof globalThis.fetch;
+    const auth = criarAuthDrive({ db, fetch, credenciais: () => CRED });
+    await auth.concluir({ code: 'c', state: stateDe(auth.iniciar(REDIRECT)) });
+    await auth.desconectar();
+    expect(sinais).toHaveLength(2);
+    for (const sg of sinais) expect(sg).toBeInstanceOf(AbortSignal);
+  });
+
   it('desconectar apaga settings mesmo se revoke falhar', async () => {
     const { auth, db, chamadas, setting } = montar([() => Promise.reject(new TypeError('rede'))]);
     db.prepare("INSERT INTO settings (key, value) VALUES ('drive.refresh_token', 'rr')").run();
