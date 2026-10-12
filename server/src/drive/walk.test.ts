@@ -221,4 +221,71 @@ describe('walkDrive', () => {
     expect(b.videos.map((v) => v.relPath)).toEqual(a.videos.map((v) => v.relPath));
     expect(a.videos.map((v) => v.relPath)).toEqual(['Original/v.mp4']);
   });
+
+  describe('listagem em paralelo', () => {
+    // Árvore com 8 subpastas, mais uma pasta alcançável por real + atalho.
+    function arvore() {
+      const nos: No[] = [pasta('r', 'C'), { ...pasta('shared', 'Shared'), createdTime: '2026-03-01T00:00:00Z' }];
+      const filhos: Record<string, string[]> = { r: [], shared: ['sv'] };
+      nos.push(arq('sv', 'sv.mp4'));
+      for (let i = 0; i < 8; i++) {
+        nos.push({ ...pasta(`p${i}`, `M${i}`), createdTime: `2026-01-0${i + 1}T00:00:00Z` });
+        nos.push(arq(`v${i}`, `v${i}.mp4`));
+        filhos[`p${i}`] = [`v${i}`];
+        filhos.r.push(`p${i}`);
+      }
+      // p0 contém um atalho para 'shared' e a raiz também: quem vem primeiro (p0) ganha.
+      nos.push(arq('sc', 'Atalho', { mimeType: ATALHO, shortcutDetails: { targetId: 'shared', targetMimeType: PASTA } }));
+      filhos.p0.push('sc');
+      filhos.p5.push('sc');
+      filhos.r.push('shared');
+      return { nos, filhos };
+    }
+
+    function comLatencia(c: ClienteDrive, ms: (id: string) => number, rastro?: { ativos: number; pico: number }): ClienteDrive {
+      return {
+        ...c,
+        async listarFilhos(id) {
+          if (rastro) rastro.pico = Math.max(rastro.pico, ++rastro.ativos);
+          await new Promise((r) => setTimeout(r, ms(id)));
+          try {
+            return await c.listarFilhos(id);
+          } finally {
+            if (rastro) rastro.ativos--;
+          }
+        },
+      };
+    }
+
+    it('latências invertidas produzem os mesmos relPaths do caminho sequencial', async () => {
+      const { nos, filhos } = arvore();
+      const base = await walkDrive(falso(nos, filhos), 'r');
+      const lento = await walkDrive(
+        comLatencia(falso(nos, filhos), (id) => (id === 'p0' ? 40 : id === 'shared' ? 1 : 20 - (Number(id.slice(1)) || 0))),
+        'r',
+      );
+      expect(lento.videos.map((v) => v.relPath)).toEqual(base.videos.map((v) => v.relPath));
+      // 'shared' é alcançado primeiro por p0 (ordem createdTime/id), não pela raiz.
+      expect(base.videos.map((v) => v.relPath)).toContain('M0/Atalho/sv.mp4');
+    });
+
+    it('lista até 6 pastas ao mesmo tempo, não mais', async () => {
+      const { nos, filhos } = arvore();
+      const rastro = { ativos: 0, pico: 0 };
+      await walkDrive(comLatencia(falso(nos, filhos), () => 10, rastro), 'r');
+      expect(rastro.pico).toBeGreaterThan(1);
+      expect(rastro.pico).toBeLessThanOrEqual(6);
+    });
+
+    it('erro ao listar uma subpasta propaga, sem rejeição solta das outras', async () => {
+      const { nos, filhos } = arvore();
+      const c = falso(nos, filhos);
+      const orig = c.listarFilhos;
+      c.listarFilhos = async (id) => {
+        if (id === 'p3') throw new FalhaDrive('cota-esgotada', 403);
+        return orig(id);
+      };
+      await expect(walkDrive(c, 'r')).rejects.toMatchObject({ tipo: 'cota-esgotada' });
+    });
+  });
 });
