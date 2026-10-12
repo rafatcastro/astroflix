@@ -14,10 +14,15 @@ import HelpLink from '../components/HelpLink';
 import { ArrowLeft, Play, Check, List, LayoutGrid } from '../components/icons';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
-  const notCompleted = lessons.filter((l) => !l.completed);
+  const notCompleted = lessons.filter((l) => !l.completed && !l.missing && l.playable);
   if (notCompleted.length === 0) return null;
+  // Mesma regra da estante (ultimaAula): a aula em andamento mexida mais
+  // recentemente, não a de maior ordem; senão os dois lugares apontariam aulas
+  // diferentes para "onde parei".
   const inProgress = notCompleted.filter((l) => l.position > 0);
-  if (inProgress.length > 0) return inProgress[inProgress.length - 1];
+  if (inProgress.length > 0) {
+    return inProgress.reduce((a, b) => ((b.progressUpdatedAt ?? '') > (a.progressUpdatedAt ?? '') ? b : a));
+  }
   return notCompleted[0];
 }
 

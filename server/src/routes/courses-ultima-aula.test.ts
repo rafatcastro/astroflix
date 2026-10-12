@@ -65,4 +65,28 @@ describe('GET /api/courses: ultimaAula e progressoReal', () => {
     db.prepare('UPDATE lessons SET duration_sec=NULL').run();
     expect((await listar()).progressoReal).toBeNull();
   });
+
+  it('duas aulas em andamento: vence a mais recente, não a de maior ordem; detalhe expõe progressUpdatedAt', async () => {
+    const { db, prog, listar } = montar();
+    prog('a1', 10, 10, 0, '2026-02-02T10:00:00Z'); // ordem menor, mais recente
+    prog('a2', 50, 50, 0, '2026-02-01T10:00:00Z');
+    expect((await listar()).ultimaAula).toMatchObject({ id: 'a1', posicaoSec: 10 });
+    const app = Fastify();
+    app.register(coursesRoutes, { db, config: {} as any });
+    const det = (await app.inject({ method: 'GET', url: '/api/courses/c' })).json();
+    const aulas = det.modules.flatMap((m: any) => m.lessons);
+    expect(aulas.map((a: any) => [a.id, a.progressUpdatedAt])).toEqual([
+      ['a1', '2026-02-02T10:00:00Z'], ['a2', '2026-02-01T10:00:00Z'], ['a3', null],
+    ]);
+  });
+
+  it('aula ausente ou não tocável não é a última aula', async () => {
+    const { db, prog, listar } = montar();
+    prog('a1', 10, 10, 0, '2026-02-01T10:00:00Z');
+    prog('a2', 50, 50, 0, '2026-02-02T10:00:00Z');
+    db.prepare("UPDATE lessons SET missing=1 WHERE id='a2'").run();
+    expect((await listar()).ultimaAula).toMatchObject({ id: 'a1' });
+    db.prepare("UPDATE lessons SET playable=0 WHERE id='a1'").run();
+    expect((await listar()).ultimaAula).toBeNull();
+  });
 });

@@ -121,7 +121,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     const ultimaStmt = db.prepare(`
       SELECT l.id, l.title, p.position_sec, COALESCE(l.duration_sec, p.duration_sec) AS dur
       FROM progress p JOIN lessons l ON l.id = p.lesson_id
-      WHERE l.course_id = ? AND p.completed = 0 AND p.position_sec > 0
+      WHERE l.course_id = ? AND p.completed = 0 AND p.position_sec > 0 AND l.missing = 0 AND l.playable = 1
       ORDER BY p.updated_at DESC LIMIT 1
     `);
     // Progresso por tempo assistido, não por aulas concluídas: 3 aulas pela
@@ -162,7 +162,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     if (!course) { reply.code(404); return { error: 'not_found' }; }
 
     const rows = db.prepare(`
-      SELECT l.*, p.position_sec, p.furthest_sec, p.completed, p.duration_sec AS p_dur
+      SELECT l.*, p.position_sec, p.furthest_sec, p.completed, p.updated_at AS p_updated, p.duration_sec AS p_dur
       FROM lessons l LEFT JOIN progress p ON p.lesson_id = l.id
       WHERE l.course_id = ? ORDER BY l.order_index
     `).all(id) as any[];
@@ -174,6 +174,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         orderIndex: r.order_index, durationSec: r.duration_sec ?? r.p_dur ?? null,
         container: r.container, playable: !!r.playable, missing: !!r.missing,
         position: r.position_sec ?? 0, furthest: r.furthest_sec ?? 0, completed: !!r.completed,
+        progressUpdatedAt: r.p_updated ?? null,
       };
       let mod = modules.find((m) => m.name === r.module);
       if (!mod) { mod = { name: r.module, lessons: [] }; modules.push(mod); }
