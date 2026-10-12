@@ -14,9 +14,11 @@ cursos locais funciona sem conta, sem rede e sem serviço externo. Recursos que 
 exemplo, baixar uma pasta do Google Drive) são **opcionais**: quem não usa nunca precisa configurar
 nada para eles, e nenhuma mudança pode transformá-los em pré-requisito do resto do app.
 
-O código e o histórico de commits estão em **português** (prefixos `feat:`/`fix:`/`test:`/
-`refactor:`/`chore:`/`docs:`). Escreva comentários e commits no mesmo idioma. Os comentários
-explicam o **porquê** (o caso que motivou a decisão), não o quê. Siga esse estilo.
+O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
+motivou a decisão), não o quê. Siga esse estilo.
+
+**Commits e push:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:` são
+opcionais), e pode fazer commit e **push direto na `main`**, sem branch nem Pull Request.
 
 ## Comandos
 
