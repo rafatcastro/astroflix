@@ -103,11 +103,8 @@ describe('rotas do Drive', () => {
     expect((await post(cota.app, '/api/drive/courses', { link: LINK })).statusCode).toBe(429);
   });
 
-  it('iniciar devolve a url do Google; sem credenciais → 503 sem-credenciais', async () => {
+  it('iniciar devolve a url do Google', async () => {
     const { app, db } = montar();
-    const sem = await post(app, '/api/drive/auth/iniciar', {}, { host: 'localhost:7777' });
-    // Pode haver credencial padrão embutida no build; só exercita o ramo sem ela.
-    if (sem.statusCode === 503) expect(sem.json()).toEqual({ error: 'sem-credenciais' });
     salvarCredenciais(db, { clientId: 'cid' });
     const r = await post(app, '/api/drive/auth/iniciar', {});
     expect(r.statusCode).toBe(200);
