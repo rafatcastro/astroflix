@@ -7,6 +7,7 @@ import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
 import { buildApp } from '../app';
 import { hasFfmpeg } from '../media/ffmpeg';
+import { semearCursoDrive } from '../drive/teste-helpers';
 
 function makeTsDisfarcadoDeMp4(dir: string, name: string): string {
   const f = path.join(dir, name);
@@ -72,4 +73,26 @@ describe('verificação e conversão de reprodução (pulado sem ffmpeg)', () =>
     fs.rmSync(dataDir, { recursive: true, force: true });
     db.close();
   }, 30000);
+});
+
+describe('verificação e conversão — curso do Drive (não depende de ffmpeg)', () => {
+  it('convert drive → 409', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = buildApp({ allowedRoots: [], thumbsDir: '/x', convertedDir: '/y' } as any, db);
+    const r = await app.inject({ method: 'POST', url: '/api/lessons/ld/convert' });
+    expect(r.statusCode).toBe(409);
+    expect(r.json()).toEqual({ error: 'curso-do-drive' });
+  });
+
+  it('verify-playback drive usa o flag guardado', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = buildApp({ allowedRoots: [], thumbsDir: '/x', convertedDir: '/y' } as any, db);
+    const ok = await app.inject({ method: 'POST', url: '/api/lessons/ld/verify-playback' });
+    expect(ok.json()).toEqual({ playable: true, reason: null, remuxable: false });
+    db.prepare("UPDATE lessons SET playable=0 WHERE id='ld'").run();
+    const no = await app.inject({ method: 'POST', url: '/api/lessons/ld/verify-playback' });
+    expect(no.json()).toEqual({ playable: false, reason: 'formato', remuxable: false });
+  });
 });

@@ -8,6 +8,7 @@ import { createCourseFromPath } from '../scan/scan-course';
 import { lessonThumbPath } from '../media/thumbs';
 import { infoRoutes } from './info';
 import { thumbsRoutes } from './thumbs';
+import { semearCursoDrive } from '../drive/teste-helpers';
 
 describe('GET /api/info', () => {
   it('retorna { ffmpeg: boolean }', async () => {
@@ -46,5 +47,30 @@ describe('rotas thumb/cover (cache-hit, sem ffmpeg)', () => {
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(thumbsDir, { recursive: true, force: true });
     db.close();
+  });
+});
+
+describe('thumb/cover de curso do Drive', () => {
+  it('thumb sem arquivo no cache → 404 sem chamar ffmpeg; com cache → 200', async () => {
+    const thumbsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'td-'));
+    const config = { thumbsDir } as any;
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = Fastify();
+    app.register(thumbsRoutes, { db, config });
+    expect((await app.inject({ method: 'GET', url: '/api/lessons/ld/thumb' })).statusCode).toBe(404);
+    fs.writeFileSync(lessonThumbPath(config, 'ld', 1), 'JPG');
+    expect((await app.inject({ method: 'GET', url: '/api/lessons/ld/thumb' })).statusCode).toBe(200);
+    fs.rmSync(thumbsDir, { recursive: true, force: true });
+  });
+
+  it('escolher quadro da capa de curso drive → 409', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = Fastify();
+    app.register(thumbsRoutes, { db, config: { thumbsDir: '/x' } as any });
+    const r = await app.inject({ method: 'POST', url: '/api/courses/cd/cover', payload: { lessonId: 'ld', atSec: 3 } });
+    expect(r.statusCode).toBe(409);
+    expect(r.json()).toEqual({ error: 'curso-do-drive' });
   });
 });

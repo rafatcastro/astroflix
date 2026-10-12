@@ -5,6 +5,9 @@ import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { allowedRootsFor } from './settings';
 import { arquivoDoCurso, isWithinRoots } from './fs';
+import type { ServicosDrive } from '../drive/servicos';
+import { repassarDoDrive } from '../drive/stream';
+import { resourceKeyDoCurso } from '../drive/status';
 
 const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -32,16 +35,27 @@ export function parseRange(header: string | undefined, size: number): { start: n
   return { start, end };
 }
 
-export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
 
-  app.get('/api/lessons/:id/stream', (req, reply) => {
+  app.get('/api/lessons/:id/stream', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const row = db.prepare(`
-      SELECT l.rel_path, l.container, c.root_path
+      SELECT l.rel_path, l.container, l.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key
       FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?
     `).get(id) as any;
     if (!row) return reply.code(404).send({ error: 'not_found' });
+
+    // Curso do Drive não tem arquivo local: nem raízes permitidas nem convertido
+    // se aplicam (convert é recusado para esses cursos).
+    if (row.source === 'drive') {
+      if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+      if (!row.remote_id) return reply.code(404).send({ error: 'file_missing' });
+      const cliente = drive.cliente(resourceKeyDoCurso(row.drive_folder_id, row.drive_resource_key));
+      return repassarDoDrive(req, reply, cliente, row.remote_id, {
+        contentType: CONTENT_TYPES[row.container] ?? 'application/octet-stream',
+      });
+    }
 
     // Mesma fronteira dos materiais: o arquivo precisa estar dentro da pasta do
     // curso E dentro das raízes permitidas — o caminho vem do banco, e o banco
