@@ -132,6 +132,34 @@ describe('rotas do Drive', () => {
     expect(r.body).toContain(`nonce="${nonce}"`);
   });
 
+  it('callback também avisa pelo BroadcastChannel (link de fallback sem opener)', async () => {
+    const { app } = montar();
+    const r = await app.inject({ method: 'GET', url: '/api/drive/auth/callback?state=x', headers: { host: 'localhost:7777' } });
+    expect(r.body).toContain("new BroadcastChannel('learnflix-drive')");
+    expect(r.body).toMatch(/c\.postMessage\(\{"tipo":"learnflix-drive"/);
+  });
+
+  it('PUT credenciais: trocar client apaga refresh token e e-mail; trocar só a apiKey não', async () => {
+    const { app, db } = montar();
+    const put = (payload: unknown) =>
+      app.inject({ method: 'PUT', url: '/api/drive/credenciais', payload: payload as any, headers: { host: 'localhost:7777' } });
+    const semear = () => {
+      db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('drive.refresh_token','R'),('drive.email','a@b.c')").run();
+    };
+    const tem = () => db.prepare("SELECT key FROM settings WHERE key IN ('drive.refresh_token','drive.email')").all().length;
+    await put({ clientId: 'um', clientSecret: 's' });
+    semear();
+    await put({ apiKey: 'k' });
+    expect(tem()).toBe(2);
+    await put({ clientId: 'um' });
+    expect(tem()).toBe(2);
+    await put({ clientSecret: 'outro' });
+    expect(tem()).toBe(0);
+    semear();
+    await put({ clientId: '', clientSecret: '', apiKey: '' });
+    expect(tem()).toBe(0);
+  });
+
   it('status nunca devolve o token nem os valores das credenciais', async () => {
     const { app, db } = montar();
     salvarCredenciais(db, { clientId: 'ID-SECRETO', clientSecret: 'SEGREDO-X', apiKey: 'CHAVE-Y' });

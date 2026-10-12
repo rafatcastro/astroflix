@@ -25,6 +25,9 @@ function paginaCallback(ok: boolean, motivo: string | null, nonce: string): stri
 <p>${ok ? 'Conta conectada.' : 'Não foi possível conectar a conta.'} Pode fechar esta janela.</p>
 <script nonce="${nonce}">
 window.opener?.postMessage(${msg}, location.origin);
+// Link de fallback (popup bloqueado) abre numa aba sem opener, e o postMessage não chega.
+// O BroadcastChannel alcança qualquer aba da mesma origem.
+try { const c = new BroadcastChannel('learnflix-drive'); c.postMessage(${msg}); c.close(); } catch {}
 window.close();
 </script></body></html>`;
 }
@@ -112,7 +115,14 @@ export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: S
       const v = (b as Record<string, unknown>)[c];
       if (typeof v === 'string') parcial[c] = v.trim();
     }
+    const antes = credenciaisGoogle(db);
     salvarCredenciais(db, parcial);
+    const depois = credenciaisGoogle(db);
+    // O refresh token pertence ao client OAuth que o emitiu: com outro client ele
+    // só falharia com invalid_grant, e o e-mail mostrado seria de uma conta velha.
+    if (antes.clientId !== depois.clientId || antes.clientSecret !== depois.clientSecret) {
+      await drive.auth.desconectar({ revogar: false });
+    }
     return reply.code(204).send();
   });
 }

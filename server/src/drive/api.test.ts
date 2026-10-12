@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { criarClienteDrive, CAMPOS_ARQUIVO } from './api';
+import { criarClienteDrive, CAMPOS_ARQUIVO, dormir } from './api';
 import { FalhaDrive } from './tipos';
 
 type Item = Response | Error;
@@ -103,11 +103,38 @@ describe('cliente da Drive API', () => {
     expect(chamadas).toHaveLength(1);
   });
 
-  it('TypeError do fetch, repetido até o fim → sem-conexao', async () => {
+  it('TypeError do fetch: uma nova tentativa após 1 s, depois sem-conexao', async () => {
     const fila = Array.from({ length: 6 }, () => new TypeError('fetch failed'));
-    const { cliente, chamadas } = montar(fila);
+    const { cliente, chamadas, esperas } = montar(fila);
     await expect(cliente.getArquivo('1')).rejects.toMatchObject({ tipo: 'sem-conexao' });
-    expect(chamadas).toHaveLength(6);
+    expect(chamadas).toHaveLength(2);
+    expect(esperas).toEqual([1000]);
+  });
+
+  it('a espera padrão rejeita ao abortar', async () => {
+    const ac = new AbortController();
+    const p = dormir(60_000, ac.signal);
+    ac.abort();
+    await expect(p).rejects.toBeDefined();
+    await expect(dormir(60_000, ac.signal)).rejects.toBeDefined();
+  });
+
+  it('TypeError seguido de sucesso recupera', async () => {
+    const { cliente } = montar([new TypeError('fetch failed'), json(arq('1'))]);
+    await expect(cliente.getArquivo('1')).resolves.toMatchObject({ id: '1' });
+  });
+
+  it('metadados levam timeout; o download não', async () => {
+    const sinais: (AbortSignal | undefined)[] = [];
+    const f = (async (_u: any, init?: RequestInit) => {
+      sinais.push(init?.signal ?? undefined);
+      return json(arq('1'));
+    }) as typeof fetch;
+    const c = criarClienteDrive({ fetch: f, apiKey: 'K', token: async () => null });
+    await c.getArquivo('1');
+    await c.baixar('1', undefined);
+    expect(sinais[0]).toBeDefined();
+    expect(sinais[1]).toBeUndefined();
   });
 
   it('401 renova o token uma vez e repete', async () => {

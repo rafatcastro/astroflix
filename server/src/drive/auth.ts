@@ -10,6 +10,7 @@ const URL_REVOGAR = 'https://oauth2.googleapis.com/revoke';
 const VALIDADE_STATE_MS = 10 * 60_000;
 // Renovar com folga: um token que expira no meio de uma listagem derrubaria a chamada.
 const FOLGA_TOKEN_MS = 60_000;
+const TIMEOUT_MS = 15_000;
 const K_REFRESH = 'drive.refresh_token';
 const K_EMAIL = 'drive.email';
 
@@ -22,7 +23,7 @@ export interface AuthDrive {
   >;
   token(opts?: { renovar?: boolean }): Promise<string | null>;
   status(): { conectado: boolean; email: string | null };
-  desconectar(): Promise<void>;
+  desconectar(opts?: { revogar?: boolean }): Promise<void>;
 }
 
 interface Pendente {
@@ -83,6 +84,8 @@ export function criarAuthDrive(deps: {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: form.toString(),
+      // Sem prazo, um Google inalcançável deixaria o login/renovação pendurado.
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const json = (await res.json().catch(() => ({}))) as RespostaToken;
     return { res, json };
@@ -190,13 +193,14 @@ export function criarAuthDrive(deps: {
       return { conectado: ler(K_REFRESH) !== null, email: ler(K_EMAIL) };
     },
 
-    async desconectar() {
+    async desconectar(opts) {
       const refresh = ler(K_REFRESH);
       limparConexao();
-      if (!refresh) return;
+      // revogar:false é para troca de credenciais: só limpar, sem esperar a rede.
+      if (!refresh || opts?.revogar === false) return;
       try {
         // Melhor esforço: sem rede a pessoa ainda precisa conseguir desconectar localmente.
-        await deps.fetch(`${URL_REVOGAR}?token=${encodeURIComponent(refresh)}`, { method: 'POST' });
+        await deps.fetch(`${URL_REVOGAR}?token=${encodeURIComponent(refresh)}`, { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS) });
       } catch {
         /* ignorado de propósito */
       }

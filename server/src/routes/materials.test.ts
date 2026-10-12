@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { openDb } from '../db/index';
 import { createCourseFromPath } from '../scan/scan-course';
 import { materialsRoutes } from './materials';
+import { FalhaDrive } from '../drive/tipos';
 import { semearCursoDrive, servicosFalsos } from '../drive/teste-helpers';
 
 let root: string;
@@ -90,5 +91,18 @@ describe('materials route — Drive', () => {
 
     const inline = await app.inject({ method: 'GET', url: '/api/materials/md' });
     expect(inline.headers['content-disposition']).toContain('inline');
+  });
+
+  it('material: sem-acesso com conta desconectada → 401 nao-autorizado', async () => {
+    const db = openDb(':memory:');
+    semearCursoDrive(db);
+    const app = Fastify();
+    app.register(materialsRoutes, {
+      db, config: { allowedRoots: [] } as any,
+      drive: servicosFalsos(async () => { throw new FalhaDrive('nao-autorizado', 401); }, undefined, false),
+    });
+    const r = await app.inject({ method: 'GET', url: '/api/materials/md' });
+    expect(r.statusCode).toBe(401);
+    expect(r.json()).toEqual({ error: 'nao-autorizado' });
   });
 });
