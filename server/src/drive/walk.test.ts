@@ -204,4 +204,21 @@ describe('walkDrive', () => {
     const res = await walkDrive(c, 'r');
     expect(res.videos.map((v) => v.relPath)).toEqual(['v.mp4']);
   });
+
+  it('pasta alcançável por atalho: relPath não depende da ordem da listagem', async () => {
+    const nos = [
+      pasta('r', 'C'),
+      { ...pasta('o', 'Original'), createdTime: '2026-01-01T00:00:00Z' },
+      arq('s', 'Atalho', {
+        mimeType: ATALHO,
+        createdTime: '2026-01-02T00:00:00Z',
+        shortcutDetails: { targetId: 'o', targetMimeType: PASTA },
+      }),
+      arq('v', 'v.mp4'),
+    ];
+    const a = await walkDrive(falso(nos, { r: ['o', 's'], o: ['v'] }), 'r');
+    const b = await walkDrive(falso(nos, { r: ['s', 'o'], o: ['v'] }), 'r');
+    expect(b.videos.map((v) => v.relPath)).toEqual(a.videos.map((v) => v.relPath));
+    expect(a.videos.map((v) => v.relPath)).toEqual(['Original/v.mp4']);
+  });
 });
