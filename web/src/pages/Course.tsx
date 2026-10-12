@@ -32,7 +32,10 @@ export default function Course() {
   const [rootIssue, setRootIssue] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const source = data?.source;
   useEffect(() => {
+    // Cada re-escaneio do Drive percorre a árvore inteira pela API (cota); lá ele é só manual, pelo menu.
+    if (!source || source === 'drive') return;
     let cancelled = false;
     api
       .rescan(id)
@@ -50,7 +53,7 @@ export default function Course() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, source]);
 
   if (isLoading || !data) {
     return (
@@ -106,6 +109,9 @@ export default function Course() {
       </div>
 
       <h1 className="mt-4 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{data.title}</h1>
+      {data.source === 'drive' && (
+        <span className="mt-2 inline-block rounded bg-neutral-800 px-2 py-0.5 text-xs text-neutral-300">Google Drive</span>
+      )}
 
       {rootIssue && (
         <div className="mt-4">

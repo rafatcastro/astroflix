@@ -7,7 +7,7 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Pro
   app.get('/api/lessons/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const r = db.prepare(`
-      SELECT l.*, c.title AS course_title,
+      SELECT l.*, c.title AS course_title, c.source AS course_source,
         p.position_sec, p.furthest_sec, p.completed, p.duration_sec AS p_dur
       FROM lessons l JOIN courses c ON c.id = l.course_id
       LEFT JOIN progress p ON p.lesson_id = l.id
@@ -24,6 +24,8 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Pro
       container: r.container, playable: !!r.playable, missing: !!r.missing,
       position: r.position_sec ?? 0, furthest: r.furthest_sec ?? 0, completed: !!r.completed,
       courseId: r.course_id, courseTitle: r.course_title,
+      // O player precisa saber a origem: erro de vídeo do Drive se explica por autorização/cota, não por formato.
+      courseSource: r.course_source === 'drive' ? 'drive' : 'local',
       prevLessonId: prev?.id ?? null, nextLessonId: next?.id ?? null,
     };
   });
