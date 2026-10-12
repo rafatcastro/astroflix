@@ -19,7 +19,7 @@ o curso inteiro, e com o progresso tão confiável quanto o dos cursos locais.
 | Como a aula toca | O servidor local repassa o vídeo do Drive para o player do Learnflix (HTTP Range) |
 | Player embutido do Google | Não — o iframe é de outra origem e o app não consegue ler a posição, o que quebra o progresso |
 | Acesso | Tenta como pasta pública (chave de API); se não tiver acesso, pede autorização com o popup do Google |
-| Credenciais | App OAuth do mantenedor embutido como padrão, trocável por variável de ambiente ou nas Configurações |
+| Credenciais | App OAuth do mantenedor injetado no build (fora do git) como padrão, trocável por variável de ambiente ou nas Configurações |
 | Unidade importada | Uma pasta do Drive = um curso; subpastas viram módulos |
 | Materiais | Repassados sob demanda, como os vídeos |
 | Download/cache offline | Fora desta etapa |
@@ -152,11 +152,18 @@ O curso do Drive tem um selo discreto "Google Drive" na página do curso, e o me
 
 `config.ts` ganha `google: { clientId, clientSecret, apiKey }`. Ordem de precedência: valor salvo
 nas Configurações → variável de ambiente (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-`GOOGLE_API_KEY`) → padrão embutido do app do mantenedor.
+`GOOGLE_API_KEY`) → `GOOGLE_PADRAO`, o padrão do app do mantenedor.
+
+O padrão **não é commitado**. O repositório é público e o push protection do GitHub bloqueia
+segredos do Google no código, então `scripts/gerar-bundled.mjs` injeta os valores no build: lê as
+envs `GOOGLE_*` ou, na falta delas, o `.google-oauth.local.json` (ignorado pelo git) e os grava em
+`GOOGLE_PADRAO` no `server/src/bundled.ts`, que também é gerado e fora do git. No CI as envs vêm dos
+secrets do GitHub nos passos `npm run build` de `release.yml`. Sem nenhuma fonte, o padrão fica nulo e
+o app pede credenciais próprias nas Configurações.
 
 O client de app de computador não é confidencial segundo o Google, e a chave de API é restrita à
-Drive API no console; ambos podem ir no código. Enquanto o app OAuth não passar pela verificação do
-Google, quem autoriza vê o aviso de "app não verificado" e há um teto de 100 usuários — o campo de
+Drive API no console; mesmo assim ficam fora do git. Enquanto o app OAuth não passar pela verificação
+do Google, quem autoriza vê o aviso de "app não verificado" e há um teto de 100 usuários — o campo de
 app próprio nas Configurações é a saída para quem esbarrar nisso.
 
 Limitação conhecida: o redirecionamento de loopback só funciona autorizando **na máquina onde o
