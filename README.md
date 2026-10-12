@@ -296,18 +296,18 @@ nenhuma.
 Monorepo com dois workspaces: `server` (Fastify + SQLite) e `web` (React + Vite).
 
 ```bash
-git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && npm install
-npm run dev        # Vite em :5173 com hot reload, API em :7777
-npm test           # testes dos dois workspaces
-npm run build      # tipos + interface + dist/learnflix.cjs (o arquivo único)
-npm start          # roda o arquivo empacotado
+git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && pnpm install
+pnpm dev           # Vite em :5173 com hot reload, API em :7777
+pnpm test          # testes dos dois workspaces
+pnpm build         # tipos + interface + dist/learnflix.cjs (o arquivo único)
+pnpm start         # roda o arquivo empacotado
 ```
 
 O servidor existe porque o navegador não consegue ler pastas do disco sozinho: ele lê as pastas
 (sempre só-leitura), transmite o vídeo por HTTP Range para o seek funcionar, gera as miniaturas e é
 dono do banco. A interface conversa com ele por uma API JSON.
 
-O `npm run build` gera `server/src/bundled.ts` — a interface em base64 mais a versão — e depois
+O `pnpm build` gera `server/src/bundled.ts` — a interface em base64 mais a versão — e depois
 empacota tudo em `dist/learnflix.cjs` com o esbuild. É esse arquivo que o `npx` executa. O servidor
 tem **uma única dependência de execução** (Fastify) e nenhum módulo nativo: o SQLite vem embutido no
 próprio Node.

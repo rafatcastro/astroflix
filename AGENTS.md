@@ -22,23 +22,24 @@ opcionais), e pode fazer commit e **push direto na `main`**, sem branch nem Pull
 
 ## Comandos
 
-Node >= 22.5, npm. Monorepo com dois workspaces: `server` e `web`.
+Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com dois
+workspaces (`pnpm-workspace.yaml`): `server` e `web`.
 
 ```bash
-npm install                # primeira vez
-npm run dev                # Vite (:5173, faz proxy de /api → :7777) + Fastify (:7777), hot reload
-npm run build              # web → gerar-bundled → tipos do server → esbuild → dist/learnflix.cjs
-npm start                  # roda dist/learnflix.cjs (precisa do build antes)
-npm test                   # testes dos dois workspaces
-npm run build:binario      # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
-npm run repo               # audita onde o nome do repositório GitHub aparece
-npm run repo -- dono/repo  # troca o repositório em package.json, install.sh, install.ps1 e README.md
+pnpm install               # primeira vez
+pnpm dev                   # Vite (:5173, faz proxy de /api → :7777) + Fastify (:7777), hot reload
+pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/learnflix.cjs
+pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
+pnpm test                  # testes dos dois workspaces
+pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
+pnpm repo                  # audita onde o nome do repositório GitHub aparece
+pnpm repo dono/repo        # troca o repositório em package.json, install.sh, install.ps1 e README.md
 ```
 
 Um teste só:
 
 ```bash
-npm run test --workspace=server -- src/scan/derive.test.ts
+pnpm --filter server test src/scan/derive.test.ts
 ```
 
 **Não há script separado de typecheck nem de lint.** O `tsc --noEmit` roda dentro do `build` de
@@ -87,7 +88,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   a casca em URLs que não começam com `/api`. **Nada é lido do disco.** No v1 a SPA era procurada
   relativa ao `cwd` e sumia se o processo subisse de outro lugar.
 - `bundled.ts`: **gerado** por `scripts/gerar-bundled.mjs` (interface + versão). Não versionado,
-  não editar à mão. `pretest`, `predev` e `build` o regeneram.
+  não editar à mão. `pnpm dev`, `pnpm test` e `pnpm build` o regeneram.
 - `db/`: `openDb` liga WAL e foreign keys e roda `migrate`, guardado por **`PRAGMA user_version`**.
   Para evoluir o schema, **acrescente um bloco `if (version < N)`**. Nunca edite o `SCHEMA_V1`. O
   SQLite é o do próprio Node (`node:sqlite`), sem módulo nativo. Ele entra por `require()` e não por

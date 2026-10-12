@@ -6,7 +6,7 @@
 // Isso explica o tamanho — cerca de 110 MB — e também o que ele entrega: quem
 // baixa não precisa ter Node, nem npm, nem nada. Dois cliques, ou um comando.
 //
-// Pré-requisitos: `npm run build` já ter rodado (o executável embute o
+// Pré-requisitos: `pnpm build` já ter rodado (o executável embute o
 // dist/learnflix.cjs).
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -19,7 +19,7 @@ const build = path.join(raiz, 'build');
 const bundle = path.join(raiz, 'dist', 'learnflix.cjs');
 
 if (!fs.existsSync(bundle)) {
-  console.error('dist/learnflix.cjs não existe — rode `npm run build` antes.');
+  console.error('dist/learnflix.cjs não existe — rode `pnpm build` antes.');
   process.exit(1);
 }
 
