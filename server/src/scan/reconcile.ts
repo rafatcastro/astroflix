@@ -5,6 +5,9 @@ import type { AppConfig } from '../config';
 import type { DerivedLesson } from './derive';
 import { walkCourseDir } from './walk';
 import { deriveCourse } from './derive';
+import type { ScannedFile } from './derive';
+import type { MaterialKind } from './walk';
+import type { ExtraRemoto } from './scan-course';
 
 export interface ExistingLesson {
   id: string;
@@ -150,28 +153,44 @@ export function reconcileCourse(
   if (!rootOk(targetPath)) return { status: 'root_unavailable' };
 
   const { plan, materials } = prepare(db, courseId, targetPath);
+  return aplicarReconcile(db, courseId, plan, materials, targetPath);
+}
+
+// Aplica um plano já calculado. Separado de reconcileCourse para o curso do
+// Drive reaproveitar a mesma transação com um plano vindo da API em vez do
+// disco; `extras` (por relPath) grava remote_id e duração remotos.
+export function aplicarReconcile(
+  db: Db,
+  courseId: string,
+  plan: ReconcilePlan,
+  materials: Array<ScannedFile & { kind: MaterialKind }>,
+  rootPath: string,
+  extras?: Map<string, ExtraRemoto>,
+): ReconcileResult {
+  const course = db.prepare('SELECT structure, poster_lesson_id FROM courses WHERE id=?').get(courseId) as any;
   const now = new Date().toISOString();
 
   const updateLesson = db.prepare(`
     UPDATE lessons SET rel_path=@rel_path, module=@module, title=@title, order_index=@order_index,
       module_order=@module_order, size_bytes=@size_bytes, mtime=@mtime, container=@container,
-      playable=@playable, missing=0,
-      duration_sec=CASE WHEN mtime<>@mtime THEN NULL ELSE duration_sec END,
+      playable=@playable, missing=0, remote_id=COALESCE(@remote_id, remote_id),
+      duration_sec=CASE WHEN mtime<>@mtime THEN @duration_sec ELSE COALESCE(@duration_sec, duration_sec) END,
       thumb_path=CASE WHEN mtime<>@mtime THEN NULL ELSE thumb_path END
     WHERE id=@id
   `);
   const insertLesson = db.prepare(`
-    INSERT INTO lessons (id, course_id, rel_path, module, title, order_index, module_order, duration_sec, size_bytes, mtime, container, playable, thumb_path, missing)
-    VALUES (@id, @course_id, @rel_path, @module, @title, @order_index, @module_order, NULL, @size_bytes, @mtime, @container, @playable, NULL, 0)
+    INSERT INTO lessons (id, course_id, rel_path, module, title, order_index, module_order, duration_sec, size_bytes, mtime, container, playable, thumb_path, missing, remote_id)
+    VALUES (@id, @course_id, @rel_path, @module, @title, @order_index, @module_order, @duration_sec, @size_bytes, @mtime, @container, @playable, NULL, 0, @remote_id)
   `);
   const markMissing = db.prepare('UPDATE lessons SET missing=1, order_index=@order_index WHERE id=@id');
   // Upsert por (course_id, rel_path): mantém o ID ESTÁVEL de materiais que já
   // existiam. Apagar+reinserir a cada rescan trocava os ids toda vez — e como a
   // página do curso re-escaneia no mount, os links de material quebravam.
   const upsertMaterial = db.prepare(`
-    INSERT INTO materials (id, course_id, module, rel_path, kind, size_bytes)
-    VALUES (@id, @course_id, @module, @rel_path, @kind, @size_bytes)
-    ON CONFLICT(course_id, rel_path) DO UPDATE SET module=excluded.module, kind=excluded.kind, size_bytes=excluded.size_bytes
+    INSERT INTO materials (id, course_id, module, rel_path, kind, size_bytes, remote_id)
+    VALUES (@id, @course_id, @module, @rel_path, @kind, @size_bytes, @remote_id)
+    ON CONFLICT(course_id, rel_path) DO UPDATE SET module=excluded.module, kind=excluded.kind, size_bytes=excluded.size_bytes,
+      remote_id=COALESCE(excluded.remote_id, remote_id)
   `);
   const deleteMaterial = db.prepare('DELETE FROM materials WHERE course_id=? AND rel_path=?');
 
@@ -182,6 +201,8 @@ export function reconcileCourse(
         id: m.id, rel_path: d.relPath, module: d.module, title: d.title, order_index: d.orderIndex,
         module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime, container: d.container,
         playable: d.playable ? 1 : 0,
+        remote_id: extras?.get(d.relPath)?.remoteId ?? null,
+        duration_sec: extras?.get(d.relPath)?.durationSec ?? null,
       });
     }
     for (const a of plan.added) {
@@ -190,6 +211,8 @@ export function reconcileCourse(
         id: randomUUID(), course_id: courseId, rel_path: d.relPath, module: d.module, title: d.title,
         order_index: d.orderIndex, module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime,
         container: d.container, playable: d.playable ? 1 : 0,
+        remote_id: extras?.get(d.relPath)?.remoteId ?? null,
+        duration_sec: extras?.get(d.relPath)?.durationSec ?? null,
       });
     }
     for (const ms of plan.missing) {
@@ -208,11 +231,12 @@ export function reconcileCourse(
       upsertMaterial.run({
         id: randomUUID(), course_id: courseId, module: segs.length > 1 ? segs[0] : null,
         rel_path: mat.relPath, kind: mat.kind, size_bytes: mat.sizeBytes,
+        remote_id: extras?.get(mat.relPath)?.remoteId ?? null,
       });
     }
     // Curso: estrutura, root, last_scanned, poster
     db.prepare('UPDATE courses SET structure=@structure, last_scanned_at=@now, root_path=@root WHERE id=@id').run({
-      structure: plan.structure, now, root: targetPath, id: courseId,
+      structure: plan.structure, now, root: rootPath, id: courseId,
     });
     const posterOk = course.poster_lesson_id
       ? (db.prepare('SELECT missing FROM lessons WHERE id=?').get(course.poster_lesson_id) as any)

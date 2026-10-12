@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openDb } from '../db/index';
 import { loadConfig } from '../config';
-import { createCourseFromDrive, type DepsIngestao } from './scan-drive';
+import { createCourseFromDrive, reconcileDriveCourse, type DepsIngestao } from './scan-drive';
 import type { ArquivoDrive, ClienteDrive } from '../drive/api';
 
 const PASTA = 'application/vnd.google-apps.folder';
@@ -39,7 +39,7 @@ function montar(fetchImpl: typeof fetch, token: string | null = 'tok') {
   };
   const config = loadConfig({ DATA_DIR: path.join(tmp, 'dados-' + Math.random().toString(36).slice(2)) });
   const deps: DepsIngestao = { cliente, fetch: fetchImpl, config, token: async () => token };
-  return { deps, config, db: openDb(':memory:') };
+  return { deps, config, arvore, db: openDb(':memory:') };
 }
 
 const link = { folderId: 'raiz', resourceKey: 'rk1' };
@@ -88,5 +88,52 @@ describe('createCourseFromDrive', () => {
     const { id } = await createCourseFromDrive(db, deps, link, 'l');
     const aulas: any[] = db.prepare('SELECT thumb_path FROM lessons WHERE course_id=?').all(id);
     expect(aulas.filter((a) => a.thumb_path).length).toBe(1);
+  });
+});
+
+describe('reconcileDriveCourse', () => {
+  const imgs = (async () => new Response('img')) as typeof fetch;
+
+  it('rescan drive: aula nova entra, sumida fica missing, progresso preservado', async () => {
+    const { deps, db, arvore } = montar(imgs);
+    const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    const v1: any = db.prepare("SELECT id FROM lessons WHERE course_id=? AND rel_path LIKE '%ola%'").get(id);
+    db.prepare('INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, auto_completed, updated_at) VALUES (?,?,?,?,?,?)')
+      .run(v1.id, 42, 42, 0, 0, 'x');
+
+    // v2 some, v3 entra
+    arvore.m1 = [arvore.m1[0], arq('v3', '03 - extra.mp4', { thumbnailLink: 'http://thumb/v3' })];
+    const r = await reconcileDriveCourse(db, deps, id);
+    expect(r).toMatchObject({ matched: 1, missing: 1, added: 1 });
+
+    const aulas: any[] = db.prepare('SELECT * FROM lessons WHERE course_id=?').all(id);
+    expect(aulas.find((a) => a.remote_id === 'v2').missing).toBe(1);
+    const nova = aulas.find((a) => a.remote_id === 'v3');
+    expect(nova.missing).toBe(0);
+    expect(fs.readFileSync(nova.thumb_path, 'utf8')).toBe('img');
+    const p: any = db.prepare('SELECT position_sec FROM progress WHERE lesson_id=?').get(v1.id);
+    expect(p.position_sec).toBe(42);
+  });
+
+  it('rescan drive atualiza remote_id de arquivo re-enviado com o mesmo nome', async () => {
+    const { deps, db, arvore } = montar(imgs);
+    const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    const antes: any = db.prepare("SELECT id FROM lessons WHERE remote_id='v2'").get();
+    arvore.m1 = [arvore.m1[0], arq('v2-novo', '02 - setup.mp4', { videoMediaMetadata: { durationMillis: '5000' } })];
+    await reconcileDriveCourse(db, deps, id);
+    const depois: any = db.prepare("SELECT * FROM lessons WHERE id=?").get(antes.id);
+    expect(depois.remote_id).toBe('v2-novo');
+    expect(depois.duration_sec).toBe(5);
+    expect(depois.missing).toBe(0);
+  });
+
+  it('pasta já adicionada: devolve existente, reconcilia e desarquiva', async () => {
+    const { deps, db } = montar(imgs);
+    const a = await createCourseFromDrive(db, deps, link, 'l');
+    db.prepare('UPDATE courses SET archived=1 WHERE id=?').run(a.id);
+    const b = await createCourseFromDrive(db, deps, link, 'l');
+    expect(b).toEqual({ id: a.id, existente: true });
+    expect((db.prepare('SELECT archived FROM courses WHERE id=?').get(a.id) as any).archived).toBe(0);
+    expect((db.prepare('SELECT COUNT(*) n FROM courses').get() as any).n).toBe(1);
   });
 });

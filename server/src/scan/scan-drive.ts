@@ -6,6 +6,7 @@ import type { Fetch, LinkDrive } from '../drive/tipos';
 import { walkDrive } from '../drive/walk';
 import { lessonThumbPath } from '../media/thumbs';
 import { deriveCourse } from './derive';
+import { aplicarReconcile, planReconcile, type ExistingLesson, type ReconcileResult } from './reconcile';
 import { inserirCursoDerivado, type ExtraRemoto } from './scan-course';
 
 export interface DepsIngestao {
@@ -17,14 +18,23 @@ export interface DepsIngestao {
 
 const CAPAS_SIMULTANEAS = 4;
 
-// Sempre cria um curso novo. Reconhecer uma pasta já adicionada fica com a
-// reconciliação (Tarefa 7); aqui `existente` é sempre false.
+// Pasta já adicionada não vira curso duplicado: reconcilia o existente (como o
+// POST /api/courses faz com o caminho local) e o desarquiva se preciso.
 export async function createCourseFromDrive(
   db: Db,
   deps: DepsIngestao,
   link: LinkDrive,
   linkOriginal: string,
 ): Promise<{ id: string; existente: boolean }> {
+  const ja = db.prepare('SELECT id, archived FROM courses WHERE drive_folder_id=?').get(link.folderId) as
+    | { id: string; archived: number }
+    | undefined;
+  if (ja) {
+    if (ja.archived) db.prepare('UPDATE courses SET archived=0 WHERE id=?').run(ja.id);
+    await reconcileDriveCourse(db, deps, ja.id);
+    return { id: ja.id, existente: true };
+  }
+
   const { titulo, videos, materials } = await walkDrive(deps.cliente, link.folderId);
   const derived = deriveCourse(videos);
 
@@ -89,4 +99,48 @@ export async function baixarCapasFaltando(
     while (proxima < fila.length) await baixarUma(fila[proxima++]);
   };
   await Promise.all(Array.from({ length: Math.min(CAPAS_SIMULTANEAS, fila.length) }, trabalhador));
+}
+
+// Mesmo plano do curso local, com a listagem vinda do Drive. O progresso segue
+// preso ao relPath: um arquivo re-enviado com o mesmo nome ganha outro
+// remote_id, mas continua sendo a mesma aula.
+export async function reconcileDriveCourse(
+  db: Db,
+  deps: DepsIngestao,
+  courseId: string,
+): Promise<ReconcileResult> {
+  const course = db
+    .prepare('SELECT root_path, structure, drive_folder_id FROM courses WHERE id=?')
+    .get(courseId) as { root_path: string; structure: string; drive_folder_id: string | null } | undefined;
+  if (!course?.drive_folder_id) throw new Error('curso-sem-pasta-do-drive');
+
+  const { videos, materials } = await walkDrive(deps.cliente, course.drive_folder_id);
+  const derived = deriveCourse(videos);
+  const existing = db
+    .prepare('SELECT id, rel_path, mtime, order_index FROM lessons WHERE course_id=?')
+    .all(courseId) as unknown as ExistingLesson[];
+  const plan = planReconcile(existing, derived.lessons, derived.structure);
+
+  const extras = new Map<string, ExtraRemoto>();
+  const capas = new Map<string, string>();
+  for (const f of [...videos, ...materials]) {
+    extras.set(f.relPath, { remoteId: f.remoteId, durationSec: f.durationSec });
+  }
+  for (const v of videos) if (v.thumbnailLink) capas.set(v.relPath, v.thumbnailLink);
+
+  const resultado = aplicarReconcile(db, courseId, plan, materials, course.root_path, extras);
+
+  // Só o que ainda não tem capa em disco: o arquivo re-enviado teve thumb_path
+  // zerado pelo mtime novo, e as demais aulas não precisam baixar tudo de novo.
+  const comCapa = new Set(
+    (db.prepare('SELECT rel_path, thumb_path FROM lessons WHERE course_id=?').all(courseId) as Array<{
+      rel_path: string;
+      thumb_path: string | null;
+    }>)
+      .filter((a) => a.thumb_path && fs.existsSync(a.thumb_path))
+      .map((a) => a.rel_path),
+  );
+  for (const rel of comCapa) capas.delete(rel);
+  await baixarCapasFaltando(db, deps, courseId, capas);
+  return resultado;
 }
