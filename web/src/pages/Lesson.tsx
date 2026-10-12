@@ -555,7 +555,7 @@ export default function Lesson() {
           )}
           {urlBloqueada && (
             <p className="mb-2 text-sm text-neutral-300">
-              <a href={urlBloqueada} target="_blank" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
+              <a href={urlBloqueada} target="_blank" rel="opener" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
                 Abrir a autorização do Google
               </a>
             </p>
@@ -569,6 +569,18 @@ export default function Lesson() {
                 className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
               >
                 Autorizar de novo
+              </button>
+            )}
+            {(driveErro.erro === 'sem-conexao' || driveErro.erro === 'cota-esgotada') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setDriveErro(null);
+                  setVideoKey((k) => k + 1);
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Tentar de novo
               </button>
             )}
             <button
