@@ -63,4 +63,9 @@ describe('loadConfig', () => {
     expect(loadConfig({}).openBrowser).toBe(true);
     expect(loadConfig({ OPEN_BROWSER: '0' }).openBrowser).toBe(false);
   });
+
+  it('openBrowser: não abre em `npm run dev`, a menos que peçam', () => {
+    expect(loadConfig({ npm_lifecycle_event: 'dev' }).openBrowser).toBe(false);
+    expect(loadConfig({ npm_lifecycle_event: 'dev', OPEN_BROWSER: '1' }).openBrowser).toBe(true);
+  });
 });

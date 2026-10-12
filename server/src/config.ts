@@ -66,6 +66,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dbPath: path.join(dataDir, 'app.db'),
     thumbsDir: path.join(dataDir, 'thumbs'),
     convertedDir: path.join(dataDir, 'converted'),
-    openBrowser: env.OPEN_BROWSER === undefined ? true : env.OPEN_BROWSER === '1' || env.OPEN_BROWSER === 'true',
+    // Em `npm run dev` o `tsx watch` reinicia o servidor a cada arquivo salvo, e
+    // cada reinício abriria mais uma aba em :7777 — que nem é a interface de dev
+    // (o Vite já abre a :5173). OPEN_BROWSER explícito continua valendo.
+    openBrowser:
+      env.OPEN_BROWSER === undefined
+        ? env.npm_lifecycle_event !== 'dev'
+        : env.OPEN_BROWSER === '1' || env.OPEN_BROWSER === 'true',
   };
 }
