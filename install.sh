@@ -1,7 +1,7 @@
 #!/bin/sh
 # Instalador do Learnflix para macOS e Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/OnaitsirC-MiromA/learnflix-v2/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.sh | sh
 #
 # Baixa o executável do seu sistema, confere a soma SHA-256 e põe no PATH.
 # Não precisa de Node, nem de npm, nem de permissão de administrador.
@@ -9,7 +9,7 @@
 # POSIX sh de propósito: `sh` existe em qualquer lugar, `bash` não.
 set -eu
 
-REPO="OnaitsirC-MiromA/learnflix-v2"
+REPO="rafatcastro/learnflix-v2"
 # Sobrescrevível para testar o instalador contra uma release local antes de
 # publicar de verdade.
 BASE_URL="${LEARNFLIX_BASE_URL:-https://github.com/$REPO/releases/latest/download}"

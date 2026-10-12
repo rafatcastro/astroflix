@@ -32,10 +32,15 @@ const PADROES = [
   new RegExp(`(^\\$Repo = ')([^']+)(?=')`, 'gm'),
 ];
 
+// Este repositório é um fork: o README dá crédito ao projeto original com links
+// para ele. Esses links não são "o nosso repositório" — nem a auditoria nem a
+// troca podem encostar neles.
+const ORIGEM = 'OnaitsirC-MiromA/learnflix-v2';
+
 function ocorrencias(texto) {
   const achados = [];
   for (const re of PADROES) {
-    for (const m of texto.matchAll(re)) achados.push(m[2]);
+    for (const m of texto.matchAll(re)) if (m[2] !== ORIGEM) achados.push(m[2]);
   }
   return achados;
 }
@@ -76,7 +81,8 @@ for (const arquivo of ARQUIVOS) {
   const antes = fs.readFileSync(caminho, 'utf8');
   let depois = antes;
   for (const re of PADROES) {
-    depois = depois.replace(re, (_todo, prefixo) => {
+    depois = depois.replace(re, (todo, prefixo, repo) => {
+      if (repo === ORIGEM) return todo;
       trocas++;
       return prefixo + novo;
     });
