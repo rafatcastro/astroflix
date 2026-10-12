@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { openDb } from '../db/index';
 import { loadConfig } from '../config';
-import { createCourseFromDrive, reconcileDriveCourse, type DepsIngestao } from './scan-drive';
+import { aguardarCapas, createCourseFromDrive, reconcileDriveCourse, type DepsIngestao } from './scan-drive';
 import type { ArquivoDrive, ClienteDrive } from '../drive/api';
 
 const PASTA = 'application/vnd.google-apps.folder';
@@ -45,6 +45,34 @@ function montar(fetchImpl: typeof fetch, token: string | null = 'tok') {
 const link = { folderId: 'raiz', resourceKey: 'rk1' };
 
 describe('createCourseFromDrive', () => {
+  it('não espera as capas: fetch que nunca resolve não trava a criação', async () => {
+    // Liberado no fim para não deixar capa pendurada para os outros testes.
+    let liberar!: () => void;
+    const trava = new Promise<Response>((ok) => (liberar = () => ok(new Response('x'))));
+    const { deps, db } = montar((() => trava) as unknown as typeof fetch);
+    const r = await Promise.race([
+      createCourseFromDrive(db, deps, link, 'l'),
+      new Promise<'travou'>((ok) => setTimeout(() => ok('travou'), 500)),
+    ]);
+    liberar();
+    await aguardarCapas();
+    expect(r).not.toBe('travou');
+  });
+
+  it('reconcile também não espera as capas', async () => {
+    let liberar!: () => void;
+    const trava = new Promise<Response>((ok) => (liberar = () => ok(new Response('x'))));
+    const { deps, db } = montar((() => trava) as unknown as typeof fetch);
+    const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    const r = await Promise.race([
+      reconcileDriveCourse(db, deps, id),
+      new Promise<'travou'>((ok) => setTimeout(() => ok('travou'), 500)),
+    ]);
+    liberar();
+    await aguardarCapas();
+    expect(r).not.toBe('travou');
+  });
+
   it('cria curso drive com módulos, remote_id e duração', async () => {
     const { deps, db } = montar((async () => new Response('img')) as typeof fetch);
     const { id, existente } = await createCourseFromDrive(db, deps, link, 'https://drive.google.com/x');
@@ -70,6 +98,7 @@ describe('createCourseFromDrive', () => {
       return new Response('jpegbytes');
     }) as typeof fetch);
     const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
     const aulas: any[] = db.prepare('SELECT * FROM lessons WHERE course_id=?').all(id);
     expect(chamadas).toHaveLength(2);
     expect(chamadas[0][1].headers.Authorization).toBe('Bearer tok');
@@ -88,6 +117,7 @@ describe('createCourseFromDrive', () => {
     arvore.m1[0].thumbnailLink = 'https://evil.example.com/x';
     arvore.m1[1].thumbnailLink = 'http://lh3.googleusercontent.com/y';
     await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
     expect(chamadas).toHaveLength(2);
     for (const [, init] of chamadas) expect(init.headers.Authorization).toBeUndefined();
   });
@@ -99,6 +129,7 @@ describe('createCourseFromDrive', () => {
       return new Response('ok');
     }) as typeof fetch);
     const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
     const aulas: any[] = db.prepare('SELECT thumb_path FROM lessons WHERE course_id=?').all(id);
     expect(aulas.filter((a) => a.thumb_path).length).toBe(1);
   });
@@ -117,6 +148,7 @@ describe('reconcileDriveCourse', () => {
     // v2 some, v3 entra
     arvore.m1 = [arvore.m1[0], arq('v3', '03 - extra.mp4', { thumbnailLink: 'http://thumb/v3' })];
     const r = await reconcileDriveCourse(db, deps, id);
+    await aguardarCapas();
     expect(r).toMatchObject({ matched: 1, missing: 1, added: 1 });
 
     const aulas: any[] = db.prepare('SELECT * FROM lessons WHERE course_id=?').all(id);
