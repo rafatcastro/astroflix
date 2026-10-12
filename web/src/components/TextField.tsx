@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 
-// Campo de texto charcoal compartilhado (DESIGN.md não tinha estilo de input
+// Campo de texto charcoal compartilhado (docs/design.md não tinha estilo de input
 // definido; Configurações e os diálogos de renomear usavam classes ad hoc).
 // Encaminha ref para autoFocus e leitura de valor.
 const TextField = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(

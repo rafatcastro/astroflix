@@ -550,8 +550,8 @@ que a fixa na tarefa dona do código:
   - Mostra "Conectado como {email} · Desconectar" ou "Nenhuma conta conectada".
   - Tem um `<details>` "Usar um app próprio do Google Cloud" com três campos e "Salvar". Os campos
     vêm vazios, com o placeholder "configurado" quando o status diz `true`.
-- **Acessibilidade:** foco preso no modal, `Esc` fecha, contraste e foco visível do `DESIGN` atual
-  (ver AGENTS.md).
+- **Acessibilidade:** foco preso no modal, `Esc` fecha, contraste e foco visível conforme
+  `docs/design.md`.
 
 - [ ] **Passo 1:** implementar seguindo os componentes vizinhos (`ConfirmDialog`, `TextField`,
   `RepointModal`).
