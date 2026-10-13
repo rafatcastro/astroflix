@@ -26,7 +26,11 @@ export const mensagemErroDrive = (erro: string): string =>
 const INTERVALO_MS = 1500;
 const PRAZO_MS = 10 * 60_000; // o mesmo prazo do state no servidor
 
-export function autorizarNoGoogle(url: string, opts: { signal?: AbortSignal } = {}): Promise<boolean> {
+export function autorizarNoGoogle(
+  url: string,
+  // O login da conta usa o mesmo fluxo, com o resultado perguntado na rota dela.
+  opts: { signal?: AbortSignal; resultado?: string } = {},
+): Promise<boolean> {
   return new Promise((resolve) => {
     const state = new URL(url).searchParams.get('state');
     if (!state || opts.signal?.aborted) return resolve(false);
@@ -41,7 +45,7 @@ export function autorizarNoGoogle(url: string, opts: { signal?: AbortSignal } = 
     opts.signal?.addEventListener('abort', onAbort);
     const sondagem = window.setInterval(() => {
       if (Date.now() - inicio > PRAZO_MS) return fim(false);
-      void fetch(`/api/drive/auth/resultado?state=${encodeURIComponent(state)}`)
+      void fetch(`${opts.resultado ?? '/api/drive/auth/resultado'}?state=${encodeURIComponent(state)}`)
         .then((r) => (r.ok ? (r.json() as Promise<{ pronto: boolean; ok?: boolean }>) : null))
         .then((r) => {
           if (r?.pronto) fim(!!r.ok);

@@ -86,6 +86,24 @@ function lerTelegramPadrao() {
 }
 const telegram = lerTelegramPadrao();
 
+// Projeto Supabase da conta (login obrigatório e nuvem). A chave é a publishable,
+// feita para viver dentro do app: quem protege os dados é a RLS do banco. Mesmo
+// assim fica fora do git, como as outras: envs SUPABASE_* ou .supabase.local.json.
+// Sem as duas, o app roda sem conta (fork ou desenvolvimento sem projeto).
+function lerSupabasePadrao() {
+  let local = {};
+  try {
+    local = JSON.parse(fs.readFileSync(path.join(raiz, '.supabase.local.json'), 'utf8'));
+  } catch {
+    // arquivo ausente ou ilegível: segue só com as envs
+  }
+  return {
+    url: process.env.SUPABASE_URL || local.url || null,
+    publishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || local.publishableKey || null,
+  };
+}
+const supabase = lerSupabasePadrao();
+
 const entradas = arquivos.map(({ rel, completo }) => {
   const tipo = TIPOS[path.extname(rel).toLowerCase()] ?? 'application/octet-stream';
   const base64 = fs.readFileSync(completo).toString('base64');
@@ -108,6 +126,8 @@ export const APP_VERSION = ${JSON.stringify(versao)};
 export const GOOGLE_PADRAO: { clientId: string | null; clientSecret: string | null; apiKey: string | null } = ${JSON.stringify(google)};
 
 export const TELEGRAM_PADRAO: { apiId: number | null; apiHash: string | null } = ${JSON.stringify(telegram)};
+
+export const SUPABASE_PADRAO: { url: string | null; publishableKey: string | null } = ${JSON.stringify(supabase)};
 
 export const WEB_ASSETS: Record<string, AssetEmbutido> = {
 ${entradas.join('\n')}

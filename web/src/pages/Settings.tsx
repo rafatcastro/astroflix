@@ -74,6 +74,80 @@ const CAMPOS_DRIVE: { chave: CredencialDrive; rotulo: string; segredo?: boolean 
 // O Anki só é tocado aqui quando a seção aparece, e só na própria máquina
 // (AnkiConnect escuta em localhost). Os flashcards funcionam sem ele: o card fica
 // guardado e vai quando o Anki abrir.
+const ERRO_NUVEM: Record<string, string> = {
+  'sem-conexao': 'Sem internet: as alterações esperam e sobem quando a conexão voltar.',
+  'sessao-expirada': 'A sessão expirou. Entre de novo para continuar sincronizando.',
+  recusado: 'A nuvem recusou uma alteração. Tente sincronizar de novo.',
+};
+
+// Conta e nuvem: quem está usando, quando sincronizou e o que ainda falta subir.
+function SecaoConta() {
+  const qc = useQueryClient();
+  const { data: conta } = useQuery({ queryKey: ['conta'], queryFn: api.conta, refetchInterval: 15_000 });
+  const [ocupado, setOcupado] = useState(false);
+  const [confirmarSaida, setConfirmarSaida] = useState(false);
+  if (!conta?.configurada || !conta.entrou) return null;
+  const n = conta.nuvem;
+
+  const sincronizar = async () => {
+    setOcupado(true);
+    await api.contaSincronizar().catch(() => {});
+    await qc.invalidateQueries();
+    setOcupado(false);
+  };
+  const sair = async () => {
+    setOcupado(true);
+    await api.contaSair().catch(() => {});
+    // Nada da conta pode ficar na memória da tela para a próxima pessoa.
+    qc.clear();
+    await qc.invalidateQueries({ queryKey: ['conta'] });
+  };
+  const quando = n?.ultimaSincronizacao
+    ? new Date(n.ultimaSincronizacao).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+    : null;
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Conta</h2>
+      <div className="space-y-1 rounded-lg bg-neutral-900 px-3 py-3 text-sm">
+        <div className="text-neutral-100">{conta.email ?? 'Conta Google'}</div>
+        <div className="text-neutral-400">
+          {n?.sincronizando ? 'Sincronizando…' : quando ? `Sincronizado em ${quando}` : 'Ainda não sincronizou nesta abertura'}
+          {n && n.pendentes > 0 ? ` · ${n.pendentes} alteração${n.pendentes === 1 ? '' : 'ões'} esperando` : ''}
+        </div>
+        {n?.erro && <div className="text-amber-200">{ERRO_NUVEM[n.erro]}</div>}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => void sincronizar()}
+          disabled={ocupado}
+          className="min-h-[44px] rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+        >
+          Sincronizar agora
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmarSaida(true)}
+          disabled={ocupado}
+          className="min-h-[44px] rounded-lg px-3 text-sm text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+        >
+          Sair
+        </button>
+      </div>
+      {confirmarSaida && (
+        <ConfirmDialog
+          title="Sair da conta?"
+          message="Suas alterações sobem para a nuvem antes. Para voltar a usar o app, é preciso entrar de novo."
+          confirmLabel="Sair"
+          onConfirm={() => void sair()}
+          onCancel={() => setConfirmarSaida(false)}
+        />
+      )}
+    </section>
+  );
+}
+
 function SecaoAnki() {
   const { hash } = useLocation();
   const ref = useRef<HTMLElement>(null);
@@ -495,6 +569,7 @@ export default function Settings() {
         </label>
       </section>
 
+      <SecaoConta />
       <SecaoDrive onNotice={setNotice} />
       <SecaoAnki />
       <SecaoTelegram onNotice={setNotice} />

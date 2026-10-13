@@ -11,10 +11,11 @@ no SQLite. Cursos podem ser agrupados em **bibliotecas** (coleções).
 
 O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
-carrega a interface dele. Assistir cursos locais funciona sem conta, sem rede e sem serviço externo.
-Recursos que usam rede (por exemplo, baixar uma pasta do Google Drive) são **opcionais**: quem não
-usa nunca precisa configurar nada para eles, e nenhuma mudança pode transformá-los em pré-requisito
-do resto do app.
+carrega a interface dele. **O app exige conta** (login com Google, sessão no Supabase): a nuvem
+guarda os metadados da pessoa (cursos, aulas, progresso, bibliotecas e flashcards) e o SQLite local
+é o cache. Sem rede, o app abre só com uma sessão já salva nesta máquina. Build sem projeto Supabase
+(fork, desenvolvimento) roda sem conta. Os outros recursos de rede (Drive, Telegram, Anki) continuam
+**opcionais**: quem não usa nunca precisa configurar nada para eles.
 
 O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
 motivou a decisão), não o quê. Siga esse estilo.
@@ -58,7 +59,7 @@ ninguém cria tag à mão. Um runner por plataforma gera o sidecar
 (`build:binario` → `scripts/preparar-sidecar.mjs`, que dá o nome com o target triple do Rust), a
 versão é gravada no `package.json`, no `tauri.conf.json` e no `Cargo.toml`
 (`scripts/sincronizar-versao.mjs <versão>`) e o `tauri-action` anexa os instaladores e o `latest.json` do
-atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*`, `TELEGRAM_*` e
+atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*`, `TELEGRAM_*`, `SUPABASE_*` e
 `TAURI_SIGNING_PRIVATE_KEY` (a chave fica localmente em `.tauri-signing.local.key`, ignorada pelo
 git; a pública está no `tauri.conf.json`).
 
@@ -78,6 +79,10 @@ Lidas em `server/src/config.ts`:
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
 
+- `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`: o projeto da conta. Env → `SUPABASE_PADRAO` (de
+  `.supabase.local.json`, ignorado pelo git; no CI, dos secrets). A chave é a publishable (pública
+  por desenho; quem protege os dados é a RLS de `supabase/schema.sql`). Sem as duas, o app roda sem
+  conta.
 - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`: opcionais, só para cursos do Telegram. Mesma
   precedência e mesma regra de segredo das `GOOGLE_*`: `telegram.credenciais` → env →
   `TELEGRAM_PADRAO` (de `.telegram.local.json`, ignorado pelo git; no CI, dos secrets).
@@ -161,6 +166,17 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   fechado funciona e vai depois. Ao listar, relê as notas (edição lá vem para cá, nota apagada sai;
   se **nenhuma** for achada, assume outro perfil e não apaga nada). `routes/flashcards.ts` expõe a
   API; os testes usam `anki-falso.ts` (`buildApp(..., { anki })`).
+- `nuvem/`: conta e sincronização. `cliente` fala com o Supabase por REST (`fetch` injetável),
+  `conta` faz o login (o OAuth com PKCE do Drive, `openid email profile`, trocado por sessão do
+  Supabase com `id_token`; sessão em `settings`), `sincronizar` sobe a `nuvem_fila` (preenchida por
+  gatilhos da v5, calados quando quem escreve é a descida) e desce o que o banco carimbou depois da
+  última marca de cada tabela. Conflito: a nuvem vence, mas o progresso nunca anda para trás e
+  "concluída" vale a escolha mais recente (a mesma regra em `supabase/schema.sql`). A pasta de um
+  curso local é de cada máquina (`pastas_por_maquina`). Outra conta na mesma máquina limpa o cache;
+  a primeira entrada sobe tudo. `buildApp(..., { exigirConta })` (só no `index.ts`) liga a trava
+  (401 `precisa-entrar` em toda rota fora de `/api/conta`) e a sincronização a cada minuto; os
+  testes usam `supabase-falso.ts` (`buildApp(..., { supabase })`). O schema do Postgres fica em
+  `supabase/schema.sql` (aplicar no SQL Editor).
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.

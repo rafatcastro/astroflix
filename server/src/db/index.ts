@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 4;
+const ULTIMA_VERSAO = 5;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -184,6 +184,59 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
         CREATE INDEX idx_flashcards_lesson ON flashcards(lesson_id);
       `);
       pragma(db, 'user_version = 4');
+    });
+  }
+  if (version < 5 && ate >= 5) {
+    // Conta e nuvem (nuvem/). Gatilhos anotam em nuvem_fila o que mudou nas tabelas
+    // que sobem; o enviador lê a fila e manda ao Supabase. Assim nenhuma rota
+    // precisou saber da nuvem. Uma linha por (tabela, chave): mudar a mesma aula
+    // dez vezes é um envio só. Reanotar dá um seq novo, e o enviador só apaga os
+    // seqs que leu: uma mudança que chega durante o envio não se perde.
+    // Quando quem escreve é a própria sincronização (descida), nuvem_estado tem
+    // 'aplicando' e os gatilhos não disparam: senão tudo que desce subiria de volta.
+    // Só as colunas que vão para a nuvem disparam: o re-scan regrava mtime e capa
+    // de toda aula, e isso não é mudança da conta.
+    const CHAVE_AULA = "json_object('curso', X.course_id, 'rel', X.rel_path)";
+    const quieto = "NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')";
+    const gatilhos: Array<[string, string, string, string]> = [
+      // [tabela, colunas do UPDATE, nome na fila, chave]
+      ['collections', 'name, sort_index', 'colecao', 'X.id'],
+      [
+        'courses',
+        'title, root_path, structure, archived, sort_index, collection_id, poster_lesson_id, drive_folder_id, drive_resource_key, telegram_peer',
+        'curso',
+        'X.id',
+      ],
+      ['lessons', 'title, module, order_index, module_order, duration_sec, remote_id, rel_path', 'aula', CHAVE_AULA],
+      ['progress', 'position_sec, furthest_sec, duration_sec, completed, completed_at, auto_completed', 'progresso', 'X.lesson_id'],
+      ['flashcards', 'frente, verso, lesson_id, course_id, minuto_sec, anki_note_id, pendente', 'flashcard', 'X.id'],
+    ];
+    const sql = [
+      `CREATE TABLE nuvem_fila (
+         seq INTEGER PRIMARY KEY AUTOINCREMENT,
+         tabela TEXT NOT NULL,
+         chave TEXT NOT NULL,
+         UNIQUE (tabela, chave)
+       );`,
+      `CREATE TABLE nuvem_estado (chave TEXT PRIMARY KEY, valor TEXT);`,
+    ];
+    for (const [t, cols, nome, chave] of gatilhos) {
+      // DELETE + INSERT e não OR REPLACE: dentro de um gatilho disparado por ação de
+      // chave estrangeira (curso apagado → SET NULL), o OR REPLACE do gatilho não vale
+      // e o UNIQUE derrubava a operação de quem só queria apagar uma biblioteca.
+      const ins = (X: string) => {
+        const k = chave.replaceAll('X.', X + '.');
+        return `DELETE FROM nuvem_fila WHERE tabela = '${nome}' AND chave = ${k}; INSERT INTO nuvem_fila (tabela, chave) VALUES ('${nome}', ${k});`;
+      };
+      sql.push(
+        `CREATE TRIGGER nuvem_${t}_ins AFTER INSERT ON ${t} WHEN ${quieto} BEGIN ${ins('NEW')} END;`,
+        `CREATE TRIGGER nuvem_${t}_upd AFTER UPDATE OF ${cols} ON ${t} WHEN ${quieto} BEGIN ${ins('NEW')} ${ins('OLD')} END;`,
+        `CREATE TRIGGER nuvem_${t}_del AFTER DELETE ON ${t} WHEN ${quieto} BEGIN ${ins('OLD')} END;`,
+      );
+    }
+    transaction(db, () => {
+      db.exec(sql.join('\n'));
+      pragma(db, 'user_version = 5');
     });
   }
 }
