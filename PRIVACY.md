@@ -26,7 +26,8 @@ Dispositivos. Com ela, o app:
 
 - lê as mensagens com vídeo ou arquivo do grupo que você indicou, para montar o curso (legenda,
   nome, tamanho, duração e miniatura);
-- transmite os vídeos e arquivos desse grupo para o player, no momento em que você abre cada um;
+- transmite os vídeos e arquivos desse grupo para o player e baixa para o seu computador a aula que
+  você abre e as duas seguintes;
 - entra num grupo por link de convite **só quando você confirma**;
 - mostra o seu nome de usuário nas Configurações.
 

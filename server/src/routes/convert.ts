@@ -26,14 +26,14 @@ interface Conversao { progresso: number; erro: string | null; ativa: boolean }
 export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
   const { db, config } = opts;
 
-  // A aula do Drive já baixada tem arquivo local como qualquer outra: o que vale
-  // para ela é a cópia em downloads/.
+  // A aula do Drive ou do Telegram já baixada tem arquivo local como qualquer
+  // outra: o que vale para ela é a cópia em downloads/.
   const lessonPath = (id: string): { file: string; courseId: string } | null => {
     const row = db
       .prepare('SELECT l.rel_path, l.course_id, c.root_path, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?')
       .get(id) as any;
     if (!row) return null;
-    if (row.source === 'drive') {
+    if (row.source === 'drive' || row.source === 'telegram') {
       const local = arquivoLocalDaAula(config, row.course_id, id, row.rel_path);
       return local && !local.convertido ? { file: local.arquivo, courseId: row.course_id } : null;
     }
@@ -41,14 +41,14 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     return file ? { file, courseId: row.course_id } : null;
   };
 
-  // Curso do Telegram, ou do Drive ainda não baixado: não há arquivo local para
+  // Aula do Drive ou do Telegram ainda não baixada: não há arquivo local para
   // probar nem converter.
   const aulaDoDrive = (id: string): { playable: boolean } | null => {
     const r = db
       .prepare("SELECT l.playable, l.rel_path, l.course_id, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source IN ('drive','telegram')")
       .get(id) as { playable: number; rel_path: string; course_id: string; source: string } | undefined;
     if (!r) return null;
-    if (r.source === 'drive' && arquivoLocalDaAula(config, r.course_id, id, r.rel_path)) return null;
+    if (arquivoLocalDaAula(config, r.course_id, id, r.rel_path)) return null;
     return { playable: !!r.playable };
   };
 
@@ -72,7 +72,9 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
 
   app.post('/api/lessons/:id/verify-playback', async (req, reply) => {
     const noDrive = aulaDoDrive((req.params as { id: string }).id);
-    if (noDrive) return { playable: noDrive.playable, reason: noDrive.playable ? null : 'formato', remuxable: false };
+    // semArquivo: a interface explica que a aula ainda vai ser baixada (e convertida
+    // sozinha, se precisar), em vez de oferecer uma conversão que não tem o que converter.
+    if (noDrive) return { playable: noDrive.playable, reason: noDrive.playable ? null : 'formato', remuxable: false, semArquivo: true };
     const id = (req.params as { id: string }).id;
     // Já convertido: o stream serve a cópia, então a aula toca (o original continua igual).
     if (fs.existsSync(path.join(config.convertedDir, `${id}.mp4`))) {

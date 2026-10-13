@@ -89,5 +89,5 @@ re-escanear e desconectar.
 
 ## Fora desta etapa
 
-Tópicos de fórum como módulos, login por telefone, download offline e grupos em que o vídeo é só um
-link externo.
+Tópicos de fórum como módulos, login por telefone e grupos em que o vídeo é só um link externo.
+(O download para o disco entrou depois, na mesma fila e com a mesma janela sob demanda do Drive.)
