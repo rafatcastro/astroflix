@@ -1,16 +1,25 @@
 name: Release
 
-# Publica uma versão do app desktop: o instalador de cada sistema e o
-# latest.json do atualizador, anexados à release da tag. Dispara por tag
-# (v2.1.0, v2.2.0…).
+# Publica uma versão do app desktop a cada push na main: o instalador de cada
+# sistema e o latest.json do atualizador, anexados a uma release nova. Ninguém
+# escolhe número de versão: ela é o major.minor do package.json mais o número
+# desta execução (2.1.57), que só cresce — é o que o atualizador compara.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    # Mudança só de documentação não muda o app: não vale uma release.
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
   # Permite ensaiar o build da matriz sem publicar nada.
   workflow_dispatch:
 
 permissions:
   contents: write
+
+# Uma release por vez, na ordem dos pushes: duas ao mesmo tempo disputariam o
+# "latest" e o atualizador poderia apontar para a mais velha.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   # Testar uma vez só, antes de gastar a matriz inteira: se a suíte quebra, não
@@ -24,13 +33,19 @@ jobs:
         with: { node-version: '22', cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+      - id: versao
+        run: |
+          base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+          echo "versao=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+    outputs:
+      versao: ${{ steps.versao.outputs.versao }}
 
   # A release nasce como rascunho e só vira pública no fim. O atualizador lê
   # releases/latest/download/latest.json, e "latest" ignora rascunhos: assim
   # ninguém recebe uma versão com metade das plataformas anexadas.
   rascunho:
     needs: testar
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.criar.outputs.id }}
@@ -39,17 +54,19 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        # Idempotente: numa reexecução a release já existe.
+          TAG: v${{ needs.testar.outputs.versao }}
+        # A tag nasce junto com a release, no commit deste push. Idempotente:
+        # numa reexecução a release já existe.
         run: |
-          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            gh release create "${GITHUB_REF_NAME}" --draft --generate-notes --title "Learnflix ${GITHUB_REF_NAME}"
+          if ! gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release create "${TAG}" --draft --target "${GITHUB_SHA}" --generate-notes --title "Learnflix ${TAG}"
           fi
-          id=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${GITHUB_REF_NAME}\") | .id")
+          id=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${TAG}\") | .id")
           echo "id=${id}" >> "$GITHUB_OUTPUT"
 
   desktop:
     needs: [testar, rascunho]
-    # Sem tag (workflow_dispatch), o rascunho é pulado e a matriz só ensaia o build.
+    # No workflow_dispatch o rascunho é pulado e a matriz só ensaia o build.
     if: ${{ !failure() && !cancelled() && needs.testar.result == 'success' }}
     strategy:
       fail-fast: false
@@ -80,6 +97,8 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - run: pnpm install --frozen-lockfile
+      # Antes do build: o APP_VERSION embutido no servidor sai do package.json.
+      - run: node scripts/sincronizar-versao.mjs "${{ needs.testar.outputs.versao }}"
       - name: Build
         run: pnpm build
         env:
@@ -88,7 +107,6 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       - run: pnpm build:binario
       - run: node scripts/preparar-sidecar.mjs
-      - run: node scripts/sincronizar-versao.mjs
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -102,20 +120,21 @@ jobs:
           includeUpdaterJson: true
 
   publicar:
-    needs: [rascunho, desktop]
+    needs: [testar, rascunho, desktop]
     runs-on: ubuntu-latest
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          TAG: v${{ needs.testar.outputs.versao }}
         # Os quatro jobs da matriz atualizam o mesmo latest.json, cada um com a sua
         # plataforma; dois terminando juntos podem sobrescrever um ao outro. Se
         # faltar uma, quem usa aquele sistema nunca mais receberia atualização —
         # melhor não publicar e reexecutar o job que ficou de fora.
         run: |
-          gh release download "${GITHUB_REF_NAME}" -p latest.json
+          gh release download "${TAG}" -p latest.json
           for p in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64; do
             jq -e --arg p "$p" '.platforms[$p].url' latest.json >/dev/null \
               || { echo "::error::latest.json sem a plataforma $p"; exit 1; }
           done
-          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+          gh release edit "${TAG}" --draft=false --latest
