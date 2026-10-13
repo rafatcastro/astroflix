@@ -22,12 +22,12 @@ process.env.PATH = pathComExtras(process.env.PATH ?? '', process.platform, fs.ex
 // criaria um banco vazio e a herança nunca aconteceria.
 const heranca = herdarDadosDoV1(process.cwd(), config.dataDir);
 
-for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir]) {
+for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config.downloadsDir]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
 const db = openDb(config.dbPath);
-const app = buildApp(config, db);
+const app = buildApp(config, db, { retomarDownloads: true });
 
 const shutdown = () => {
   app.close().finally(() => process.exit(0));

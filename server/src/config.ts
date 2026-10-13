@@ -16,6 +16,8 @@ export interface AppConfig {
   dbPath: string;
   thumbsDir: string;
   convertedDir: string;
+  /** Cópias locais dos cursos do Google Drive (uma pasta por curso). */
+  downloadsDir: string;
 }
 
 // Raízes navegáveis padrão no seletor de pastas. No macOS, compartilhamentos de
@@ -65,5 +67,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dbPath: path.join(dataDir, 'app.db'),
     thumbsDir: path.join(dataDir, 'thumbs'),
     convertedDir: path.join(dataDir, 'converted'),
+    downloadsDir: path.join(dataDir, 'downloads'),
   };
 }

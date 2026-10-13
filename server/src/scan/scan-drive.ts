@@ -15,6 +15,8 @@ export interface DepsIngestao {
   fetch: Fetch;
   config: AppConfig;
   token: () => Promise<string | null>;
+  /** Chamado quando a pasta do curso terminou de ser lida (para baixar as aulas). */
+  depoisDeLer?: (courseId: string) => void;
 }
 
 const CAPAS_SIMULTANEAS = 4;
@@ -91,6 +93,7 @@ async function lerCursoNovo(db: Db, deps: DepsIngestao, id: string, pastaId: str
   const capas = new Map<string, string>();
   for (const v of videos) if (v.thumbnailLink) capas.set(v.relPath, v.thumbnailLink);
   dispararCapas(db, deps, id, capas);
+  deps.depoisDeLer?.(id);
 }
 
 // Estado das leituras em segundo plano, por curso. Só em memória: se o app
@@ -235,5 +238,6 @@ export async function reconcileDriveCourse(
   );
   for (const rel of comCapa) capas.delete(rel);
   dispararCapas(db, deps, courseId, capas);
+  deps.depoisDeLer?.(courseId);
   return resultado;
 }
