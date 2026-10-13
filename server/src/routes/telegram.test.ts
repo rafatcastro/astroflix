@@ -50,15 +50,19 @@ function montar(opts: { conectado?: boolean; convite?: 'convite' | 'ja-membro' }
     },
     miniatura: async () => null,
   };
+  let desconectou = 0;
   const telegram = {
     status: () => ({ conectado: opts.conectado ?? true, usuario: '@eu', credenciais: { apiId: true, apiHash: true } }),
+    aoTrocarCredenciais: async () => {
+      desconectou++;
+    },
     cliente: async () => {
       if (opts.conectado === false) throw new FalhaTelegram('nao-autorizado');
       return cliente;
     },
   } as unknown as ServicosTelegram;
   const app = buildApp(config, db, { telegram });
-  return { app, db, pedidos };
+  return { app, db, pedidos, desconexoes: () => desconectou };
 }
 
 const post = (app: any, url: string, payload: unknown) =>
@@ -135,6 +139,19 @@ describe('rotas do Telegram', () => {
     expect(r.statusCode).toBe(200);
     expect(r.rawPayload.length).toBe(2000);
     expect(r.headers['content-disposition']).toBe("attachment; filename*=UTF-8''apostila.pdf");
+  });
+
+  it('credenciais: api_id inválido → 400 sem mexer em nada; desconecta só quando a credencial muda', async () => {
+    const { app, db, desconexoes } = montar();
+    const put = (payload: unknown) =>
+      app.inject({ method: 'PUT', url: '/api/telegram/credenciais', payload: payload as any, headers: { host: 'localhost:7777' } });
+    expect((await put({ apiId: 'abc' })).statusCode).toBe(400);
+    expect(db.prepare("SELECT value FROM settings WHERE key='telegram.credenciais'").get()).toBeUndefined();
+    expect(desconexoes()).toBe(0);
+    expect((await put({ apiId: '42', apiHash: 'h' })).statusCode).toBe(200);
+    expect(desconexoes()).toBe(1);
+    expect((await put({ apiId: 42 })).statusCode).toBe(200);
+    expect(desconexoes()).toBe(1);
   });
 
   it('re-escanear passa pelo Telegram; re-apontar é recusado', async () => {
