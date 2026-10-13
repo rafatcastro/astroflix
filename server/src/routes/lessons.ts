@@ -24,8 +24,8 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Pro
       container: r.container, playable: !!r.playable, missing: !!r.missing,
       position: r.position_sec ?? 0, furthest: r.furthest_sec ?? 0, completed: !!r.completed,
       courseId: r.course_id, courseTitle: r.course_title,
-      // O player precisa saber a origem: erro de vídeo do Drive se explica por autorização/cota, não por formato.
-      courseSource: r.course_source === 'drive' ? 'drive' : 'local',
+      // O player precisa saber a origem: erro de vídeo do Drive/Telegram se explica por autorização/cota, não por formato.
+      courseSource: r.course_source === 'drive' || r.course_source === 'telegram' ? r.course_source : 'local',
       prevLessonId: prev?.id ?? null, nextLessonId: next?.id ?? null,
     };
   });

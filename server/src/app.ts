@@ -23,13 +23,20 @@ import { backupRoutes } from './routes/backup';
 import { criarServicosDrive } from './drive/servicos';
 import type { Fetch } from './drive/tipos';
 import { driveRoutes } from './routes/drive';
+import type { ServicosTelegram } from './telegram/servicos';
+import { criarServicosTelegram } from './telegram/gramjs';
+import { telegramRoutes } from './routes/telegram';
 
-// `opts.fetch` existe só para os testes injetarem um Google falso.
-export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch }): FastifyInstance {
+// `opts.fetch` e `opts.telegram` existem só para os testes injetarem um Google e
+// um Telegram falsos.
+export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch; telegram?: ServicosTelegram }): FastifyInstance {
   const app = Fastify({ logger: false });
   // Uma instância só: o auth guarda os states pendentes do login em memória, e
   // o callback precisa enxergar os mesmos que o início do fluxo criou.
   const drive = criarServicosDrive(db, config, opts?.fetch);
+  // Uma instância só, pelo mesmo motivo: o login por QR vive em memória. Não
+  // conecta nada até alguém usar (ver gramjs.ts).
+  const telegram = opts?.telegram ?? criarServicosTelegram(db);
 
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
   registrarGuarda(app);
@@ -51,18 +58,19 @@ export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch }): F
   app.register(fsRoutes, { config, db });
   app.register(coursesRoutes, { db, config });
   app.register(lessonsRoutes, { db });
-  app.register(streamRoutes, { db, config, drive });
+  app.register(streamRoutes, { db, config, drive, telegram });
   app.register(infoRoutes);
-  app.register(thumbsRoutes, { db, config, drive });
-  app.register(migrationRoutes, { db, config, drive });
+  app.register(thumbsRoutes, { db, config, drive, telegram });
+  app.register(migrationRoutes, { db, config, drive, telegram });
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
   app.register(convertRoutes, { db, config });
   app.register(resetRoutes, { db, config });
-  app.register(materialsRoutes, { db, config, drive });
+  app.register(materialsRoutes, { db, config, drive, telegram });
   app.register(swRoutes);
   app.register(backupRoutes, { db, config });
   app.register(driveRoutes, { db, drive });
+  app.register(telegramRoutes, { db, config, telegram });
   // [ROUTES]
 
   // A interface vem embutida no build, não do disco — ver spa.ts.

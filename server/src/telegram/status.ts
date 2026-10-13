@@ -8,6 +8,7 @@ const STATUS: Partial<Record<TipoFalhaTelegram, number>> = {
   'sem-acesso': 403,
   convite: 409,
   'convite-invalido': 410,
+  'aguardando-aprovacao': 403,
   'sem-videos': 422,
   removido: 404,
   flood: 429,
@@ -24,6 +25,7 @@ const POR_CODIGO: Array<[RegExp, TipoFalhaTelegram]> = [
   [/^(CHANNEL_PRIVATE|CHANNEL_INVALID|CHAT_FORBIDDEN|CHAT_ID_INVALID|PEER_ID_INVALID|CHANNEL_PUBLIC_GROUP_NA)$/, 'sem-acesso'],
   [/^(USERNAME_NOT_OCCUPIED|USERNAME_INVALID)$/, 'nao-encontrado'],
   [/^INVITE_HASH_(EXPIRED|INVALID|EMPTY)$/, 'convite-invalido'],
+  [/^INVITE_REQUEST_SENT$/, 'aguardando-aprovacao'],
   [/^(AUTH_KEY_UNREGISTERED|AUTH_KEY_INVALID|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|USER_DEACTIVATED_BAN|AUTH_KEY_DUPLICATED)$/, 'nao-autorizado'],
   [/^(MSG_ID_INVALID|MESSAGE_ID_INVALID|FILE_REFERENCE_EXPIRED)$/, 'removido'],
 ];

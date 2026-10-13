@@ -10,6 +10,7 @@
     "repoint": "tsx src/scan/repoint-prefix.ts"
   },
   "dependencies": {
+    "big-integer": "1.6.52",
     "fastify": "^5.1.0",
     "telegram": "2.26.22",
     "tsx": "^4.19.2"

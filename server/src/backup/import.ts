@@ -96,7 +96,7 @@ export function planImport(db: Db, data: LibraryExport): ImportPlan {
   for (const c of data.courses) {
     const candidato = matchCourse(db, c);
     const funde = Boolean(candidato && !reivindicados.has(candidato));
-    if (!funde && c.source === 'drive') {
+    if (!funde && (c.source === 'drive' || c.source === 'telegram')) {
       plano.driveAusentes.push(c.title);
       continue;
     }
@@ -242,9 +242,10 @@ export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): voi
       // vezes o mesmo arquivo tem de dar no mesmo que importar uma.
       const candidato = matchCourse(db, c);
       const jaExiste = candidato && !reivindicados.has(candidato) ? candidato : null;
-      // Curso do Drive sem correspondente aqui fica de fora por inteiro: rootPath é
-      // um link, não pasta, e nada dele pode virar aula, progresso ou raiz.
-      if (!jaExiste && c.source === 'drive') continue;
+      // Curso do Drive ou do Telegram sem correspondente aqui fica de fora por
+      // inteiro: rootPath é um link, não pasta, e nada dele pode virar aula,
+      // progresso ou raiz.
+      if (!jaExiste && (c.source === 'drive' || c.source === 'telegram')) continue;
       const courseId = jaExiste ?? (pastaExiste(c.rootPath) && podeEscanear(c.rootPath) ? criarComScan(c) : criarSemPasta(c));
       reivindicados.add(courseId);
 

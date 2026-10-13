@@ -61,9 +61,11 @@ export interface ExportedCourse {
   // Opcionais de propósito: backups anteriores ao Drive não os têm e continuam
   // válidos na mesma VERSION, e versões antigas do app simplesmente os ignoram.
   // Em curso do Drive, rootPath guarda o link original (não é pasta do disco).
-  source?: 'local' | 'drive';
+  source?: 'local' | 'drive' | 'telegram';
   driveFolderId?: string;
   driveResourceKey?: string;
+  /** JSON de PeerTelegram, em curso do Telegram. */
+  telegramPeer?: string;
 }
 
 /**
@@ -87,9 +89,10 @@ function saneiaCursos(cursos: unknown[]): ExportedCourse[] {
       lessons: Array.isArray(c.lessons) ? c.lessons.filter((l) => relPathSeguro(l?.relPath)) : [],
       posterLessonRelPath: relPathSeguro(c.posterLessonRelPath) ? c.posterLessonRelPath : null,
       // Campo do Drive torto não derruba o arquivo: cai no comportamento de curso local.
-      source: c.source === 'local' || c.source === 'drive' ? c.source : undefined,
+      source: c.source === 'local' || c.source === 'drive' || c.source === 'telegram' ? c.source : undefined,
       driveFolderId: typeof c.driveFolderId === 'string' ? c.driveFolderId : undefined,
       driveResourceKey: typeof c.driveResourceKey === 'string' ? c.driveResourceKey : undefined,
+      telegramPeer: typeof c.telegramPeer === 'string' ? c.telegramPeer : undefined,
     }));
 }
 
