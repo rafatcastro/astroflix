@@ -52,10 +52,12 @@ cada workspace. O servidor nunca emite JS: roda via `tsx` em dev e é empacotado
 (`moduleResolution: "Bundler"`).
 
 O pacote não é publicado no npm (`"private": true`). As releases saem de
-`.github/workflows/release.yml`, disparado por tag `v*`: um runner por plataforma gera o sidecar
+`.github/workflows/release.yml`, disparado por **todo push na `main`** que não seja só de
+documentação; a versão é automática (`major.minor` do `package.json` + `GITHUB_RUN_NUMBER`), então
+ninguém cria tag à mão. Um runner por plataforma gera o sidecar
 (`build:binario` → `scripts/preparar-sidecar.mjs`, que dá o nome com o target triple do Rust), a
-versão é copiada do `package.json` para o `tauri.conf.json`/`Cargo.toml`
-(`scripts/sincronizar-versao.mjs`) e o `tauri-action` anexa os instaladores e o `latest.json` do
+versão é gravada no `package.json`, no `tauri.conf.json` e no `Cargo.toml`
+(`scripts/sincronizar-versao.mjs <versão>`) e o `tauri-action` anexa os instaladores e o `latest.json` do
 atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*` e
 `TAURI_SIGNING_PRIVATE_KEY` (a chave fica localmente em `.tauri-signing.local.key`, ignorada pelo
 git; a pública está no `tauri.conf.json`).

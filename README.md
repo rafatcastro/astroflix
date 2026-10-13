@@ -284,8 +284,9 @@ O app desktop é uma janela que sobe esse servidor — empacotado num executáve
 dentro — e carrega a interface dele. No `pnpm dev`, a mesma janela abre o Vite, e o servidor roda
 direto do código-fonte.
 
-As versões saem por tag (`git tag v2.1.0 && git push --tags`): a CI gera os instaladores dos três
-sistemas e o arquivo que o atualizador consulta.
+Cada push na `main` (que não seja só de documentação) vira uma versão: a CI gera os instaladores dos
+três sistemas e o arquivo que o atualizador consulta, e quem já tem o app recebe o aviso. O número é
+automático — o `major.minor` do `package.json` mais o número da execução da CI.
 
 O código e os comentários estão em português.
 
