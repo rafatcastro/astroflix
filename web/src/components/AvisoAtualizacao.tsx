@@ -9,6 +9,9 @@ export default function AvisoAtualizacao() {
   const [update, setUpdate] = useState<{ download: () => Promise<void>; install: () => Promise<void> } | null>(null);
 
   useEffect(() => {
+    // No `pnpm dev` a versão é a do package.json (sempre atrás da release): o aviso
+    // apareceria sempre, e instalar trocaria o binário de dev pela release.
+    if (import.meta.env.DEV) return;
     let vivo = true;
     void (async () => {
       try {
