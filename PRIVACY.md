@@ -2,8 +2,22 @@
 
 **Última atualização:** 13 de outubro de 2026
 
-O Learnflix é um aplicativo que roda inteiramente no seu computador. Não existe servidor do Learnflix
-na internet, conta do Learnflix ou coleta de dados pelo projeto.
+O Learnflix roda no seu computador e usa uma **conta** (entrar com o Google) para guardar os seus
+metadados na nuvem e levá-los para qualquer computador em que você entrar.
+
+## O que vai para a nuvem da conta
+
+Ao entrar com o Google, o app recebe só o seu e-mail e um identificador da conta (escopos `openid
+email profile`). Ficam no banco do Learnflix no Supabase, visíveis só para a sua conta (regra de
+acesso por usuário no próprio banco):
+
+- a lista de cursos (título, origem, o link do Drive ou do Telegram e o caminho da pasta de cada
+  curso local em cada computador seu), as aulas (título, ordem, duração) e as bibliotecas;
+- o seu progresso em cada aula;
+- os seus flashcards.
+
+**Nunca** vão para a nuvem: os vídeos e materiais, as cópias baixadas e convertidas, as capas, as
+sessões do Google Drive e do Telegram e as configurações do player.
 
 ## O que o app acessa no Google Drive
 

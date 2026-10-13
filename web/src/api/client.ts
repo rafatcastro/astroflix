@@ -55,6 +55,19 @@ const qsFlashcards = (f: FiltroFlashcards): string =>
   : 'courseId' in f ? `?courseId=${encodeURIComponent(f.courseId)}`
   : 'geral' in f ? '?geral=1' : '';
 
+// Conta (login obrigatório) e o estado da sincronização com a nuvem.
+export interface Conta {
+  configurada: boolean;
+  entrou: boolean;
+  email: string | null;
+  nuvem: {
+    sincronizando: boolean;
+    ultimaSincronizacao: string | null;
+    pendentes: number;
+    erro: 'sem-conexao' | 'sessao-expirada' | 'recusado' | null;
+  } | null;
+}
+
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
 export interface BrowseResult { path: string | null; parent: string | null; dirs: DirEntry[]; }
@@ -243,6 +256,10 @@ export const api = {
   exportLibraryUrl: '/api/library/export',
   importPreview: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import/preview', { method: 'POST', body: JSON.stringify(data) }),
+  conta: () => jsonFetch<Conta>('/api/conta'),
+  contaLogin: () => jsonFetch<{ url: string }>('/api/conta/login', { method: 'POST' }),
+  contaSincronizar: () => jsonFetch<Conta['nuvem']>('/api/conta/sincronizar', { method: 'POST' }),
+  contaSair: () => jsonFetch<void>('/api/conta/sair', { method: 'POST' }),
   listarFlashcards: (f: FiltroFlashcards) => jsonFetch<ListaFlashcards>(`/api/flashcards${qsFlashcards(f)}`),
   criarFlashcard: (c: NovoFlashcard) =>
     jsonFetch<{ card: Flashcard; anki: EstadoAnki }>('/api/flashcards', { method: 'POST', body: JSON.stringify(c) }),

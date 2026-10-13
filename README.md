@@ -92,6 +92,21 @@ aula. Veja [Backup e migração](#backup-e-migração).
 
 ---
 
+## Sua conta
+
+Na primeira vez, o Learnflix pede para **entrar com o Google**. A conta guarda na nuvem a sua
+biblioteca, o progresso de cada aula, as bibliotecas e os flashcards: entre em outro computador e
+está tudo lá. Os vídeos nunca saem do seu computador; só os metadados sobem.
+
+- **Sem internet**, o app abre normalmente com a última sessão e o que já estava nele; o que você
+  fizer offline sobe quando a conexão voltar.
+- **Assistiu em dois computadores?** O progresso nunca volta para trás: vale quem foi mais longe.
+- **Curso de uma pasta do disco** aparece nos outros computadores com "pasta não encontrada" até
+  você usar **Re-apontar pasta…** e mostrar onde ele está naquela máquina.
+- **Configurações → Conta** mostra o e-mail, a última sincronização e o botão **Sair**.
+
+---
+
 ## Adicionando seus cursos
 
 Clique em **Adicionar ▾ → Dos arquivos** e escolha a pasta na janela do próprio sistema (Finder,

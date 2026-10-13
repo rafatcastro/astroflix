@@ -13,7 +13,7 @@ describe('openDb', () => {
     expect(tables).toEqual(
       expect.arrayContaining(['collections', 'course_roots', 'courses', 'lessons', 'materials', 'progress', 'settings']),
     );
-    expect(pragma(db, 'user_version')).toBe(4);
+    expect(pragma(db, 'user_version')).toBe(5);
     const cols = db.prepare('PRAGMA table_info(courses)').all().map((r: any) => r.name);
     expect(cols).toContain('cover_path');
     expect(cols).toContain('collection_id');
@@ -63,7 +63,7 @@ describe('openDb', () => {
   it('migrate é idempotente na última versão', () => {
     const db = openDb(':memory:');
     expect(() => migrate(db)).not.toThrow();
-    expect(pragma(db, 'user_version')).toBe(4);
+    expect(pragma(db, 'user_version')).toBe(5);
     db.close();
   });
 
