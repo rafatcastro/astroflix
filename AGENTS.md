@@ -138,7 +138,8 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   curso, retomando `.part` com Range) para `DATA_DIR/downloads/<curso>/<id da aula>` (`local.ts`)
   e convertida se não tocar (`media/preparar.ts`, mesma fila de recodificação do player). Stream e
   materiais preferem o arquivo local; o que ainda não chegou vem do Drive. Ao abrir, o app retoma
-  os downloads (`buildApp(..., { retomarDownloads })`, só no `index.ts`).
+  os downloads (`buildApp(..., { retomarDownloads })`, só no `index.ts`). Aula concluída tem a
+  cópia apagada (menos a assistida por último) e não é rebaixada; o banco guarda os metadados.
 - `telegram/`: cursos do Telegram, com a **conta da pessoa** (MTProto, GramJS). Tudo do GramJS
   fica em `gramjs.ts` (importado sob demanda: nada conecta até alguém colar um link); o resto do
   app só conhece `ClienteTelegram` e `ServicosTelegram`, e os testes injetam falsos

@@ -25,7 +25,10 @@ export interface EstadoDownload {
 }
 
 export interface Baixador {
-  /** Põe o curso na fila (idempotente). Chamado ao colar o link, ao re-escanear e ao abrir o app. */
+  /**
+   * Põe o curso na fila (idempotente). Chamado ao colar o link, ao re-escanear, ao
+   * abrir o app e ao (des)marcar uma aula como concluída, que limpa ou rebaixa a cópia.
+   */
   enfileirar(courseId: string): void;
   estado(courseId: string): EstadoDownload;
   /** Retoma todos os cursos do Drive, com o que faltar de cada um. */
@@ -94,6 +97,35 @@ export function criarBaixador(deps: {
     fs.renameSync(parcial, destino);
   }
 
+  // Curso baixado inteiro ocupa dezenas de GB; o que já foi assistido não precisa
+  // ficar. Apaga a cópia (baixada e convertida) das aulas concluídas e mantém tudo
+  // no banco. A aula assistida por último fica: concluir a 90% marca a aula com o
+  // vídeo ainda rodando, e apagar ali tiraria os minutos finais do disco. Ela sai
+  // na próxima conclusão ou quando o app abrir de novo.
+  function limparConcluidas(courseId: string): Set<string> {
+    const concluidas = db
+      .prepare('SELECT l.id, l.rel_path FROM lessons l JOIN progress p ON p.lesson_id = l.id WHERE l.course_id=? AND p.completed=1')
+      .all(courseId) as Array<{ id: string; rel_path: string }>;
+    const ultima = db
+      .prepare('SELECT p.lesson_id FROM progress p JOIN lessons l ON l.id = p.lesson_id WHERE l.course_id=? ORDER BY p.updated_at DESC LIMIT 1')
+      .get(courseId) as { lesson_id: string } | undefined;
+    // Sem a cópia convertida, o que sobra é o original do Drive, que não tocava:
+    // a aula volta a dizer isso em vez de abrir um player quebrado.
+    const marcarNaoTocavel = db.prepare('UPDATE lessons SET playable=0 WHERE id=?');
+    for (const a of concluidas) {
+      if (a.id === ultima?.lesson_id) continue;
+      const convertido = path.join(config.convertedDir, `${a.id}.mp4`);
+      if (fs.existsSync(convertido)) {
+        fs.rmSync(convertido, { force: true });
+        marcarNaoTocavel.run(a.id);
+      }
+      const baixado = arquivoBaixadoDaAula(config, courseId, a.id, a.rel_path);
+      fs.rmSync(baixado, { force: true });
+      fs.rmSync(`${baixado}.part`, { force: true });
+    }
+    return new Set(concluidas.map((a) => a.id));
+  }
+
   async function baixarCurso(courseId: string): Promise<void> {
     const curso = db.prepare('SELECT drive_folder_id, drive_resource_key FROM courses WHERE id=? AND source=?').get(courseId, 'drive') as
       | { drive_folder_id: string | null; drive_resource_key: string | null }
@@ -106,9 +138,13 @@ export function criarBaixador(deps: {
       .prepare('SELECT id, rel_path, remote_id, size_bytes FROM lessons WHERE course_id=? AND missing=0 AND remote_id IS NOT NULL ORDER BY order_index')
       .all(courseId) as Array<{ id: string; rel_path: string; remote_id: string; size_bytes: number | null }>;
     const marcarTocavel = db.prepare('UPDATE lessons SET playable=1 WHERE id=?');
+    const concluidas = limparConcluidas(courseId);
 
     for (const a of aulas) {
       if (!existe(courseId)) return; // excluído no meio: não baixa mais nada
+      // Aula concluída não volta para o disco: foi apagada de propósito, e o
+      // progresso (e o resto dos metadados) continua no banco.
+      if (concluidas.has(a.id)) continue;
       if (arquivoLocalDaAula(config, courseId, a.id, a.rel_path)) continue;
       const destino = arquivoBaixadoDaAula(config, courseId, a.id, a.rel_path);
       await baixarArquivo(cliente, a.remote_id, destino, Number(a.size_bytes ?? 0));

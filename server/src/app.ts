@@ -62,7 +62,7 @@ export function buildApp(
   app.register(healthRoutes);
   app.register(fsRoutes, { config, db });
   app.register(coursesRoutes, { db, config, drive });
-  app.register(lessonsRoutes, { db });
+  app.register(lessonsRoutes, { db, drive });
   app.register(streamRoutes, { db, config, drive, telegram });
   app.register(infoRoutes);
   app.register(thumbsRoutes, { db, config, drive, telegram });

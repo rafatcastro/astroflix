@@ -132,6 +132,10 @@ Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pas
   já o converte. Cada aula que chega passa a tocar sem internet; as que ainda não chegaram tocam
   direto do Drive enquanto isso. Se o app fechar no meio, o download continua de onde parou na
   próxima vez. Excluir o curso apaga as cópias.
+- **O que você já assistiu sai do disco**: quando uma aula é concluída, a cópia dela é apagada (a
+  última assistida fica até a próxima, para não cortar o fim do vídeo). O progresso, o título e os
+  materiais continuam; rever uma aula concluída toca direto do Drive, e desmarcar "concluída" baixa
+  de novo.
 
 **O Google mostra um aviso na autorização.** O app ainda não foi verificado pelo Google, então
 aparece "O Google não verificou este app": clique em **Avançado → Continuar**. Enquanto não for
