@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { cliqueFora } from '../lib/desktop';
 import { Link } from 'react-router-dom';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
 import DirPicker from '../components/DirPicker';
@@ -476,6 +476,10 @@ export default function Library() {
   const { data: courses, isLoading, isError } = useCourses(tab === 'archived');
   const { data: collections } = useCollections();
   const [picking, setPicking] = useState<null | 'single' | 'batch' | 'drive' | 'telegram'>(null);
+  // Sem o app do Telegram no build nem um próprio nas Configurações, a opção só
+  // levaria a um "não configurado": melhor não oferecer.
+  const { data: tg } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
+  const temTelegram = Boolean(tg?.credenciais.apiId && tg?.credenciais.apiHash);
   const [addMenu, setAddMenu] = useState(false);
   const [creatingCol, setCreatingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
@@ -635,10 +639,12 @@ export default function Library() {
               Do Google Drive
               <div className="text-xs text-neutral-500">Cole o link de uma pasta compartilhada</div>
             </button>
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('telegram'); }}>
-              Do Telegram
-              <div className="text-xs text-neutral-500">Cole o link de um grupo ou canal</div>
-            </button>
+            {temTelegram && (
+              <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('telegram'); }}>
+                Do Telegram
+                <div className="text-xs text-neutral-500">Cole o link de um grupo ou canal</div>
+              </button>
+            )}
             <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setNewColName(''); setCreatingCol(true); }}>
               Nova coleção
               <div className="text-xs text-neutral-500">Agrupe cursos na estante</div>
@@ -878,13 +884,15 @@ export default function Library() {
                 >
                   Do Google Drive
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setPicking('telegram')}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
-                >
-                  Do Telegram
-                </button>
+                {temTelegram && (
+                  <button
+                    type="button"
+                    onClick={() => setPicking('telegram')}
+                    className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
+                  >
+                    Do Telegram
+                  </button>
+                )}
                 <HelpLink topico="primeiros-passos" className="mt-1 text-sm text-neutral-500 hover:text-neutral-300">
                   Como isso funciona?
                 </HelpLink>

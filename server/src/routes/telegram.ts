@@ -5,7 +5,7 @@ import { parseLinkTelegram } from '../telegram/link';
 import type { ServicosTelegram } from '../telegram/servicos';
 import type { ClienteTelegram, GrupoTelegram } from '../telegram/cliente';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
-import { salvarCredenciaisTelegram } from '../telegram/credenciais';
+import { credenciaisTelegram, salvarCredenciaisTelegram } from '../telegram/credenciais';
 import { createCourseFromTelegram } from '../scan/scan-telegram';
 
 export async function telegramRoutes(
@@ -85,21 +85,39 @@ export async function telegramRoutes(
   });
 
   // Trocar o app do Telegram invalida a sessão: ela foi criada com o api_id
-  // antigo. Desconecta antes de gravar, enquanto a credencial velha ainda serve
-  // para encerrar a sessão do lado do Telegram.
+  // antigo. A sessão é encerrada com a credencial VELHA (enquanto ela ainda
+  // serve para falar com o Telegram), e só se o valor efetivo mudar de verdade.
   app.put('/api/telegram/credenciais', async (req, reply) => {
     const b = (req.body ?? {}) as { apiId?: unknown; apiHash?: unknown };
     const parcial: { apiId?: string | number | null; apiHash?: string | null } = {};
     if ('apiId' in b) {
       if (b.apiId !== null && typeof b.apiId !== 'string' && typeof b.apiId !== 'number') return reply.code(400).send({ error: 'invalido' });
-      parcial.apiId = b.apiId as string | number | null;
+      const v = typeof b.apiId === 'string' ? b.apiId.trim() : b.apiId;
+      // Vazio restaura o padrão; qualquer outra coisa tem de ser um inteiro positivo.
+      if (v !== null && v !== '' && !(Number.isInteger(Number(v)) && Number(v) > 0)) return reply.code(400).send({ error: 'api-id-invalido' });
+      parcial.apiId = v as string | number | null;
     }
     if ('apiHash' in b) {
       if (b.apiHash !== null && typeof b.apiHash !== 'string') return reply.code(400).send({ error: 'invalido' });
       parcial.apiHash = (b.apiHash as string | null)?.trim() || null;
     }
-    if (telegram.status().conectado) await telegram.aoTrocarCredenciais();
+
+    const lerSalvo = () => (db.prepare("SELECT value FROM settings WHERE key='telegram.credenciais'").get() as { value: string } | undefined)?.value;
+    const salvoAntes = lerSalvo();
+    const antes = credenciaisTelegram(db);
     salvarCredenciaisTelegram(db, parcial);
+    const depois = credenciaisTelegram(db);
+    const mudou = antes.apiId !== depois.apiId || antes.apiHash !== depois.apiHash;
+    if (mudou && telegram.status().conectado) {
+      const salvoDepois = lerSalvo();
+      const gravar = (v: string | undefined) =>
+        v === undefined
+          ? db.prepare("DELETE FROM settings WHERE key='telegram.credenciais'").run()
+          : db.prepare("INSERT INTO settings (key, value) VALUES ('telegram.credenciais', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(v);
+      gravar(salvoAntes);
+      await telegram.aoTrocarCredenciais();
+      gravar(salvoDepois);
+    }
     return telegram.status();
   });
 }

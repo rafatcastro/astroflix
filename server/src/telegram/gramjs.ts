@@ -152,8 +152,11 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         const e =
           link.tipo === 'publico'
             ? await entidade(link.usuario)
-            : await entidade(new Api.PeerChannel({ channelId: bigInt(link.canalId) })).catch(() => {
-                throw new FalhaTelegram('sem-acesso');
+            : await entidade(new Api.PeerChannel({ channelId: bigInt(link.canalId) })).catch((err) => {
+                // Não achar o canal é "não está no grupo"; sessão caída, rede e flood
+                // seguem com o próprio nome, para a interface oferecer a saída certa.
+                const f = falhaDoErro(err);
+                throw f.tipo === 'telegram' || f.tipo === 'sem-acesso' ? new FalhaTelegram('sem-acesso') : f;
               });
         return peerDe(Api, e);
       }),
@@ -190,6 +193,10 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
 
     async *baixar(peer, msgId, offset, signal) {
       let renovar = false;
+      // Bytes já entregues: a nova tentativa continua daqui, e não do offset
+      // original — senão o player receberia blocos repetidos no meio do vídeo.
+      // Como cada bloco tem BLOCO bytes (menos o último), a soma segue alinhada.
+      let entregue = 0;
       for (let tentativa = 0; tentativa < 2; tentativa++) {
         const { doc } = await documento(peer, msgId, renovar);
         const local = new Api.InputDocumentFileLocation({
@@ -201,12 +208,13 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         try {
           for await (const bloco of client.iterDownload({
             file: local,
-            offset: bigInt(offset),
+            offset: bigInt(offset + entregue),
             requestSize: BLOCO,
             dcId: doc.dcId,
             fileSize: doc.size,
           })) {
             if (signal.aborted) return;
+            entregue += bloco.length;
             yield bloco;
           }
           return;
@@ -227,9 +235,14 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     miniatura: (peer, msgId) =>
       chamar(async () => {
         const { msg, doc } = await documento(peer, msgId);
-        const n = doc.thumbs?.length ?? 0;
-        if (!n) return null;
-        const r = await client.downloadMedia(msg, { thumb: n - 1 });
+        // A maior miniatura de verdade, escolhida aqui: por índice, o GramJS descarta
+        // os PhotoPathSize antes de indexar, e um índice fora da lista o faz baixar
+        // o VÍDEO inteiro para a memória no lugar da capa.
+        const tamanho = (s: TiposApi.TypePhotoSize): number =>
+          s instanceof Api.PhotoSize ? s.size : s instanceof Api.PhotoSizeProgressive ? (s.sizes.at(-1) ?? 0) : -1;
+        const melhor = (doc.thumbs ?? []).filter((s) => tamanho(s) > 0).sort((a, b) => tamanho(b) - tamanho(a))[0];
+        if (!melhor) return null;
+        const r = await client.downloadMedia(msg, { thumb: melhor });
         return Buffer.isBuffer(r) && r.length ? r : null;
       }),
   };
@@ -260,10 +273,11 @@ export function criarServicosTelegram(db: Db): ServicosTelegram {
 
   // ---- login por QR ----
   let login: {
-    client: TelegramClient;
+    client: TelegramClient | null;
     cancelado: boolean;
     responderSenha: ((s: string) => void) | null;
     erroSenha: 'senha-incorreta' | null;
+    falha: string | null;
   } | null = null;
   let estado: EstadoLogin = { fase: 'parado' };
   let ouvintes: Array<() => void> = [];
@@ -312,18 +326,19 @@ export function criarServicosTelegram(db: Db): ServicosTelegram {
       atual ??= (async () => {
         const m = await carregar();
         const client = await novoCliente(sessao, c);
-        let autorizado: boolean;
+        // Não usa checkAuthorization: ele devolve false para QUALQUER erro, e uma
+        // rede piscando no primeiro uso apagaria a sessão (e o QR de novo). Só
+        // "não autorizado" de verdade esquece a conta.
         try {
-          autorizado = await client.checkAuthorization();
+          await client.invoke(new m.tg.Api.updates.GetState());
         } catch (e) {
           encerrar(client);
-          throw falhaDoErro(e);
-        }
-        if (!autorizado) {
-          encerrar(client);
-          apagar(K_SESSAO);
-          apagar(K_USUARIO);
-          throw new FalhaTelegram('nao-autorizado');
+          const f = falhaDoErro(e);
+          if (f.tipo === 'nao-autorizado') {
+            apagar(K_SESSAO);
+            apagar(K_USUARIO);
+          }
+          throw f;
         }
         return { client, cliente: envolver(client, m, esquecerSessao) };
       })();
@@ -338,12 +353,34 @@ export function criarServicosTelegram(db: Db): ServicosTelegram {
     login: {
       async iniciar() {
         cancelarLogin();
-        const c = credenciais();
-        const m = await carregar();
-        const client = await novoCliente('', c);
-        const este = { client, cancelado: false, responderSenha: null as ((s: string) => void) | null, erroSenha: null as 'senha-incorreta' | null };
+        // Reservado ANTES do primeiro await: um cancelar (ou um segundo iniciar)
+        // que chegue enquanto a conexão abre precisa achar este login para matá-lo.
+        // Sem isso, dois logins corriam em paralelo e o QR alternava entre eles.
+        const este = {
+          client: null as TelegramClient | null,
+          cancelado: false,
+          responderSenha: null as ((s: string) => void) | null,
+          erroSenha: null as 'senha-incorreta' | null,
+          falha: null as string | null,
+        };
         login = este;
         mudar({ fase: 'parado' });
+        let c: CredenciaisTelegram;
+        let m: Modulos;
+        let client: TelegramClient;
+        try {
+          c = credenciais();
+          m = await carregar();
+          client = await novoCliente('', c);
+        } catch (e) {
+          if (login === este) login = null;
+          throw e;
+        }
+        if (este.cancelado) {
+          encerrar(client);
+          return estado;
+        }
+        este.client = client;
 
         client
           .signInUserWithQrCode(
@@ -366,7 +403,10 @@ export function criarServicosTelegram(db: Db): ServicosTelegram {
                   este.erroSenha = 'senha-incorreta';
                   return false;
                 }
-                mudar({ fase: 'erro', erro: falhaDoErro(err).tipo });
+                // Guardada: ao parar, o GramJS lança um AUTH_USER_CANCEL genérico, e o
+                // motivo de verdade (um flood, por exemplo) se perderia no .catch.
+                este.falha = falhaDoErro(err).tipo;
+                mudar({ fase: 'erro', erro: este.falha });
                 return true;
               },
             },
@@ -388,13 +428,13 @@ export function criarServicosTelegram(db: Db): ServicosTelegram {
           .catch((e) => {
             if (este.cancelado) return;
             encerrar(client);
-            login = null;
-            mudar({ fase: 'erro', erro: falhaDoErro(e).tipo });
+            if (login === este) login = null;
+            mudar({ fase: 'erro', erro: este.falha ?? falhaDoErro(e).tipo });
           });
 
         // Devolve já com o QR (ou o erro), para o modal não abrir vazio.
         const limite = Date.now() + ESPERA_PRIMEIRO_QR_MS;
-        while (estado.fase === 'parado' && Date.now() < limite) await proximaMudanca(limite - Date.now());
+        while (!este.cancelado && estado.fase === 'parado' && Date.now() < limite) await proximaMudanca(limite - Date.now());
         return estado;
       },
 
