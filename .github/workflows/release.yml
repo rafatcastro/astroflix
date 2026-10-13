@@ -61,13 +61,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           TAG: v${{ needs.testar.outputs.versao }}
-        # A tag nasce junto com a release, no commit deste push. Idempotente:
-        # numa reexecução a release já existe.
+        # A tag nasce junto com a release, no commit deste push. O id vem da
+        # própria resposta da criação: a listagem de releases demora a enxergar
+        # um rascunho recém-criado e devolvia vazio. Idempotente: numa
+        # reexecução o rascunho já existe e é reaproveitado.
         run: |
-          if ! gh release view "${TAG}" >/dev/null 2>&1; then
-            gh release create "${TAG}" --draft --target "${GITHUB_SHA}" --generate-notes --title "Learnflix ${TAG}"
+          id=$(gh api "repos/${GH_REPO}/releases" --paginate --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n1)
+          if [ -z "${id}" ]; then
+            id=$(gh api -X POST "repos/${GH_REPO}/releases" \
+              -f tag_name="${TAG}" -f target_commitish="${GITHUB_SHA}" -f name="Learnflix ${TAG}" \
+              -F draft=true -F generate_release_notes=true --jq .id)
           fi
-          id=$(gh api "repos/${GH_REPO}/releases" --jq ".[] | select(.tag_name == \"${TAG}\") | .id")
+          test -n "${id}"
           echo "id=${id}" >> "$GITHUB_OUTPUT"
 
   desktop:
