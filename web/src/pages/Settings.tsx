@@ -6,6 +6,7 @@ import { api, type CredencialDrive, type ImportPlan } from '../api/client';
 import { getPref, setPref } from '../lib/prefs';
 import DirPicker from '../components/DirPicker';
 import TelegramLinkModal from '../components/TelegramLinkModal';
+import EmDesenvolvimento from '../components/EmDesenvolvimento';
 import TextField from '../components/TextField';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Banner from '../components/Banner';
@@ -218,7 +219,7 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
 
   return (
     <section className="mb-8">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Telegram</h2>
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Telegram<EmDesenvolvimento /></h2>
       <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
         {status?.conectado ? (
           <>

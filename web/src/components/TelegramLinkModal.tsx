@@ -5,6 +5,7 @@ import { api, type RespostaTelegram } from '../api/client';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import TelegramLogin from './TelegramLogin';
 import TextField from './TextField';
+import EmDesenvolvimento from './EmDesenvolvimento';
 
 type Fase = { tipo: 'link' } | { tipo: 'login' } | { tipo: 'convite'; titulo: string };
 
@@ -108,7 +109,7 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado }: {
         className="w-full max-w-lg rounded-xl bg-neutral-900 p-5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div id="tg-modal-titulo" className="mb-3 font-medium">{titulo}</div>
+        <div id="tg-modal-titulo" className="mb-3 font-medium">{titulo}<EmDesenvolvimento /></div>
 
         {fase.tipo === 'login' && (
           <>
