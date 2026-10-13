@@ -188,3 +188,13 @@ export function Settings(p: IconProps) {
     </Svg>
   );
 }
+
+/** Flashcards: dois cartões sobrepostos. */
+export function Cards(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect width="14" height="10" x="7" y="9" rx="2" />
+      <path d="M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
+    </Svg>
+  );
+}

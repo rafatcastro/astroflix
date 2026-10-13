@@ -26,14 +26,17 @@ import { driveRoutes } from './routes/drive';
 import type { ServicosTelegram } from './telegram/servicos';
 import { criarServicosTelegram } from './telegram/gramjs';
 import { telegramRoutes } from './routes/telegram';
+import { criarClienteAnki, type ClienteAnki } from './anki/cliente';
+import { criarServicosAnki } from './anki/servicos';
+import { flashcardsRoutes } from './routes/flashcards';
 
-// `opts.fetch` e `opts.telegram` existem só para os testes injetarem um Google e
-// um Telegram falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
+// `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
+// um Google, um Telegram e um Anki falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
 // testes, nenhum download começa sozinho.
 export function buildApp(
   config: AppConfig,
   db: Db,
-  opts?: { fetch?: Fetch; telegram?: ServicosTelegram; retomarDownloads?: boolean },
+  opts?: { fetch?: Fetch; telegram?: ServicosTelegram; anki?: ClienteAnki; retomarDownloads?: boolean },
 ): FastifyInstance {
   const app = Fastify({ logger: false });
   // Uma instância só: o auth guarda os states pendentes do login em memória, e
@@ -42,6 +45,9 @@ export function buildApp(
   // Uma instância só, pelo mesmo motivo: o login por QR vive em memória. Não
   // conecta nada até alguém usar (ver gramjs.ts).
   const telegram = opts?.telegram ?? criarServicosTelegram(db);
+  // Uma instância só: a fila de envio ao Anki não pode ter duas cópias correndo.
+  // Nada fala com o Anki até alguém abrir os flashcards.
+  const anki = criarServicosAnki(db, opts?.anki ?? criarClienteAnki());
 
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
   registrarGuarda(app);
@@ -76,6 +82,7 @@ export function buildApp(
   app.register(backupRoutes, { db, config });
   app.register(driveRoutes, { db, drive });
   app.register(telegramRoutes, { db, config, telegram });
+  app.register(flashcardsRoutes, { db, anki });
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.

@@ -92,3 +92,37 @@ describe('ida e volta', () => {
     destino.close();
   });
 });
+
+describe('flashcards no backup', () => {
+  it('vão e voltam presos à aula, sem duplicar ao importar de novo', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cards-'));
+    fs.writeFileSync(path.join(root, 'aula-01.mp4'), 'x');
+    const origem = openDb(':memory:');
+    const courseId = createCourseFromPath(origem, root);
+    const aula = origem.prepare('SELECT id FROM lessons WHERE course_id=?').get(courseId) as { id: string };
+    const card = origem.prepare(
+      `INSERT INTO flashcards (id, course_id, lesson_id, minuto_sec, frente, verso, anki_note_id, pendente, criado_em, atualizado_em)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'x', 'x')`,
+    );
+    card.run('f1', courseId, aula.id, 42, 'Frente', 'Verso', 1001, null);
+    card.run('f2', null, null, null, 'Geral', 'V', null, 'criar');
+    card.run('f3', null, null, null, 'Apagado', 'V', 1002, 'apagar');
+
+    const arquivo = buildExport(origem);
+    expect(arquivo.courses[0].flashcards).toEqual([
+      { lessonRelPath: 'aula-01.mp4', minutoSec: 42, frente: 'Frente', verso: 'Verso', ankiNoteId: 1001, criadoEm: 'x' },
+    ]);
+    expect(arquivo.flashcardsGerais?.map((f) => f.frente)).toEqual(['Geral']);
+
+    const destino = openDb(':memory:');
+    applyImport(destino, arquivo);
+    applyImport(destino, arquivo);
+    const linhas = destino
+      .prepare('SELECT f.frente, f.minuto_sec, f.anki_note_id, f.pendente, l.rel_path FROM flashcards f LEFT JOIN lessons l ON l.id = f.lesson_id ORDER BY f.frente')
+      .all();
+    expect(linhas).toEqual([
+      { frente: 'Frente', minuto_sec: 42, anki_note_id: 1001, pendente: null, rel_path: 'aula-01.mp4' },
+      { frente: 'Geral', minuto_sec: null, anki_note_id: null, pendente: 'criar', rel_path: null },
+    ]);
+  });
+});

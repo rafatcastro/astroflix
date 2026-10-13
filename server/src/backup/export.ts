@@ -5,6 +5,7 @@ import {
   VERSION,
   type ExportedCollection,
   type ExportedCourseRoot,
+  type ExportedFlashcard,
   type ExportedLesson,
   type LibraryExport,
 } from './format';
@@ -40,6 +41,25 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
     ORDER BY l.order_index
   `);
 
+  // Card que a pessoa apagou e só espera o Anki confirmar já não existe para ela.
+  const cardsDe = (where: string, ...args: string[]): ExportedFlashcard[] =>
+    (
+      db
+        .prepare(
+          `SELECT l.rel_path, f.minuto_sec, f.frente, f.verso, f.anki_note_id, f.criado_em
+           FROM flashcards f LEFT JOIN lessons l ON l.id = f.lesson_id
+           WHERE ${where} AND f.pendente IS NOT 'apagar' ORDER BY f.criado_em`,
+        )
+        .all(...args) as any[]
+    ).map((f) => ({
+      lessonRelPath: f.rel_path ?? null,
+      minutoSec: f.minuto_sec,
+      frente: f.frente,
+      verso: f.verso,
+      ankiNoteId: f.anki_note_id,
+      criadoEm: f.criado_em,
+    }));
+
   const courseRoots = (
     db.prepare('SELECT path, created_at, last_checked_at FROM course_roots ORDER BY rowid').all() as any[]
   ).map((r): ExportedCourseRoot => ({ path: r.path, createdAt: r.created_at, lastCheckedAt: r.last_checked_at }));
@@ -69,6 +89,8 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
         : c.source === 'telegram'
           ? { source: 'telegram' as const, telegramPeer: c.telegram_peer ?? undefined }
           : {}),
+      // Só quem tem card leva o campo: o arquivo de quem não usa fica igual ao de antes.
+      ...((cards) => (cards.length ? { flashcards: cards } : {}))(cardsDe('f.course_id = ?', c.id)),
       lessons: (lessonsDoCurso.all(c.id) as any[]).map(
         (l): ExportedLesson => ({
           relPath: l.rel_path,
@@ -95,5 +117,6 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
     })),
     courseRoots,
     settings: { allowedRootsExtra: getAllowedRootsExtra(db) },
+    ...((gerais) => (gerais.length ? { flashcardsGerais: gerais } : {}))(cardsDe('f.course_id IS NULL')),
   };
 }
