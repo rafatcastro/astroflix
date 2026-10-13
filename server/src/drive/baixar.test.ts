@@ -58,22 +58,46 @@ function montar() {
 const ler = (p: string) => fs.readFileSync(p, 'utf8');
 
 describe('download dos cursos do Drive', () => {
-  it('baixa as aulas na ordem do curso e depois os materiais', async () => {
+  it('abrir uma aula baixa ela e as próximas, na ordem; materiais ficam no Drive', async () => {
     const { config, baixador, pedidos } = montar();
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     expect(baixador.estado('c1')).toEqual({ ativo: true, erro: null });
     await baixador.aguardar();
 
-    expect(pedidos.map((p) => p.id)).toEqual(['v-1', 'v-2', 'pdf']);
+    expect(pedidos.map((p) => p.id)).toEqual(['v-1', 'v-2']);
     expect(ler(arquivoBaixadoDaAula(config, 'c1', 'a1', '01 - a.mp4'))).toBe(ARQUIVOS['v-1']);
     expect(ler(arquivoBaixadoDaAula(config, 'c1', 'a2', '02 - b.mp4'))).toBe(ARQUIVOS['v-2']);
-    expect(ler(arquivoBaixadoDoMaterial(config, 'c1', 'm1', 'apostila.pdf'))).toBe(ARQUIVOS.pdf);
+    expect(fs.existsSync(arquivoBaixadoDoMaterial(config, 'c1', 'm1', 'apostila.pdf'))).toBe(false);
     expect(baixador.estado('c1')).toEqual({ ativo: false, erro: null });
 
     // De novo: o que já está no disco não é baixado outra vez.
+    baixador.pedirAula('a1');
+    await baixador.aguardar();
+    expect(pedidos).toHaveLength(2);
+  });
+
+  // Um curso de 40 GB baixado inteiro ao colar o link tomou a internet da casa.
+  it('nunca baixa o curso inteiro: só a janela da aula aberta, e nada ao abrir o app', async () => {
+    const { db, baixador, pedidos } = montar();
+    const aula = db.prepare(
+      `INSERT INTO lessons (id, course_id, rel_path, title, order_index, module_order, size_bytes, mtime, container, playable, remote_id)
+       VALUES (?, 'c1', ?, ?, ?, 0, 1, 1, 'mp4', 1, ?)`,
+    );
+    for (let i = 3; i <= 6; i++) {
+      ARQUIVOS[`v-${i}`] = 'x';
+      aula.run(`a${i}`, `0${i}.mp4`, `Aula ${i}`, i - 1, `v-${i}`);
+    }
+    db.prepare("INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, updated_at) VALUES ('a4', 0, 0, 1, 'x')").run();
+
+    baixador.retomarTodos();
     baixador.enfileirar('c1');
     await baixador.aguardar();
-    expect(pedidos).toHaveLength(3);
+    expect(pedidos).toEqual([]);
+
+    // A concluída (a4) não conta na janela: a3 aberta → a3, a5, a6.
+    baixador.pedirAula('a3');
+    await baixador.aguardar();
+    expect(pedidos.map((p) => p.id)).toEqual(['v-3', 'v-5', 'v-6']);
   });
 
   it('retoma o arquivo pela metade com Range em vez de começar do zero', async () => {
@@ -82,7 +106,7 @@ describe('download dos cursos do Drive', () => {
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     fs.writeFileSync(`${destino}.part`, ARQUIVOS['v-1'].slice(0, 5));
 
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
 
     expect(pedidos[0]).toEqual({ id: 'v-1', range: 'bytes=5-' });
@@ -95,7 +119,7 @@ describe('download dos cursos do Drive', () => {
     const { config, db, baixador } = montar();
     db.prepare("UPDATE lessons SET size_bytes=999 WHERE id='a1'").run();
 
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
 
     expect(fs.existsSync(arquivoBaixadoDaAula(config, 'c1', 'a1', '01 - a.mp4'))).toBe(false);
@@ -108,14 +132,14 @@ describe('download dos cursos do Drive', () => {
       if (id === 'v-1') db.prepare("DELETE FROM courses WHERE id='c1'").run();
     });
 
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
 
     expect(pedidos.map((p) => p.id)).toEqual(['v-1']);
     expect(fs.existsSync(arquivoBaixadoDaAula(config, 'c1', 'a2', '02 - b.mp4'))).toBe(false);
   });
 
-  // Re-escanear enquanto baixa traz aula nova: ela entra na mesma leva.
+  // Re-escanear enquanto baixa traz aula nova, e a pessoa abre a aula de novo: ela entra na mesma leva.
   it('pedido de novo durante o download roda mais uma volta no fim', async () => {
     const { config, db, baixador, aoBaixar } = montar();
     aoBaixar((id) => {
@@ -126,10 +150,10 @@ describe('download dos cursos do Drive', () => {
         `INSERT INTO lessons (id, course_id, rel_path, title, order_index, module_order, size_bytes, mtime, container, playable, remote_id)
          VALUES ('a3', 'c1', '03 - c.mp4', 'C', 2, 0, 8, 1, 'mp4', 1, 'v-3')`,
       ).run();
-      baixador.enfileirar('c1');
+      baixador.pedirAula('a1');
     });
 
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
 
     expect(ler(arquivoBaixadoDaAula(config, 'c1', 'a3', '03 - c.mp4'))).toBe('terceira');
@@ -138,7 +162,7 @@ describe('download dos cursos do Drive', () => {
 
   it('aula baixada toca do disco, sem passar pelo Drive', async () => {
     const { config, db, baixador } = montar();
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
 
     // fetch que explode: se o stream fosse ao Google, o teste falharia.
@@ -146,9 +170,6 @@ describe('download dos cursos do Drive', () => {
     const r = await app.inject({ method: 'GET', url: '/api/lessons/a1/stream', headers: { range: 'bytes=0-4' } });
     expect(r.statusCode).toBe(206);
     expect(r.body).toBe(ARQUIVOS['v-1'].slice(0, 5));
-    const m = await app.inject({ method: 'GET', url: '/api/materials/m1' });
-    expect(m.statusCode).toBe(200);
-    expect(m.body).toBe(ARQUIVOS.pdf);
 
     const curso = (await app.inject({ method: 'GET', url: '/api/courses/c1' })).json();
     expect(curso.download).toEqual({ total: 2, baixadas: 2, ativo: false, erro: null });
@@ -160,7 +181,7 @@ describe('download dos cursos do Drive', () => {
 
   it('aula concluída sai do disco e não é baixada de novo; a assistida por último fica', async () => {
     const { config, db, baixador, pedidos } = montar();
-    baixador.enfileirar('c1');
+    baixador.pedirAula('a1');
     await baixador.aguardar();
     const a1 = arquivoBaixadoDaAula(config, 'c1', 'a1', '01 - a.mp4');
     const a2 = arquivoBaixadoDaAula(config, 'c1', 'a2', '02 - b.mp4');
@@ -179,11 +200,10 @@ describe('download dos cursos do Drive', () => {
     expect(fs.existsSync(a1)).toBe(false);
     expect(fs.existsSync(convertidoA1)).toBe(false);
     expect(fs.existsSync(a2)).toBe(true);
-    // Os metadados ficam: a aula, o progresso e os materiais.
+    // Os metadados ficam: a aula e o progresso.
     expect(db.prepare("SELECT title FROM lessons WHERE id='a1'").get()).toEqual({ title: 'A' });
     expect(db.prepare("SELECT completed FROM progress WHERE lesson_id='a1'").get()).toEqual({ completed: 1 });
-    expect(fs.existsSync(arquivoBaixadoDoMaterial(config, 'c1', 'm1', 'apostila.pdf'))).toBe(true);
-    expect(pedidos).toHaveLength(3);
+    expect(pedidos).toHaveLength(2);
 
     const app = buildApp(config, db);
     const curso = (await app.inject({ method: 'GET', url: '/api/courses/c1' })).json();
@@ -204,6 +224,16 @@ describe('download dos cursos do Drive', () => {
     await vi.waitFor(() => expect(fs.existsSync(a1)).toBe(false));
   });
 
+  it('abrir a aula pela API é o que dispara o download dela', async () => {
+    const { config, db } = montar();
+    const app = buildApp(config, db, { fetch: (async () => { throw new Error('offline'); }) as unknown as typeof fetch });
+    const curso = async () => (await app.inject({ method: 'GET', url: '/api/courses/c1' })).json().download;
+    expect(await curso()).toMatchObject({ ativo: false, erro: null });
+    await app.inject({ method: 'GET', url: '/api/lessons/a2' });
+    // Offline: a tentativa acontece e para com erro, sem derrubar a aula.
+    await vi.waitFor(async () => expect((await curso()).erro).not.toBeNull());
+  });
+
   // MPEG-TS com cara de .mp4 é comum em curso baixado: chega já convertido.
   it.skipIf(!hasFfmpeg())('vídeo que não toca é convertido depois de baixar, e a cópia baixada sai', async () => {
     const ts = path.join(tmp, 'aula.ts');
@@ -212,7 +242,7 @@ describe('download dos cursos do Drive', () => {
     ARQUIVOS['v-1'] = fs.readFileSync(ts, 'latin1');
     db.prepare("UPDATE lessons SET size_bytes=? WHERE id='a1'").run(fs.statSync(ts).size);
     try {
-      baixador.enfileirar('c1');
+      baixador.pedirAula('a1');
       await baixador.aguardar();
     } finally {
       ARQUIVOS['v-1'] = 'primeira aula....';

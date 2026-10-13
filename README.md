@@ -127,11 +127,11 @@ Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pas
 - **Pasta privada**: o app abre a autorização do Google no seu navegador; depois de autorizar, é só
   voltar para o Learnflix. A permissão é só de leitura
   (`drive.readonly`); o Learnflix nunca cria, altera nem apaga nada no seu Drive.
-- **O curso vem para o computador**: depois de colar o link, o Learnflix baixa as aulas na ordem do
-  curso para a pasta de dados do app e, se algum vídeo estiver num formato que o player não toca,
-  já o converte. Cada aula que chega passa a tocar sem internet; as que ainda não chegaram tocam
-  direto do Drive enquanto isso. Se o app fechar no meio, o download continua de onde parou na
-  próxima vez. Excluir o curso apaga as cópias.
+- **Baixa só o que você vai assistir**: quando você abre uma aula, o Learnflix baixa essa aula e as
+  duas seguintes para a pasta de dados do app e, se algum vídeo estiver num formato que o player não
+  toca, já o converte. Nada é baixado ao colar o link nem ao abrir o app, então o curso inteiro
+  nunca disputa a sua internet. Aula que já chegou toca sem internet; as outras tocam direto do
+  Drive. Um download interrompido continua de onde parou. Excluir o curso apaga as cópias.
 - **O que você já assistiu sai do disco**: quando uma aula é concluída, a cópia dela é apagada (a
   última assistida fica até a próxima, para não cortar o fim do vídeo). O progresso, o título e os
   materiais continuam; rever uma aula concluída toca direto do Drive, e desmarcar "concluída" baixa
