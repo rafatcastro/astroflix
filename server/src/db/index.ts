@@ -90,13 +90,17 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-export function migrate(db: Db): void {
+const ULTIMA_VERSAO = 3;
+
+// `ate` existe para os testes montarem um banco parado numa versão antiga de
+// verdade; o app sempre migra até a última.
+export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
   const version = pragma(db, 'user_version') as number;
-  if (version < 1) {
+  if (version < 1 && ate >= 1) {
     db.exec(SCHEMA_V1);
     pragma(db, 'user_version = 1');
   }
-  if (version < 2) {
+  if (version < 2 && ate >= 2) {
     // Cursos do Google Drive. `source` com DEFAULT 'local' deixa todo curso
     // existente como estava; o progresso segue preso ao rel_path, e o remote_id
     // é só o endereço da aula no Drive, nunca a identidade dela.
@@ -110,6 +114,52 @@ export function migrate(db: Db): void {
       `);
       pragma(db, 'user_version = 2');
     });
+  }
+  if (version < 3 && ate >= 3) {
+    // Cursos do Telegram. O CHECK de `source` não se altera no SQLite, então a
+    // tabela é reconstruída pelo procedimento oficial (sqlite.org/lang_altertable):
+    // FKs desligadas FORA da transação (dentro, o PRAGMA é ignorado), cópia,
+    // troca de nome e foreign_key_check antes de confirmar. Sem desligar, o
+    // DROP TABLE apagaria em cascata todas as aulas e todo o progresso.
+    // telegram_peer guarda onde o grupo mora (ver PeerTelegram).
+    const fkAntes = pragma(db, 'foreign_keys') as number;
+    pragma(db, 'foreign_keys = OFF');
+    try {
+      transaction(db, () => {
+        db.exec(`
+          CREATE TABLE courses_v3 (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            root_path TEXT NOT NULL,
+            structure TEXT NOT NULL CHECK (structure IN ('modules','flat')),
+            archived INTEGER NOT NULL DEFAULT 0,
+            sort_index INTEGER,
+            poster_lesson_id TEXT,
+            cover_path TEXT,
+            collection_id TEXT REFERENCES collections(id) ON DELETE SET NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            last_scanned_at TEXT,
+            source TEXT NOT NULL DEFAULT 'local' CHECK (source IN ('local','drive','telegram')),
+            drive_folder_id TEXT,
+            drive_resource_key TEXT,
+            telegram_peer TEXT
+          );
+          INSERT INTO courses_v3 (id, title, root_path, structure, archived, sort_index, poster_lesson_id, cover_path,
+                                  collection_id, created_at, updated_at, last_scanned_at, source, drive_folder_id, drive_resource_key)
+            SELECT id, title, root_path, structure, archived, sort_index, poster_lesson_id, cover_path,
+                   collection_id, created_at, updated_at, last_scanned_at, source, drive_folder_id, drive_resource_key
+            FROM courses;
+          DROP TABLE courses;
+          ALTER TABLE courses_v3 RENAME TO courses;
+        `);
+        const quebradas = db.prepare('PRAGMA foreign_key_check').all();
+        if (quebradas.length) throw new Error(`migração v3: ${quebradas.length} chaves estrangeiras quebradas`);
+        pragma(db, 'user_version = 3');
+      });
+    } finally {
+      if (fkAntes) pragma(db, 'foreign_keys = ON');
+    }
   }
 }
 

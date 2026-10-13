@@ -40,6 +40,7 @@ build/
 
 # Credenciais do app do Google criadas no console, até irem para o config.ts
 .google-oauth.local.json
+.telegram.local.json
 
 # App desktop: chave do atualizador (vai para os secrets da CI), sidecar e build do Rust.
 .tauri-signing.local.key
