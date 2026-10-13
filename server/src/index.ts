@@ -27,7 +27,7 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config
 }
 
 const db = openDb(config.dbPath);
-const app = buildApp(config, db, { retomarDownloads: true });
+const app = buildApp(config, db, { retomarDownloads: true, exigirConta: true });
 
 const shutdown = () => {
   app.close().finally(() => process.exit(0));

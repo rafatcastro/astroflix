@@ -30,6 +30,11 @@ import { fonteDoTelegram } from './telegram/baixar';
 import { criarClienteAnki, type ClienteAnki } from './anki/cliente';
 import { criarServicosAnki } from './anki/servicos';
 import { flashcardsRoutes } from './routes/flashcards';
+import { configSupabase, criarClienteSupabase, type ClienteSupabase } from './nuvem/cliente';
+import { criarServicosConta } from './nuvem/conta';
+import { criarSincronizador, type Sincronizador } from './nuvem/sincronizar';
+import { contaRoutes } from './routes/conta';
+import { credenciaisGoogle } from './drive/credenciais';
 
 // `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
 // um Google, um Telegram e um Anki falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
@@ -37,7 +42,16 @@ import { flashcardsRoutes } from './routes/flashcards';
 export function buildApp(
   config: AppConfig,
   db: Db,
-  opts?: { fetch?: Fetch; telegram?: ServicosTelegram; anki?: ClienteAnki; retomarDownloads?: boolean },
+  opts?: {
+    fetch?: Fetch;
+    telegram?: ServicosTelegram;
+    anki?: ClienteAnki;
+    retomarDownloads?: boolean;
+    /** Supabase falso nos testes; null = app sem conta. Omitido: o projeto do build. */
+    supabase?: ClienteSupabase | null;
+    /** Só o app de verdade (index.ts): sem conta, nenhuma rota de dados responde; e sincroniza a cada minuto. */
+    exigirConta?: boolean;
+  },
 ): FastifyInstance {
   const app = Fastify({ logger: false });
   // Uma instância só: o login por QR vive em memória. Não conecta nada até
@@ -51,8 +65,49 @@ export function buildApp(
   // Nada fala com o Anki até alguém abrir os flashcards.
   const anki = criarServicosAnki(db, opts?.anki ?? criarClienteAnki());
 
+  // Conta e nuvem (nuvem/). Sem projeto Supabase no build, o app roda sem conta.
+  const cfgNuvem = configSupabase();
+  const supabase =
+    opts?.supabase !== undefined ? opts.supabase : cfgNuvem ? criarClienteSupabase(cfgNuvem, opts?.fetch ?? globalThis.fetch) : null;
+  let sinc: Sincronizador | null = null;
+  const conta = criarServicosConta({
+    db,
+    fetch: opts?.fetch ?? globalThis.fetch,
+    supabase,
+    credenciaisGoogle: () => credenciaisGoogle(db),
+    aoEntrar: (s) => {
+      sinc?.aoEntrar(s.userId);
+      if (opts?.exigirConta) sinc?.iniciar();
+    },
+  });
+  if (supabase) sinc = criarSincronizador({ db, supabase, token: () => conta.token() });
+
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
   registrarGuarda(app);
+
+  // Login obrigatório: a trava é aqui, no servidor, e não só na tela. Sem sessão,
+  // só a própria conta (para entrar) e o que não é dado da pessoa respondem.
+  if (opts?.exigirConta && conta.configurada) {
+    const livres = ['/api/conta', '/api/health', '/api/info'];
+    app.addHook('onRequest', async (req, reply) => {
+      const url = req.url.split('?')[0];
+      if (!url.startsWith('/api/') || livres.some((l) => url === l || url.startsWith(`${l}/`))) return;
+      if (!conta.estado().entrou) return reply.code(401).send({ error: 'precisa-entrar' });
+    });
+  }
+
+  // Mudou algo (não-GET): sobe logo, sem esperar a volta do minuto. O progresso
+  // salva a cada poucos segundos, então junta numa subida só.
+  let subidaMarcada: NodeJS.Timeout | null = null;
+  app.addHook('onResponse', async (req) => {
+    if (!sinc || req.method === 'GET' || !req.url.startsWith('/api/') || req.url.startsWith('/api/conta')) return;
+    if (subidaMarcada || !conta.estado().entrou) return;
+    subidaMarcada = setTimeout(() => {
+      subidaMarcada = null;
+      void sinc?.sincronizar();
+    }, 3000);
+    subidaMarcada.unref();
+  });
 
   // Tolera corpo vazio em application/json: um POST/DELETE sem corpo (ex.: rescan, excluir)
   // não deve falhar com FST_ERR_CTP_EMPTY_JSON_BODY — trata corpo vazio como indefinido.
@@ -85,10 +140,16 @@ export function buildApp(
   app.register(driveRoutes, { db, drive });
   app.register(telegramRoutes, { db, config, telegram });
   app.register(flashcardsRoutes, { db, anki });
+  app.register(contaRoutes, { conta, sinc });
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.
   if (opts?.retomarDownloads) app.addHook('onReady', async () => drive.baixador.retomarTodos());
+  // Já entrou numa abertura anterior: sincroniza ao abrir e a cada minuto.
+  if (opts?.exigirConta) app.addHook('onReady', async () => {
+    if (conta.estado().entrou) sinc?.iniciar();
+  });
+  app.addHook('onClose', async () => sinc?.parar());
 
   // A interface vem embutida no build, não do disco — ver spa.ts.
   registrarSpa(app, WEB_ASSETS);
