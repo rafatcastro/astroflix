@@ -21,6 +21,7 @@ export const IDS = [
   'primeiros-passos',
   'assistir',
   'bibliotecas',
+  'flashcards',
   'problemas',
   'video-nao-toca',
   'pasta-mudou',
@@ -49,6 +50,7 @@ export const ATALHOS: { teclas: string[]; desc: string }[] = [
   { teclas: ['F'], desc: 'Tela cheia' },
   { teclas: ['M'], desc: 'Mudo' },
   { teclas: ['N', 'P'], desc: 'Próxima / anterior aula' },
+  { teclas: ['C'], desc: 'Flashcards da aula' },
   { teclas: ['Esc'], desc: 'Fechar / voltar ao curso' },
   { teclas: ['?'], desc: 'Mostrar estes atalhos' },
 ];
@@ -210,6 +212,47 @@ export const TOPICOS: Topico[] = [
           <>
             <b>Excluir uma biblioteca não apaga curso nenhum.</b> Os cursos voltam para a lista
             geral, com todo o progresso intacto. Biblioteca é organização, não posse.
+          </>
+        ),
+      },
+    ],
+  },
+
+  {
+    id: 'flashcards',
+    titulo: 'Flashcards e Anki',
+    resumo: 'Anotar cards durante a aula e revisar no Anki',
+    blocos: [
+      {
+        t: 'p',
+        texto:
+          'Escreva a frente e o verso de um card enquanto assiste: ele vai para o seu Anki, preso à aula e ao minuto do vídeo, e você revisa lá (no computador ou no celular).',
+      },
+      {
+        t: 'passos',
+        itens: [
+          <>
+            Instale o Anki e o complemento <b>AnkiConnect</b> (código 2055492159). Em{' '}
+            <b>Configurações → Anki</b> estão os detalhes.
+          </>,
+          <>
+            Na aula, aperte <b>C</b> (ou o botão de cards no topo). Escreva frente e verso e salve com{' '}
+            <b>⌘/Ctrl + Enter</b>. O vídeo pausa enquanto você escreve.
+          </>,
+          <>
+            Clique no minuto de um card para voltar o vídeo até ali. Cards gerais e do curso todo ficam
+            na tela <b>Flashcards</b>, aberta pela biblioteca ou pelo curso.
+          </>,
+        ],
+      },
+      {
+        t: 'nota',
+        tom: 'info',
+        texto: (
+          <>
+            Os cards do curso vão para o baralho <b>Learnflix::Cursos::&lt;curso&gt;</b>, e os gerais para{' '}
+            <b>Learnflix::Cursos</b>. Com o Anki fechado, o card fica guardado e vai quando ele abrir. Editar
+            ou apagar no Anki também muda aqui.
           </>
         ),
       },

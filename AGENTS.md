@@ -149,6 +149,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   o vídeo. Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
   `scan/scan-telegram.ts` espelham o Drive. O `telegram_peer` do curso guarda o access hash: sem
   ele, um canal privado não é achado depois de reiniciar.
+- `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
+  AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
+  próprio "Learnflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
+  dos campos e monta o baralho (`Learnflix::Cursos[::<curso>]`), `servicos` é o espelho local
+  (tabela `flashcards`, v4) com a fila de pendentes: o Anki é a fonte da verdade, mas criar com ele
+  fechado funciona e vai depois. Ao listar, relê as notas (edição lá vem para cá, nota apagada sai;
+  se **nenhuma** for achada, assume outro perfil e não apaga nada). `routes/flashcards.ts` expõe a
+  API; os testes usam `anki-falso.ts` (`buildApp(..., { anki })`).
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.
@@ -190,6 +198,9 @@ re-apontar preserva o histórico.
   guardam o ID do arquivo (Drive) ou da mensagem (Telegram) em `lessons.remote_id`. A v3
   reconstruiu `courses` para o CHECK aceitar `telegram` (o SQLite não altera CHECK). O progresso continua preso ao `rel_path`, nunca ao ID do Drive,
   então re-escanear depois de o dono reenviar o arquivo preserva o histórico.
+- `flashcards` (v4): `course_id` nulo = card geral (CASCADE com o curso); `lesson_id` nulo = do
+  curso todo (SET NULL: re-scan que apaga a aula não leva o card). `pendente` = o que falta mandar
+  ao Anki. Entram no backup (`flashcards` por curso, `flashcardsGerais`).
 - `progress` é uma tabela por aula, com `position_sec`, `furthest_sec` e
   `completed`/`auto_completed`.
 - As aulas são apagadas em cascata.
@@ -201,8 +212,8 @@ re-apontar preserva o histórico.
 React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 
 - `main.tsx`: providers (QueryClient, BrowserRouter).
-- `App.tsx`: quatro rotas: `/` (Library), `/course/:id` (Course), `/lesson/:id` (Lesson) e
-  `/settings` (Settings).
+- `App.tsx`: cinco rotas: `/` (Library), `/course/:id` (Course), `/lesson/:id` (Lesson),
+  `/settings` (Settings) e `/flashcards` (Flashcards, `?curso=<id>`).
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o
   servidor.
 - `api/hooks.ts`: wrappers do TanStack Query. As mutations invalidam `['courses']` e

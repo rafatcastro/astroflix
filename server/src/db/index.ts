@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 3;
+const ULTIMA_VERSAO = 4;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -160,6 +160,31 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
     } finally {
       if (fkAntes) pragma(db, 'foreign_keys = ON');
     }
+  }
+  if (version < 4 && ate >= 4) {
+    // Flashcards (anki/). Curso e aula nulos = card geral; aula nula com curso =
+    // card do curso todo. Apagar a aula (re-scan) não pode levar o card que a
+    // pessoa escreveu: ele fica no curso. Apagar o curso leva os cards daqui,
+    // e no Anki eles continuam. `pendente` é o que ainda falta mandar ao Anki.
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE flashcards (
+          id TEXT PRIMARY KEY,
+          course_id TEXT REFERENCES courses(id) ON DELETE CASCADE,
+          lesson_id TEXT REFERENCES lessons(id) ON DELETE SET NULL,
+          minuto_sec REAL,
+          frente TEXT NOT NULL,
+          verso TEXT NOT NULL,
+          anki_note_id INTEGER,
+          pendente TEXT CHECK (pendente IN ('criar','editar','apagar')),
+          criado_em TEXT NOT NULL,
+          atualizado_em TEXT NOT NULL
+        );
+        CREATE INDEX idx_flashcards_course ON flashcards(course_id);
+        CREATE INDEX idx_flashcards_lesson ON flashcards(lesson_id);
+      `);
+      pragma(db, 'user_version = 4');
+    });
   }
 }
 

@@ -34,6 +34,18 @@ export interface ExportedLesson {
   progress: ProgressState | null;
 }
 
+// Card de flashcard (ver anki/). O de curso prende a aula pelo rel_path, como o
+// progresso; o id da nota no Anki vai junto para que importar na outra máquina
+// (mesma conta do AnkiWeb) não crie a nota de novo.
+export interface ExportedFlashcard {
+  lessonRelPath: string | null;
+  minutoSec: number | null;
+  frente: string;
+  verso: string;
+  ankiNoteId: number | null;
+  criadoEm: string;
+}
+
 export interface ExportedCourseRoot {
   path: string;
   createdAt: string;
@@ -66,6 +78,7 @@ export interface ExportedCourse {
   driveResourceKey?: string;
   /** JSON de PeerTelegram, em curso do Telegram. */
   telegramPeer?: string;
+  flashcards?: ExportedFlashcard[];
 }
 
 /**
@@ -93,6 +106,22 @@ function saneiaCursos(cursos: unknown[]): ExportedCourse[] {
       driveFolderId: typeof c.driveFolderId === 'string' ? c.driveFolderId : undefined,
       driveResourceKey: typeof c.driveResourceKey === 'string' ? c.driveResourceKey : undefined,
       telegramPeer: typeof c.telegramPeer === 'string' ? c.telegramPeer : undefined,
+      flashcards: saneiaCards(c.flashcards),
+    }));
+}
+
+// Card torto é descartado sozinho; rel_path de aula fora da pasta vira card do curso.
+function saneiaCards(cards: unknown): ExportedFlashcard[] | undefined {
+  if (!Array.isArray(cards)) return undefined;
+  return cards
+    .filter((f) => !!f && typeof f.frente === 'string' && typeof f.verso === 'string' && f.frente.trim() && f.verso.trim())
+    .map((f) => ({
+      lessonRelPath: relPathSeguro(f.lessonRelPath) ? f.lessonRelPath : null,
+      minutoSec: typeof f.minutoSec === 'number' && Number.isFinite(f.minutoSec) && f.minutoSec >= 0 ? f.minutoSec : null,
+      frente: f.frente,
+      verso: f.verso,
+      ankiNoteId: Number.isSafeInteger(f.ankiNoteId) ? f.ankiNoteId : null,
+      criadoEm: typeof f.criadoEm === 'string' ? f.criadoEm : new Date().toISOString(),
     }));
 }
 
@@ -136,6 +165,7 @@ export function parseExport(raw: unknown): ParseResult {
       collections: Array.isArray(o.collections) ? (o.collections as ExportedCollection[]) : [],
       courses: saneiaCursos(o.courses),
       courseRoots: Array.isArray(o.courseRoots) ? (o.courseRoots as ExportedCourseRoot[]) : [],
+      flashcardsGerais: saneiaCards(o.flashcardsGerais),
       settings: {
         allowedRootsExtra: Array.isArray(extras.allowedRootsExtra)
           ? extras.allowedRootsExtra
@@ -158,4 +188,6 @@ export interface LibraryExport {
   courses: ExportedCourse[];
   courseRoots: ExportedCourseRoot[];
   settings: { allowedRootsExtra: string[] };
+  /** Cards sem curso. Opcional: backups de antes dos flashcards não têm. */
+  flashcardsGerais?: ExportedFlashcard[];
 }
