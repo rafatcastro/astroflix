@@ -26,7 +26,7 @@ Baixe o instalador na **[página da última versão](https://github.com/rafatcas
 | macOS (Apple Silicon: M1, M2…) | `Learnflix_<versão>_aarch64.dmg` |
 | macOS (Intel) | `Learnflix_<versão>_x64.dmg` |
 | Windows | `Learnflix_<versão>_x64-setup.exe` (ou o `.msi`) |
-| Linux | `Learnflix_<versão>_amd64.AppImage` (ou o `.deb`) |
+| Linux | `Learnflix_<versão>_amd64.AppImage` (ou o `.deb` / `.rpm`) |
 
 Abra o Learnflix como qualquer outro programa — pelo Dock, pelo menu Iniciar ou pelo menu de
 aplicativos. Ele abre na própria janela.
@@ -138,10 +138,16 @@ detalhes do que o app lê estão na [política de privacidade](PRIVACY.md).
 
 ---
 
-## Cursos do Telegram
+## Cursos do Telegram *(em desenvolvimento)*
 
 Grupo ou canal do Telegram com as aulas postadas também vira curso. Clique em **Adicionar ▾ → Do
 Telegram** e cole o link (`t.me/…`).
+
+> **Ainda em teste.** O recurso aparece com o selo **Em desenvolvimento** e ainda não foi validado
+> com contas reais. Enquanto isso, o instalador não vem com o app do Telegram configurado: para
+> experimentar, crie o seu em [my.telegram.org](https://my.telegram.org) → **API development tools**
+> e cole o `api_id` e o `api_hash` em **Configurações → Telegram → Usar um app próprio do Telegram**.
+> A opção **Do Telegram** aparece na biblioteca logo depois.
 
 - **Com a sua conta**: na primeira vez, o app mostra um QR code. No celular, abra o Telegram →
   **Configurações → Dispositivos → Conectar dispositivo** e aponte para a tela. A sessão aparece lá
@@ -151,7 +157,10 @@ Telegram** e cole o link (`t.me/…`).
 - **Grupo privado e convite**: vale qualquer grupo em que você já está. Num link de convite
   (`t.me/+…`), o app pergunta antes de entrar no grupo com a sua conta.
 - **Nada é baixado**: o vídeo é transmitido na hora, com avançar e voltar funcionando. Contas sem
-  Telegram Premium têm download mais lento, e isso é limite do próprio Telegram.
+  Telegram Premium têm download mais lento, e isso é limite do próprio Telegram. As capas são as
+  miniaturas que o próprio Telegram guarda, sem precisar do ffmpeg.
+- **Fora por enquanto**: tópicos de grupos-fórum (o curso vira uma lista única) e vídeos que são só
+  um link externo.
 
 Quem não usa Telegram não vê nada disso: o app não conecta ao Telegram até você colar um link.
 
@@ -299,13 +308,39 @@ O servidor existe porque a interface (uma página web, dentro da janela) não co
 disco sozinha: ele lê as pastas (sempre só-leitura), transmite o vídeo por HTTP Range para o seek
 funcionar, gera as miniaturas e é dono do banco. A interface conversa com ele por uma API JSON.
 
+Recursos de rede ficam isolados em `server/src/drive/` (Google Drive, OAuth com PKCE e Drive API)
+e `server/src/telegram/` (a conta da pessoa via MTProto, com o [GramJS](https://gram.js.org)
+carregado só quando alguém cola um link). Os testes injetam clientes falsos, então a suíte inteira
+roda sem rede.
+
 O app desktop é uma janela que sobe esse servidor — empacotado num executável único, com o Node
 dentro — e carrega a interface dele. No `pnpm dev`, a mesma janela abre o Vite, e o servidor roda
 direto do código-fonte.
 
-Cada push na `main` (que não seja só de documentação) vira uma versão: a CI gera os instaladores dos
-três sistemas e o arquivo que o atualizador consulta, e quem já tem o app recebe o aviso. O número é
-automático — o `major.minor` do `package.json` mais o número da execução da CI.
+Cada push na `main` (que não seja só de documentação) vira uma versão: a CI roda os testes, gera os
+instaladores (macOS Apple Silicon e Intel, Windows e Linux) numa release em rascunho e só a publica
+depois de conferir que as quatro plataformas estão no arquivo que o atualizador consulta. Quem já tem
+o app recebe o aviso. O número é automático — o `major.minor` do `package.json` mais o número da
+execução da CI —, então ninguém cria tag à mão.
+
+<details>
+<summary>Publicando o seu próprio fork</summary>
+
+<br>
+
+1. `pnpm repo seu-usuario/seu-repo` troca o repositório no `package.json`, no README e no
+   `tauri.conf.json` (o atualizador procura as versões lá).
+2. Gere uma chave de assinatura do atualizador (`pnpm --filter desktop tauri signer generate`),
+   ponha a pública no `tauri.conf.json` e a privada no secret `TAURI_SIGNING_PRIVATE_KEY`.
+3. Opcionais: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` e `GOOGLE_API_KEY` para o Drive;
+   `TELEGRAM_API_ID` e `TELEGRAM_API_HASH` para o Telegram. Sem eles, o app funciona igual e a
+   pessoa pode usar credenciais próprias em Configurações.
+4. Em forks, o GitHub desliga os workflows: ative em **Actions** antes do primeiro push.
+
+Localmente, as mesmas credenciais podem ficar em `.google-oauth.local.json` e
+`.telegram.local.json`, ignorados pelo git. Nunca commite esses arquivos: o repositório é público.
+
+</details>
 
 O código e os comentários estão em português.
 
@@ -329,8 +364,9 @@ baixar, instalar e abrir.
 
 - **Sem terminal e sem Node.** O instalador traz tudo dentro.
 - **Atualiza sozinho.** Quando sai versão nova, o app avisa e se atualiza com um clique.
-- **Cursos do Google Drive e do Telegram.** Cole o link de uma pasta ou de um grupo e assista sem
-  baixar nada.
+- **Cursos do Google Drive.** Cole o link de uma pasta e assista sem baixar nada.
+- **Cursos do Telegram (em desenvolvimento).** Cole o link de um grupo ou canal e entre com a sua
+  conta pelo QR code; os vídeos viram aulas na ordem em que foram postados.
 - **Os mesmos dados.** Quem já usava o Learnflix abre o app e encontra a biblioteca e o progresso
   exatamente como deixou.
 
