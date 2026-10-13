@@ -26,6 +26,7 @@ import { driveRoutes } from './routes/drive';
 import type { ServicosTelegram } from './telegram/servicos';
 import { criarServicosTelegram } from './telegram/gramjs';
 import { telegramRoutes } from './routes/telegram';
+import { fonteDoTelegram } from './telegram/baixar';
 import { criarClienteAnki, type ClienteAnki } from './anki/cliente';
 import { criarServicosAnki } from './anki/servicos';
 import { flashcardsRoutes } from './routes/flashcards';
@@ -39,12 +40,13 @@ export function buildApp(
   opts?: { fetch?: Fetch; telegram?: ServicosTelegram; anki?: ClienteAnki; retomarDownloads?: boolean },
 ): FastifyInstance {
   const app = Fastify({ logger: false });
-  // Uma instância só: o auth guarda os states pendentes do login em memória, e
-  // o callback precisa enxergar os mesmos que o início do fluxo criou.
-  const drive = criarServicosDrive(db, config, opts?.fetch);
-  // Uma instância só, pelo mesmo motivo: o login por QR vive em memória. Não
-  // conecta nada até alguém usar (ver gramjs.ts).
+  // Uma instância só: o login por QR vive em memória. Não conecta nada até
+  // alguém usar (ver gramjs.ts).
   const telegram = opts?.telegram ?? criarServicosTelegram(db);
+  // Uma instância só, pelo mesmo motivo: o auth guarda os states pendentes do
+  // login em memória, e o callback precisa enxergar os mesmos que o início do
+  // fluxo criou. Ela também tem a fila de downloads, do Drive e do Telegram.
+  const drive = criarServicosDrive(db, config, opts?.fetch, fonteDoTelegram(db, telegram));
   // Uma instância só: a fila de envio ao Anki não pode ter duas cópias correndo.
   // Nada fala com o Anki até alguém abrir os flashcards.
   const anki = criarServicosAnki(db, opts?.anki ?? criarClienteAnki());

@@ -8,10 +8,10 @@ import type { Capacidades } from '../media/ffmpeg';
 import { prepararParaTocar } from '../media/preparar';
 import type { ClienteDrive } from './api';
 import { arquivoBaixadoDaAula, arquivoLocalDaAula } from './local';
-import { resourceKeyDoCurso } from './status';
 import { FalhaDrive } from './tipos';
+import { FalhaTelegram } from '../telegram/tipos';
 
-// As aulas do Drive são baixadas para DATA_DIR/downloads e, se preciso, convertidas
+// As aulas do Drive e do Telegram são baixadas para DATA_DIR/downloads e, se preciso, convertidas
 // para tocar. Assistir pela rede dependia da cota do Google (que bloqueia pastas
 // muito acessadas), de conexão boa e do seek ir e voltar ao Drive; com o arquivo
 // local, o player é o mesmo dos cursos do disco. Enquanto uma aula não chega, ela
@@ -63,10 +63,44 @@ export function salvarCapacidades(db: Db, cap: Capacidades): void {
   );
 }
 
+/** Baixa um arquivo da origem para `destino`, retomando um `destino.part` que já exista. */
+export type BaixarArquivo = (remoteId: string, destino: string, tamanho: number) => Promise<void>;
+
+export const baixarDoDrive = (cliente: ClienteDrive): BaixarArquivo => async (remoteId, destino, tamanho) => {
+  fs.mkdirSync(path.dirname(destino), { recursive: true });
+  const parcial = `${destino}.part`;
+  // Retoma de onde parou: vídeo de aula tem centenas de MB, e cair a rede no
+  // meio não pode custar o download inteiro.
+  let inicio = fs.existsSync(parcial) ? fs.statSync(parcial).size : 0;
+  let res = await cliente.baixar(remoteId, inicio ? `bytes=${inicio}-` : undefined);
+  if (inicio && res.status === 416) {
+    // O pedaço já estava completo; só faltou renomear.
+    await res.body?.cancel();
+  } else {
+    if (inicio && res.status !== 206) {
+      await res.body?.cancel();
+      inicio = 0;
+      res = await cliente.baixar(remoteId, undefined);
+    }
+    if (!res.ok || !res.body) throw new FalhaDrive('sem-conexao');
+    await pipeline(
+      Readable.fromWeb(res.body as import('node:stream/web').ReadableStream),
+      fs.createWriteStream(parcial, { flags: inicio ? 'a' : 'w' }),
+    );
+  }
+  // Arquivo truncado tocaria até o meio e pararia: confere com o tamanho do Drive.
+  if (tamanho > 0 && fs.statSync(parcial).size !== tamanho) {
+    fs.rmSync(parcial, { force: true });
+    throw new FalhaDrive('sem-conexao');
+  }
+  fs.renameSync(parcial, destino);
+};
+
 export function criarBaixador(deps: {
   db: Db;
   config: AppConfig;
-  cliente: (resourceKeys: string | null) => ClienteDrive;
+  /** Como baixar os arquivos deste curso (Drive ou Telegram); null = curso sem origem remota. */
+  fonte: (courseId: string) => Promise<BaixarArquivo | null>;
 }): Baixador {
   const { db, config } = deps;
   const fila: string[] = [];
@@ -80,35 +114,6 @@ export function criarBaixador(deps: {
 
   const existe = (courseId: string) => !!db.prepare('SELECT 1 FROM courses WHERE id=?').get(courseId);
 
-  async function baixarArquivo(cliente: ClienteDrive, remoteId: string, destino: string, tamanho: number): Promise<void> {
-    fs.mkdirSync(path.dirname(destino), { recursive: true });
-    const parcial = `${destino}.part`;
-    // Retoma de onde parou: vídeo de aula tem centenas de MB, e cair a rede no
-    // meio não pode custar o download inteiro.
-    let inicio = fs.existsSync(parcial) ? fs.statSync(parcial).size : 0;
-    let res = await cliente.baixar(remoteId, inicio ? `bytes=${inicio}-` : undefined);
-    if (inicio && res.status === 416) {
-      // O pedaço já estava completo; só faltou renomear.
-      await res.body?.cancel();
-    } else {
-      if (inicio && res.status !== 206) {
-        await res.body?.cancel();
-        inicio = 0;
-        res = await cliente.baixar(remoteId, undefined);
-      }
-      if (!res.ok || !res.body) throw new FalhaDrive('sem-conexao');
-      await pipeline(
-        Readable.fromWeb(res.body as import('node:stream/web').ReadableStream),
-        fs.createWriteStream(parcial, { flags: inicio ? 'a' : 'w' }),
-      );
-    }
-    // Arquivo truncado tocaria até o meio e pararia: confere com o tamanho do Drive.
-    if (tamanho > 0 && fs.statSync(parcial).size !== tamanho) {
-      fs.rmSync(parcial, { force: true });
-      throw new FalhaDrive('sem-conexao');
-    }
-    fs.renameSync(parcial, destino);
-  }
 
   // Curso baixado inteiro ocupa dezenas de GB; o que já foi assistido não precisa
   // ficar. Apaga a cópia (baixada e convertida) das aulas concluídas e mantém tudo
@@ -140,11 +145,9 @@ export function criarBaixador(deps: {
   }
 
   async function baixarCurso(courseId: string): Promise<void> {
-    const curso = db.prepare('SELECT drive_folder_id, drive_resource_key FROM courses WHERE id=? AND source=?').get(courseId, 'drive') as
-      | { drive_folder_id: string | null; drive_resource_key: string | null }
-      | undefined;
-    if (!curso) return;
-    const cliente = deps.cliente(resourceKeyDoCurso(curso.drive_folder_id, curso.drive_resource_key));
+    // A fonte só é montada se há o que baixar: no Telegram ela abre a conexão.
+    let baixarArquivo: BaixarArquivo | null | undefined;
+    const fonte = async () => (baixarArquivo === undefined ? (baixarArquivo = await deps.fonte(courseId)) : baixarArquivo);
 
     // Na ordem do curso: as primeiras aulas, que a pessoa assiste primeiro, chegam antes.
     const aulas = db
@@ -163,7 +166,9 @@ export function criarBaixador(deps: {
       if (concluidas.has(a.id)) continue;
       if (arquivoLocalDaAula(config, courseId, a.id, a.rel_path)) continue;
       const destino = arquivoBaixadoDaAula(config, courseId, a.id, a.rel_path);
-      await baixarArquivo(cliente, a.remote_id, destino, Number(a.size_bytes ?? 0));
+      const baixar = await fonte();
+      if (!baixar) return;
+      await baixar(a.remote_id, destino, Number(a.size_bytes ?? 0));
       pedidas.get(courseId)?.delete(a.id);
       try {
         const convertido = path.join(config.convertedDir, `${a.id}.mp4`);
@@ -190,7 +195,11 @@ export function criarBaixador(deps: {
         estado.erro = null;
       } catch (e) {
         estado.erro =
-          e instanceof FalhaDrive ? e.tipo : (e as NodeJS.ErrnoException)?.code === 'ENOSPC' ? 'sem-espaco' : 'sem-conexao';
+          e instanceof FalhaDrive || e instanceof FalhaTelegram
+            ? e.tipo
+            : (e as NodeJS.ErrnoException)?.code === 'ENOSPC'
+              ? 'sem-espaco'
+              : 'sem-conexao';
       }
       fila.shift();
       if (deNovo.delete(id) && !estado.erro) fila.push(id);
@@ -201,7 +210,7 @@ export function criarBaixador(deps: {
   const baixador: Baixador = {
     pedirAula(lessonId) {
       const aula = db
-        .prepare("SELECT l.course_id, l.order_index FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=? AND c.source='drive'")
+        .prepare("SELECT l.course_id, l.order_index FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=? AND c.source IN ('drive','telegram')")
         .get(lessonId) as { course_id: string; order_index: number } | undefined;
       if (!aula || !config.downloadsDir) return;
       // A aberta e as próximas ainda não concluídas (concluída não volta para o disco).
@@ -232,7 +241,7 @@ export function criarBaixador(deps: {
       return estados.get(courseId) ?? { ativo: false, erro: null };
     },
     retomarTodos() {
-      const ids = db.prepare("SELECT id FROM courses WHERE source='drive' AND archived=0 ORDER BY created_at").all() as Array<{ id: string }>;
+      const ids = db.prepare("SELECT id FROM courses WHERE source IN ('drive','telegram') AND archived=0 ORDER BY created_at").all() as Array<{ id: string }>;
       for (const { id } of ids) baixador.enfileirar(id);
     },
     async aguardar() {

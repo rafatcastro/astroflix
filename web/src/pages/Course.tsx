@@ -11,6 +11,7 @@ import MaterialsSection from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
+import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
 import { ArrowLeft, Play, Check, List, LayoutGrid, Cards } from '../components/icons';
 
@@ -147,8 +148,10 @@ export default function Course() {
         <div className="mt-4" role="status">
           {data.download.erro && !data.download.ativo ? (
             <Banner>
-              O download das próximas aulas parou: {mensagemErroDrive(data.download.erro)} Elas continuam tocando direto do Drive, e o
-              download tenta de novo quando você abrir uma aula.
+              O download das próximas aulas parou:{' '}
+              {data.source === 'telegram' ? mensagemErroTelegram(data.download.erro) : mensagemErroDrive(data.download.erro)} Elas
+              continuam tocando direto do {data.source === 'telegram' ? 'Telegram' : 'Drive'}, e o download tenta de novo quando você
+              abrir uma aula.
             </Banner>
           ) : (
             <Banner tone="info">
