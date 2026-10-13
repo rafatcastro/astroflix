@@ -68,8 +68,8 @@ export const TOPICOS: Topico[] = [
         t: 'p',
         texto: (
           <>
-            <b>Um curso de cada vez.</b> Clique em <b>Adicionar</b> e navegue até a pasta dele. Todo
-            vídeo lá dentro vira uma aula.
+            <b>Um curso de cada vez.</b> Clique em <b>Adicionar → Dos arquivos</b> e escolha a pasta
+            dele na janela do sistema. Todo vídeo lá dentro vira uma aula.
           </>
         ),
       },
@@ -78,8 +78,8 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             <b>Uma pasta inteira de cursos.</b> Se você tem uma pasta-mãe com vários cursos dentro,
-            use <b>Importar pasta de cursos</b> e aponte para ela: cada subpasta com vídeo vira um
-            curso. O Learnflix guarda essa pasta-mãe, e depois basta clicar em{' '}
+            escolha essa pasta do mesmo jeito: o Learnflix pergunta se ela é um curso só (as
+            subpastas viram módulos) ou vários cursos (cada subpasta com vídeo vira um curso). O Learnflix guarda essa pasta-mãe, e depois basta clicar em{' '}
             <b>Verificar novos cursos</b> para trazer o que apareceu de novo. Rodar de novo nunca
             duplica nada.
           </>
