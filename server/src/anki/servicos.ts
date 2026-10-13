@@ -141,10 +141,22 @@ export function criarServicosAnki(db: Db, cliente: ClienteAnki): ServicosAnki {
     } catch (e) {
       return estadoDe(e);
     }
-    // Nenhuma nota encontrada de todas que pedimos: muito provavelmente o Anki
-    // está aberto noutro perfil, e não que a pessoa apagou tudo. Apagar aqui
-    // jogaria fora os cards dela.
-    if (!notas.length) return 'conectado';
+    // Nenhuma das pedidas existe: ou a pessoa as apagou, ou o Anki está aberto
+    // noutro perfil. Para saber, olha os outros cards dela: se nenhum existe
+    // nesse Anki, é outro perfil, e apagar aqui jogaria fora os cards dela.
+    if (!notas.length) {
+      const pedidas = new Set(cards.map((c) => c.anki_note_id!));
+      const outras = (
+        db.prepare('SELECT anki_note_id FROM flashcards WHERE anki_note_id IS NOT NULL LIMIT 500').all() as Array<{ anki_note_id: number }>
+      )
+        .map((r) => r.anki_note_id)
+        .filter((id) => !pedidas.has(id));
+      try {
+        if (!outras.length || !(await cliente.ler(outras)).length) return 'conectado';
+      } catch (e) {
+        return estadoDe(e);
+      }
+    }
     const porId = new Map(notas.map((n) => [n.id, n]));
     const apagar = db.prepare('DELETE FROM flashcards WHERE id=? AND pendente IS NULL AND atualizado_em=?');
     const gravar = db.prepare('UPDATE flashcards SET frente=?, verso=? WHERE id=? AND pendente IS NULL AND atualizado_em=?');
