@@ -1,8 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
+import type { ServicosDrive } from '../drive/servicos';
 
-export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Promise<void> {
-  const { db } = opts;
+export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; drive?: ServicosDrive }): Promise<void> {
+  const { db, drive } = opts;
 
   app.get('/api/lessons/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
@@ -49,7 +50,10 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Pro
   app.post('/api/lessons/:id/complete', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const b = req.body as { completed: boolean };
-    if (!db.prepare('SELECT 1 FROM lessons WHERE id=?').get(id)) { reply.code(404); return { error: 'not_found' }; }
+    const aula = db
+      .prepare('SELECT l.course_id, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=?')
+      .get(id) as { course_id: string; source: string } | undefined;
+    if (!aula) { reply.code(404); return { error: 'not_found' }; }
     const now = new Date().toISOString();
     db.prepare(`
       INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, completed_at, auto_completed, updated_at)
@@ -60,6 +64,8 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db }): Pro
         auto_completed = 0,
         updated_at = excluded.updated_at
     `).run({ id, completed: b.completed ? 1 : 0, completedAt: b.completed ? now : null, now });
+    // Curso do Drive: concluir libera o disco das aulas já vistas; desmarcar baixa de novo.
+    if (aula.source === 'drive') drive?.baixador.enfileirar(aula.course_id);
     reply.code(204);
   });
 }

@@ -19,12 +19,17 @@ const origemPublica = (s: unknown): 'local' | 'drive' | 'telegram' => (s === 'dr
 export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
   const { db, config, drive } = opts;
 
-  // Curso do Drive: quantas aulas já estão no disco e se o download segue.
+  // Curso do Drive: quantas aulas já estão no disco e se o download segue. A
+  // concluída conta como pronta: a cópia dela foi apagada de propósito.
   const downloadDe = (courseId: string) => {
     const aulas = db
-      .prepare('SELECT id, rel_path FROM lessons WHERE course_id=? AND missing=0 AND remote_id IS NOT NULL')
-      .all(courseId) as Array<{ id: string; rel_path: string }>;
-    const baixadas = aulas.filter((a) => arquivoLocalDaAula(config, courseId, a.id, a.rel_path)).length;
+      .prepare(
+        `SELECT l.id, l.rel_path, COALESCE(p.completed, 0) AS completed FROM lessons l
+         LEFT JOIN progress p ON p.lesson_id = l.id
+         WHERE l.course_id=? AND l.missing=0 AND l.remote_id IS NOT NULL`,
+      )
+      .all(courseId) as Array<{ id: string; rel_path: string; completed: number }>;
+    const baixadas = aulas.filter((a) => a.completed || arquivoLocalDaAula(config, courseId, a.id, a.rel_path)).length;
     const e = drive?.baixador.estado(courseId) ?? { ativo: false, erro: null };
     return { total: aulas.length, baixadas, ativo: e.ativo, erro: e.erro };
   };

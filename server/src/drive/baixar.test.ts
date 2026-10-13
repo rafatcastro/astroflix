@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -156,6 +156,52 @@ describe('download dos cursos do Drive', () => {
     // Excluir o curso apaga as cópias.
     await app.inject({ method: 'DELETE', url: '/api/courses/c1' });
     expect(fs.existsSync(path.join(config.downloadsDir, 'c1'))).toBe(false);
+  });
+
+  it('aula concluída sai do disco e não é baixada de novo; a assistida por último fica', async () => {
+    const { config, db, baixador, pedidos } = montar();
+    baixador.enfileirar('c1');
+    await baixador.aguardar();
+    const a1 = arquivoBaixadoDaAula(config, 'c1', 'a1', '01 - a.mp4');
+    const a2 = arquivoBaixadoDaAula(config, 'c1', 'a2', '02 - b.mp4');
+    const convertidoA1 = path.join(config.convertedDir, 'a1.mp4');
+    fs.mkdirSync(config.convertedDir, { recursive: true });
+    fs.writeFileSync(convertidoA1, 'convertido');
+
+    const progresso = db.prepare(
+      'INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, updated_at) VALUES (?, 0, 0, 1, ?)',
+    );
+    progresso.run('a1', '2026-01-01');
+    progresso.run('a2', '2026-01-02'); // ainda tocando os minutos finais
+    baixador.enfileirar('c1');
+    await baixador.aguardar();
+
+    expect(fs.existsSync(a1)).toBe(false);
+    expect(fs.existsSync(convertidoA1)).toBe(false);
+    expect(fs.existsSync(a2)).toBe(true);
+    // Os metadados ficam: a aula, o progresso e os materiais.
+    expect(db.prepare("SELECT title FROM lessons WHERE id='a1'").get()).toEqual({ title: 'A' });
+    expect(db.prepare("SELECT completed FROM progress WHERE lesson_id='a1'").get()).toEqual({ completed: 1 });
+    expect(fs.existsSync(arquivoBaixadoDoMaterial(config, 'c1', 'm1', 'apostila.pdf'))).toBe(true);
+    expect(pedidos).toHaveLength(3);
+
+    const app = buildApp(config, db);
+    const curso = (await app.inject({ method: 'GET', url: '/api/courses/c1' })).json();
+    expect(curso.download).toMatchObject({ total: 2, baixadas: 2 });
+  });
+
+  it('concluir uma aula do Drive pela API apaga a cópia dela', async () => {
+    const { config, db } = montar();
+    // fetch que falha: o que importa aqui é a limpeza, que vem antes de qualquer download.
+    const app = buildApp(config, db, { fetch: (async () => { throw new Error('offline'); }) as unknown as typeof fetch });
+    const a1 = arquivoBaixadoDaAula(config, 'c1', 'a1', '01 - a.mp4');
+    fs.mkdirSync(path.dirname(a1), { recursive: true });
+    fs.writeFileSync(a1, ARQUIVOS['v-1']);
+    db.prepare("INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, updated_at) VALUES ('a2', 0, 0, 0, '2999-01-01')").run();
+
+    const r = await app.inject({ method: 'POST', url: '/api/lessons/a1/complete', payload: { completed: true } });
+    expect(r.statusCode).toBe(204);
+    await vi.waitFor(() => expect(fs.existsSync(a1)).toBe(false));
   });
 
   // MPEG-TS com cara de .mp4 é comum em curso baixado: chega já convertido.
