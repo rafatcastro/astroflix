@@ -55,7 +55,13 @@ interface Item {
   arquivo: ArquivoDrive; // o alvo, quando for atalho
 }
 
-export async function walkDrive(cliente: ClienteDrive, pastaId: string): Promise<WalkDriveResult> {
+// `aoAvancar` recebe o que já foi lido, pasta a pasta, na ordem final: o relPath
+// de um arquivo já entregue não muda depois, então quem chama pode ir gravando.
+export async function walkDrive(
+  cliente: ClienteDrive,
+  pastaId: string,
+  aoAvancar?: (parcial: Omit<WalkDriveResult, 'titulo'>) => void,
+): Promise<WalkDriveResult> {
   const raiz = await cliente.getArquivo(pastaId);
   if (raiz.mimeType !== PASTA) throw new FalhaDrive('nao-e-pasta');
 
@@ -173,6 +179,7 @@ export async function walkDrive(cliente: ClienteDrive, pastaId: string): Promise
       if (VIDEO_EXTS.has(ext)) videos.push(base);
       else materials.push({ ...base, kind: materialKind(ext) });
     }
+    if (arquivos.length) aoAvancar?.({ videos: [...videos], materials: [...materials] });
   };
 
   await visitar(raiz.id, '');

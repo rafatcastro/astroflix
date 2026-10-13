@@ -6,7 +6,7 @@ import type { AppConfig } from '../config';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { previewReconcile, reconcileCourse } from '../scan/reconcile';
-import { reconcileDriveCourse } from '../scan/scan-drive';
+import { reconcileDriveCourse, importacaoDrive } from '../scan/scan-drive';
 import { FalhaDrive } from '../drive/tipos';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
@@ -65,6 +65,8 @@ export async function migrationRoutes(
     if (curso?.source === 'drive') {
       if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
       // Mesmo formato do cabeçalho de resource key usado ao criar o curso.
+      // Duas leituras ao mesmo tempo gravariam planos diferentes por cima uma da outra.
+      if (importacaoDrive(id).carregando) return reply.code(409).send({ error: 'carregando' });
       const rk = resourceKeyDoCurso(curso.drive_folder_id, curso.drive_resource_key);
       try {
         return await reconcileDriveCourse(db, drive.ingestao(rk), id);

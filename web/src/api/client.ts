@@ -4,6 +4,7 @@ export interface CourseSummary {
   posterLessonId: string | null; lastActivityAt: string | null;
   collectionId: string | null;
   source: 'local' | 'drive' | 'telegram';
+  carregando: boolean;
   // Onde a pessoa parou (aula mexida mais recentemente e não concluída).
   ultimaAula: { id: string; titulo: string; posicaoSec: number; duracaoSec: number | null } | null;
   // 0–100 por tempo assistido; null se nenhuma aula tem duração conhecida.
@@ -30,6 +31,8 @@ export interface CourseDetail {
   materials: MaterialDTO[];
   collectionId: string | null;
   source: 'local' | 'drive' | 'telegram';
+  // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
+  importacao: { carregando: boolean; erro: string | null } | null;
 }
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
@@ -157,6 +160,7 @@ export const api = {
   listCourses: (archived?: boolean) => jsonFetch<CourseSummary[]>(`/api/courses${archived ? '?archived=1' : ''}`),
   getCourse: (id: string) => jsonFetch<CourseDetail>(`/api/courses/${id}`),
   createCourse: (path: string) => jsonFetch<{ id: string; existing?: boolean }>('/api/courses', { method: 'POST', body: JSON.stringify({ path }) }),
+  inspect: (path: string) => jsonFetch<{ videosNaRaiz: boolean; subpastasComVideo: number }>(`/api/fs/inspect?path=${encodeURIComponent(path)}`),
   browse: (path?: string) => jsonFetch<BrowseResult>(`/api/fs/browse${path ? `?path=${encodeURIComponent(path)}` : ''}`),
   getLesson: (id: string) => jsonFetch<LessonFull>(`/api/lessons/${id}`),
   saveProgress: (id: string, body: { position_sec: number; furthest_sec: number; duration_sec: number | null }) =>

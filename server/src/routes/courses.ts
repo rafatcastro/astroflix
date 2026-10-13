@@ -9,6 +9,7 @@ import { walkCourseDir } from '../scan/walk';
 import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
+import { importacaoDrive } from '../scan/scan-drive';
 
 // Só os três valores conhecidos saem na API; qualquer outra coisa é curso local.
 const origemPublica = (s: unknown): 'local' | 'drive' | 'telegram' => (s === 'drive' || s === 'telegram' ? s : 'local');
@@ -151,6 +152,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
         source: origemPublica(c.source),
+        carregando: c.source === 'drive' && importacaoDrive(c.id).carregando,
         ultimaAula: ultima
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
@@ -201,6 +203,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       totalLessons: rows.length, completedLessons, materialsCount: materials.length, modules, materials,
       collectionId: course.collection_id ?? null,
       source: origemPublica(course.source),
+      // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
+      importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
     };
   });
 
