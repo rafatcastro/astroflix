@@ -30,6 +30,7 @@ beforeAll(() => {
   escrever('estante/Só PDF/a.pdf');
   escrever('estante/.oculta/01.mp4');
   escrever('vazia/notas.txt');
+  escrever('funda/a/b/c/d/e/01.mp4');
 });
 
 afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -60,5 +61,11 @@ describe('GET /api/fs/inspect', () => {
     const app = makeApp();
     expect((await inspecionar(app, '/etc')).statusCode).toBe(403);
     expect((await inspecionar(app, path.join(root, 'nao-existe'))).statusCode).toBe(404);
+  });
+
+  // Leitura síncrona: sem teto, escolher a home inteira travava o servidor.
+  it('não desce além de 4 níveis', async () => {
+    const res = await inspecionar(makeApp(), path.join(root, 'funda'));
+    expect(res.json()).toEqual({ videosNaRaiz: false, subpastasComVideo: 0 });
   });
 });
