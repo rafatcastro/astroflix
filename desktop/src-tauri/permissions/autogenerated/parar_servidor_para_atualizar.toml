@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-parar-servidor-para-atualizar"
+description = "Enables the parar_servidor_para_atualizar command without any pre-configured scope."
+commands.allow = ["parar_servidor_para_atualizar"]
+
+[[permission]]
+identifier = "deny-parar-servidor-para-atualizar"
+description = "Denies the parar_servidor_para_atualizar command without any pre-configured scope."
+commands.deny = ["parar_servidor_para_atualizar"]
