@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { materialUrl, type MaterialDTO } from '../api/client';
+import { cliqueFora } from '../lib/desktop';
 
 // Materiais adicionais do curso (pdf/zip/imagem/doc), agrupados por módulo/pasta.
 // Acesso apenas: abrir (PDF no leitor embutido, imagem no visualizador) e baixar
@@ -71,6 +72,7 @@ export default function MaterialsSection({ materials }: { materials: MaterialDTO
                       <a
                         href={materialUrl(m.id, true)}
                         download={m.name}
+                        onClick={(e) => cliqueFora(e, materialUrl(m.id, true))}
                         className="inline-flex min-h-[44px] items-center rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700"
                       >
                         Baixar
@@ -92,7 +94,10 @@ export default function MaterialsSection({ materials }: { materials: MaterialDTO
               <a
                 href={materialUrl(viewer.id, true)}
                 download={viewer.name}
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cliqueFora(e, materialUrl(viewer.id, true));
+                }}
                 className="min-h-[44px] rounded-lg bg-neutral-800 px-3 text-sm leading-[44px] text-neutral-200 hover:bg-neutral-700"
               >
                 Baixar

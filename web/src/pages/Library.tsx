@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
+import { cliqueFora } from '../lib/desktop';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
@@ -762,6 +763,7 @@ export default function Library() {
           {courses && courses.length > 0 && (
             <a
               href={api.exportLibraryUrl}
+            onClick={(e) => cliqueFora(e, api.exportLibraryUrl)}
               aria-label="Exportar biblioteca"
               title="Exportar biblioteca (backup)"
               className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"

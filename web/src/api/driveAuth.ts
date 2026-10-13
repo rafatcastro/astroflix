@@ -1,3 +1,5 @@
+import { abrirFora, emDesktop } from '../lib/desktop';
+
 // Autorização do Google pelo popup: um único lugar para o modal de link e para o player, que
 // precisam do mesmo fluxo (abrir popup, esperar o postMessage da página de callback).
 
@@ -22,7 +24,11 @@ export function autorizarNoGoogle(
   opts: { onBloqueado?: () => void; signal?: AbortSignal } = {},
 ): Promise<boolean> {
   return new Promise((resolve) => {
-    const popup = window.open(url, 'learnflix-drive', 'width=500,height=650');
+    // No app desktop o login vai para o navegador do sistema (o Google recusa webview
+    // embutida); sem popup para observar, a volta é pela sondagem do status, abaixo.
+    const desktop = emDesktop();
+    if (desktop) void abrirFora(url);
+    const popup = desktop ? null : window.open(url, 'learnflix-drive', 'width=500,height=650');
     let fechamento = 0;
     let sondagem = 0;
     // O link de fallback abre numa aba que pode não ter opener (postMessage some); o
@@ -63,7 +69,7 @@ export function autorizarNoGoogle(
     } else {
       // Popup bloqueado: quem chamou mostra um link para abrir a autorização em outra aba; a
       // mensagem de volta continua sendo ouvida.
-      opts.onBloqueado?.();
+      if (!desktop) opts.onBloqueado?.();
       // Último recurso se nem mensagem nem canal chegarem: perguntar ao servidor se a conta conectou.
       sondagem = window.setInterval(() => {
         void fetch('/api/drive/status')

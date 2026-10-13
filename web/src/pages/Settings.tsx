@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { cliqueFora } from '../lib/desktop';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type CredencialDrive, type ImportPlan } from '../api/client';
@@ -334,6 +335,7 @@ export default function Settings() {
         <div className="space-y-2">
           <a
             href={api.exportLibraryUrl}
+            onClick={(e) => cliqueFora(e, api.exportLibraryUrl)}
             className="flex w-full items-center gap-3 rounded-lg bg-neutral-900 px-3 py-3 text-sm no-underline hover:bg-neutral-800"
           >
             <Download size={18} className="shrink-0 text-neutral-400" />
