@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
+import { abrirFora } from '../lib/desktop';
 import TextField from './TextField';
 
 export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
@@ -11,7 +12,7 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
   const [link, setLink] = useState('');
   const [busy, setBusy] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [urlBloqueada, setUrlBloqueada] = useState<string | null>(null);
+  const [urlAuth, setUrlAuth] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -48,15 +49,15 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
     if (!link.trim() || busy) return;
     setBusy(true);
     setErro(null);
-    setUrlBloqueada(null);
+    setUrlAuth(null);
     try {
       let res = await api.driveCriarCurso(link.trim());
       if (res.tipo === 'autorizar') {
-        const urlAuth = res.url;
         const ctrl = new AbortController();
         abortRef.current = ctrl;
-        const ok = await autorizarNoGoogle(urlAuth, { signal: ctrl.signal, onBloqueado: () => setUrlBloqueada(urlAuth) });
-        setUrlBloqueada(null);
+        setUrlAuth(res.url);
+        const ok = await autorizarNoGoogle(res.url, { signal: ctrl.signal });
+        setUrlAuth(null);
         if (ctrl.signal.aborted) return;
         if (!ok) {
           setErro('A autorização do Google não foi concluída.');
@@ -114,11 +115,12 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
               {erro}
             </p>
           )}
-          {urlBloqueada && (
-            <p className="mt-2 text-sm text-neutral-300">
-              <a href={urlBloqueada} target="_blank" rel="opener" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
-                Abrir a autorização do Google
-              </a>
+          {urlAuth && (
+            <p className="mt-2 text-sm text-neutral-300" role="status">
+              Conclua a autorização no navegador que abriu.{' '}
+              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+                Abrir de novo
+              </button>
             </p>
           )}
           <div className="mt-4 flex justify-end gap-2">

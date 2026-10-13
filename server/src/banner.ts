@@ -6,7 +6,6 @@ export interface EstadoDoBoot {
   trocouDePorta: boolean;
   portaPedida: number;
   herdouDoV1: boolean;
-  abrindoNavegador: boolean;
   plataforma: NodeJS.Platform;
 }
 
@@ -39,6 +38,6 @@ export function mensagemDeBoot(e: EstadoDoBoot): string[] {
     linhas.push('', `  a porta ${e.portaPedida} estava ocupada, então o app subiu na seguinte`);
   }
 
-  linhas.push('', `  ${e.url}${e.abrindoNavegador ? '  (abrindo o navegador…)' : ''}`);
+  linhas.push('', `  ${e.url}`);
   return linhas;
 }

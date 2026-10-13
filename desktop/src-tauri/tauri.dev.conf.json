@@ -1,0 +1,9 @@
+{
+  "build": {
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": { "script": "pnpm -w dev:servicos", "wait": false }
+  },
+  "bundle": {
+    "externalBin": []
+  }
+}

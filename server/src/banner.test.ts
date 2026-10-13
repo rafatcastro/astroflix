@@ -9,7 +9,6 @@ const base = {
   trocouDePorta: false,
   portaPedida: 7777,
   herdouDoV1: false,
-  abrindoNavegador: true,
   plataforma: 'darwin' as NodeJS.Platform,
 };
 
@@ -47,9 +46,5 @@ describe('mensagemDeBoot', () => {
 
   it('conta quando adotou os dados do v1', () => {
     expect(juntas({ herdouDoV1: true })).toMatch(/v1/i);
-  });
-
-  it('não promete abrir o navegador quando não vai abrir', () => {
-    expect(juntas({ abrindoNavegador: false })).not.toContain('navegador');
   });
 });

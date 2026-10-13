@@ -1,6 +1,7 @@
 import path from 'node:path';
 
-// Modo desktop: o servidor roda como sidecar do app Tauri (ver desktop/).
+// O servidor roda como sidecar do app Tauri (ver desktop/): é a janela dele que
+// mostra a interface, nunca o navegador.
 
 /**
  * Linha de máquina com a URL real. O app desktop lê a saída do sidecar até

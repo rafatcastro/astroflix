@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db';
 import type { ServicosDrive } from '../drive/servicos';
@@ -14,22 +13,15 @@ const CAMPOS = ['clientId', 'clientSecret', 'apiKey'] as const;
 // próxima porta quando a 7777 está ocupada, então um valor fixo quebraria o login.
 const redirectDe = (req: FastifyRequest) => `http://${req.headers.host}/api/drive/auth/callback`;
 
-// Página que o popup do Google abre ao voltar. Nada vindo da query entra no
-// HTML: o resultado é só { ok, motivo } de um enum fixo, serializado e com "<"
-// escapado, e o script só roda com o nonce desta resposta (CSP).
-function paginaCallback(ok: boolean, motivo: string | null, nonce: string): string {
-  const msg = JSON.stringify({ tipo: 'learnflix-drive', ok, motivo }).replace(/</g, '\\u003c');
+// Página que o Google abre ao voltar, no navegador do sistema (fora do app). Ela
+// só informa: a janela do app descobre o resultado perguntando por
+// /api/drive/auth/resultado. Nada vindo da query entra no HTML.
+function paginaCallback(ok: boolean): string {
   return `<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8"><title>Learnflix</title></head>
 <body style="font-family:sans-serif;background:#0a0a0a;color:#eee;padding:2rem">
-<p>${ok ? 'Conta conectada.' : 'Não foi possível conectar a conta.'} Pode fechar esta janela.</p>
-<script nonce="${nonce}">
-window.opener?.postMessage(${msg}, location.origin);
-// Link de fallback (popup bloqueado) abre numa aba sem opener, e o postMessage não chega.
-// O BroadcastChannel alcança qualquer aba da mesma origem.
-try { const c = new BroadcastChannel('learnflix-drive'); c.postMessage(${msg}); c.close(); } catch {}
-window.close();
-</script></body></html>`;
+<p>${ok ? 'Conta conectada. Pode fechar esta aba e voltar ao Learnflix.' : 'Não foi possível conectar a conta. Volte ao Learnflix e tente de novo.'}</p>
+</body></html>`;
 }
 
 export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: ServicosDrive }): Promise<void> {
@@ -81,17 +73,23 @@ export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: S
     const q = (req.query ?? {}) as Record<string, unknown>;
     const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
     const r = await drive.auth.concluir({ code: str(q.code), state: str(q.state), error: str(q.error) });
-    const nonce = randomBytes(16).toString('base64url');
     return reply
       .code(200)
       .header('content-type', 'text/html; charset=utf-8')
       .header(
         'content-security-policy',
-        `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; base-uri 'none'`,
+        "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'",
       )
       .header('cache-control', 'no-store')
       .header('referrer-policy', 'no-referrer')
-      .send(paginaCallback(r.ok, r.ok ? null : r.motivo, nonce));
+      .send(paginaCallback(r.ok));
+  });
+
+  app.get('/api/drive/auth/resultado', async (req, reply) => {
+    const state = (req.query as Record<string, unknown> | undefined)?.state;
+    if (typeof state !== 'string' || !state) return reply.code(400).send({ error: 'sem-state' });
+    const r = drive.auth.resultado(state);
+    return r ? { pronto: true, ...r } : { pronto: false };
   });
 
   app.get('/api/drive/status', async () => {

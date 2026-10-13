@@ -6,7 +6,7 @@
   "remote": { "urls": ["http://localhost:*"] },
   "permissions": [
     "core:default",
-    "opener:allow-open-url",
+    "opener:default",
     "updater:default",
     "process:allow-restart"
   ]
