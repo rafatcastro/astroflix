@@ -1,10 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { cliqueFora } from '../lib/desktop';
+import { cliqueFora, escolherPasta } from '../lib/desktop';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
-import DirPicker from '../components/DirPicker';
 import CourseCardMenu from '../components/CourseCardMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
 import TelegramLinkModal from '../components/TelegramLinkModal';
@@ -476,11 +475,14 @@ export default function Library() {
   };
   const { data: courses, isLoading, isError } = useCourses(tab === 'archived');
   const { data: collections } = useCollections();
-  const [picking, setPicking] = useState<null | 'single' | 'batch' | 'drive' | 'telegram'>(null);
+  const [picking, setPicking] = useState<null | 'drive' | 'telegram'>(null);
+  // Pasta com vídeo só nas subpastas: um curso com módulos ou uma estante de cursos?
+  const [ambigua, setAmbigua] = useState<{ path: string; subpastas: number } | null>(null);
   // Sem o app do Telegram no build nem um próprio nas Configurações, a opção só
   // levaria a um "não configurado": melhor não oferecer.
   const { data: tg } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
-  const temTelegram = Boolean(tg?.credenciais.apiId && tg?.credenciais.apiHash);
+  // Em desenvolvimento: só aparece no `pnpm dev`, até ser validado com contas reais.
+  const temTelegram = import.meta.env.DEV && Boolean(tg?.credenciais.apiId && tg?.credenciais.apiHash);
   const [addMenu, setAddMenu] = useState(false);
   const [creatingCol, setCreatingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
@@ -614,7 +616,29 @@ export default function Library() {
     }
   };
 
-  // Menu "Adicionar ▾": as três formas de criar — curso único, lote, coleção.
+  // Uma entrada só para pastas do disco: o seletor nativo devolve um caminho e o
+  // servidor diz o que tem dentro. Antes eram duas ("Curso" e "Pasta de cursos")
+  // e a pessoa tinha de saber de antemão qual das duas era a dela.
+  const adicionarDosArquivos = async () => {
+    let path: string | null;
+    try {
+      path = await escolherPasta('Escolha a pasta do curso (ou a pasta com vários cursos)');
+    } catch {
+      setNotice('Não foi possível abrir o seletor de pastas.');
+      return;
+    }
+    if (!path) return;
+    try {
+      const info = await api.inspect(path);
+      if (info.videosNaRaiz || info.subpastasComVideo === 1) void doAddCourse(path);
+      else if (info.subpastasComVideo === 0) setNotice('Não achei vídeos nessa pasta.');
+      else setAmbigua({ path, subpastas: info.subpastasComVideo });
+    } catch (e) {
+      setNotice(batchErrorMessage(e));
+    }
+  };
+
+  // Menu "Adicionar ▾": do disco ou do Google Drive.
   const addMenuButton = (
     <div className="relative">
       <button
@@ -628,13 +652,9 @@ export default function Library() {
         <>
           <div className="fixed inset-0 z-10" onClick={() => setAddMenu(false)} />
           <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 text-left">
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('single'); }}>
-              Curso
-              <div className="text-xs text-neutral-500">Uma pasta vira um curso</div>
-            </button>
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('batch'); }}>
-              Pasta de cursos
-              <div className="text-xs text-neutral-500">Cada subpasta com vídeos vira um curso</div>
+            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); void adicionarDosArquivos(); }}>
+              Dos arquivos
+              <div className="text-xs text-neutral-500">Uma pasta com um curso ou com vários</div>
             </button>
             <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('drive'); }}>
               Do Google Drive
@@ -646,10 +666,6 @@ export default function Library() {
                 <div className="text-xs text-neutral-500">Cole o link de um grupo ou canal</div>
               </button>
             )}
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setNewColName(''); setCreatingCol(true); }}>
-              Nova coleção
-              <div className="text-xs text-neutral-500">Agrupe cursos na estante</div>
-            </button>
           </div>
         </>
       )}
@@ -866,17 +882,10 @@ export default function Library() {
               <div className="grid gap-2">
                 <button
                   type="button"
-                  onClick={() => setPicking('single')}
+                  onClick={() => void adicionarDosArquivos()}
                   className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500"
                 >
-                  <Plus size={18} /> Adicionar curso
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPicking('batch')}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
-                >
-                  Importar pasta de cursos
+                  <Plus size={18} /> Dos arquivos
                 </button>
                 <button
                   type="button"
@@ -1017,18 +1026,41 @@ export default function Library() {
         </div>
       )}
 
-      {picking === 'single' && (
-        <DirPicker onClose={() => setPicking(null)} onPick={(path) => { setPicking(null); void doAddCourse(path); }} />
-      )}
       {picking === 'drive' && <DriveLinkModal onClose={() => setPicking(null)} />}
       {picking === 'telegram' && <TelegramLinkModal onClose={() => setPicking(null)} />}
-      {picking === 'batch' && (
-        <DirPicker
-          title="Escolha a pasta que contém os cursos"
-          confirmLabel="Importar cursos"
-          onClose={() => setPicking(null)}
-          onPick={(path) => void doBatchImport(path)}
-        />
+      {ambigua && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={() => setAmbigua(null)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="ambigua-titulo" className="w-full max-w-sm rounded-xl bg-neutral-900 p-5" onClick={(e) => e.stopPropagation()}>
+            <div id="ambigua-titulo" className="mb-1 font-medium">O que tem nessa pasta?</div>
+            <p className="mb-4 text-sm text-neutral-400">Os vídeos estão em {ambigua.subpastas} subpastas.</p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                autoFocus
+                onClick={() => { const p = ambigua.path; setAmbigua(null); void doBatchImport(p); }}
+                className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-left text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Vários cursos
+                <div className="text-xs text-blue-100">Cada subpasta vira um curso</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => { const p = ambigua.path; setAmbigua(null); void doAddCourse(p); }}
+                className="min-h-[44px] rounded-lg bg-neutral-800 px-3 py-2 text-left text-sm text-neutral-200 hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Um curso só
+                <div className="text-xs text-neutral-400">As subpastas viram os módulos</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setAmbigua(null)}
+                className="min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {batchResult && (

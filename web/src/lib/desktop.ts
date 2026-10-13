@@ -16,3 +16,14 @@ export function cliqueFora(e: MouseEvent, url: string): void {
   e.preventDefault();
   void abrirFora(url);
 }
+
+/**
+ * Seletor de pasta nativo (Finder, Explorer, GTK). Antes era um navegador de
+ * pastas feito à mão, listando os volumes, que ninguém reconhecia. Devolve null
+ * se a pessoa cancelar.
+ */
+export async function escolherPasta(titulo: string): Promise<string | null> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const r = await open({ directory: true, multiple: false, title: titulo });
+  return typeof r === 'string' ? r : null;
+}

@@ -37,7 +37,7 @@ pnpm test                  # testes do server e da web
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm repo                  # audita onde o nome do repositório GitHub aparece
-pnpm repo dono/repo        # troca o repositório em package.json, README.md e tauri.conf.json
+pnpm repo dono/repo        # troca o repositório em package.json, README.md, tauri.conf.json e AvisoAtualizacao.tsx
 ```
 
 Um teste só:
