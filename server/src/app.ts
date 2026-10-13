@@ -28,8 +28,13 @@ import { criarServicosTelegram } from './telegram/gramjs';
 import { telegramRoutes } from './routes/telegram';
 
 // `opts.fetch` e `opts.telegram` existem só para os testes injetarem um Google e
-// um Telegram falsos.
-export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch; telegram?: ServicosTelegram }): FastifyInstance {
+// um Telegram falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
+// testes, nenhum download começa sozinho.
+export function buildApp(
+  config: AppConfig,
+  db: Db,
+  opts?: { fetch?: Fetch; telegram?: ServicosTelegram; retomarDownloads?: boolean },
+): FastifyInstance {
   const app = Fastify({ logger: false });
   // Uma instância só: o auth guarda os states pendentes do login em memória, e
   // o callback precisa enxergar os mesmos que o início do fluxo criou.
@@ -56,7 +61,7 @@ export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch; tele
 
   app.register(healthRoutes);
   app.register(fsRoutes, { config, db });
-  app.register(coursesRoutes, { db, config });
+  app.register(coursesRoutes, { db, config, drive });
   app.register(lessonsRoutes, { db });
   app.register(streamRoutes, { db, config, drive, telegram });
   app.register(infoRoutes);
@@ -72,6 +77,9 @@ export function buildApp(config: AppConfig, db: Db, opts?: { fetch?: Fetch; tele
   app.register(driveRoutes, { db, drive });
   app.register(telegramRoutes, { db, config, telegram });
   // [ROUTES]
+
+  // Ao abrir o app, os cursos do Drive continuam de onde o download parou.
+  if (opts?.retomarDownloads) app.addHook('onReady', async () => drive.baixador.retomarTodos());
 
   // A interface vem embutida no build, não do disco — ver spa.ts.
   registrarSpa(app, WEB_ASSETS);

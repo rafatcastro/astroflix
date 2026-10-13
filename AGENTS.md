@@ -73,7 +73,7 @@ Lidas em `server/src/config.ts`:
 - `PORT`: padrão 7777. Se estiver ocupada, o app anda para a próxima (ver `listen.ts`).
 - `BIND`: padrão 127.0.0.1.
 - `DATA_DIR`: padrão `~/.learnflix`, ou `%LOCALAPPDATA%\Learnflix` no Windows. Guarda `app.db`,
-  `thumbs/` e `converted/`.
+  `thumbs/`, `converted/` e `downloads/` (cópias dos cursos do Drive).
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
@@ -133,7 +133,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   pelo `state`), `walk` lista a pasta, `stream` repassa o `Range` do vídeo, `status`/`tipos`
   mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
-  local.
+  local. Colar o link cria o curso assim que a raiz responde; a listagem continua em segundo plano
+  (`importacaoDrive`). Depois de lida, a pasta é **baixada** (`baixar.ts`, uma fila, na ordem do
+  curso, retomando `.part` com Range) para `DATA_DIR/downloads/<curso>/<id da aula>` (`local.ts`)
+  e convertida se não tocar (`media/preparar.ts`, mesma fila de recodificação do player). Stream e
+  materiais preferem o arquivo local; o que ainda não chegou vem do Drive. Ao abrir, o app retoma
+  os downloads (`buildApp(..., { retomarDownloads })`, só no `index.ts`).
 - `telegram/`: cursos do Telegram, com a **conta da pessoa** (MTProto, GramJS). Tudo do GramJS
   fica em `gramjs.ts` (importado sob demanda: nada conecta até alguém colar um link); o resto do
   app só conhece `ClienteTelegram` e `ServicosTelegram`, e os testes injetam falsos

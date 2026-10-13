@@ -10,12 +10,24 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
+import { arquivoLocalDaAula, pastaBaixadaDoCurso } from '../drive/local';
+import type { ServicosDrive } from '../drive/servicos';
 
 // Só os três valores conhecidos saem na API; qualquer outra coisa é curso local.
 const origemPublica = (s: unknown): 'local' | 'drive' | 'telegram' => (s === 'drive' || s === 'telegram' ? s : 'local');
 
-export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
+
+  // Curso do Drive: quantas aulas já estão no disco e se o download segue.
+  const downloadDe = (courseId: string) => {
+    const aulas = db
+      .prepare('SELECT id, rel_path FROM lessons WHERE course_id=? AND missing=0 AND remote_id IS NOT NULL')
+      .all(courseId) as Array<{ id: string; rel_path: string }>;
+    const baixadas = aulas.filter((a) => arquivoLocalDaAula(config, courseId, a.id, a.rel_path)).length;
+    const e = drive?.baixador.estado(courseId) ?? { ativo: false, erro: null };
+    return { total: aulas.length, baixadas, ativo: e.ativo, erro: e.erro };
+  };
 
   app.post('/api/courses', async (req, reply) => {
     const body = req.body as { path?: string };
@@ -152,7 +164,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
         source: origemPublica(c.source),
-        carregando: c.source === 'drive' && importacaoDrive(c.id).carregando,
+        carregando: c.source === 'drive' && (importacaoDrive(c.id).carregando || !!drive?.baixador.estado(c.id).ativo),
         ultimaAula: ultima
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
@@ -205,6 +217,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       source: origemPublica(course.source),
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
+      download: course.source === 'drive' ? downloadDe(course.id) : null,
     };
   });
 
@@ -232,6 +245,9 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     if (!db.prepare('SELECT 1 FROM courses WHERE id=?').get(id)) return reply.code(404).send({ error: 'not_found' });
     const lessonIds = (db.prepare('SELECT id FROM lessons WHERE course_id=?').all(id) as any[]).map((r) => r.id);
     db.prepare('DELETE FROM courses WHERE id=?').run(id); // cascata remove lessons/progress/materials
+    // Cópias do Drive e convertidos: sem o curso, só ocupariam disco.
+    if (config.downloadsDir) fs.rmSync(pastaBaixadaDoCurso(config, id), { recursive: true, force: true });
+    for (const lid of lessonIds) fs.rmSync(path.join(config.convertedDir ?? '', `${lid}.mp4`), { force: true });
     // Limpa o cache de imagens: <lessonId>-*.jpg e course-<id>.jpg
     try {
       const prefixes = new Set(lessonIds.map((lid) => `${lid}-`));

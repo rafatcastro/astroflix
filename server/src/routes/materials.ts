@@ -11,6 +11,7 @@ import { repassarDoTelegram } from '../telegram/stream';
 import type { PeerTelegram } from '../telegram/tipos';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
+import { arquivoBaixadoDoMaterial } from '../drive/local';
 import { resourceKeyDoCurso } from '../drive/status';
 
 // Content-types dos materiais adicionais. PDF/imagem servem INLINE (para o leitor
@@ -40,11 +41,12 @@ export async function materialsRoutes(
   app.get('/api/materials/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const row = db.prepare(
-      `SELECT m.rel_path, m.remote_id, m.size_bytes, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer
+      `SELECT m.rel_path, m.remote_id, m.size_bytes, m.course_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer
        FROM materials m JOIN courses c ON c.id=m.course_id WHERE m.id=?`,
     ).get(id) as
       | {
           rel_path: string;
+          course_id: string;
           remote_id: string | null;
           size_bytes: number;
           root_path: string;
@@ -70,7 +72,11 @@ export async function materialsRoutes(
       if (ext === 'svg') reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     };
 
-    if (row.source === 'drive') {
+    // Material do Drive já baixado sai do disco; senão, direto do Drive.
+    const baixado = row.source === 'drive' && config.downloadsDir ? arquivoBaixadoDoMaterial(config, row.course_id, id, row.rel_path) : null;
+    const local = baixado && fs.existsSync(baixado) ? baixado : null;
+
+    if (row.source === 'drive' && !local) {
       if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
       if (!row.remote_id) return reply.code(404).send({ error: 'file_missing' });
       protegido();
@@ -93,8 +99,8 @@ export async function materialsRoutes(
       );
     }
 
-    const filePath = arquivoDoCurso(row.root_path, row.rel_path);
-    if (!filePath || !isWithinRoots(filePath, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
+    const filePath = local ?? arquivoDoCurso(row.root_path, row.rel_path);
+    if (!filePath || (!local && !isWithinRoots(filePath, allowedRootsFor(config, db)))) return reply.code(403).send({ error: 'forbidden' });
     let stat: fs.Stats;
     try {
       stat = fs.statSync(filePath);
