@@ -4,10 +4,11 @@
 //   pnpm repo                          # mostra onde o nome aparece e se batem
 //   pnpm repo usuario/projeto    # troca em todos os lugares de uma vez
 //
-// O nome precisa aparecer em três arquivos por natureza: a metadata do
-// package.json, o README (links das releases) e o tauri.conf.json (o endpoint
-// de onde o atualizador do app baixa o latest.json). Este script é o "um lugar
-// só" — ninguém edita os três à mão. Errar o do tauri.conf.json é o pior: o app
+// O nome precisa aparecer em quatro arquivos por natureza: a metadata do
+// package.json, o README (links das releases), o tauri.conf.json (o endpoint
+// de onde o atualizador do app baixa o latest.json) e o aviso de atualização
+// (o "Baixar no site" quando a atualização falha). Este script é o "um lugar
+// só" — ninguém edita os quatro à mão. Errar o do tauri.conf.json é o pior: o app
 // instalado procuraria atualizações num repositório que não é o dele.
 //
 // A varredura é GENÉRICA de propósito: procura qualquer URL do GitHub nesses
@@ -19,7 +20,7 @@ import path from 'node:path';
 import url from 'node:url';
 
 const raiz = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
-const ARQUIVOS = ['package.json', 'README.md', 'desktop/src-tauri/tauri.conf.json'];
+const ARQUIVOS = ['package.json', 'README.md', 'desktop/src-tauri/tauri.conf.json', 'web/src/components/AvisoAtualizacao.tsx'];
 
 // O nome do repositório termina em `.git`, `#`, `/`, aspas ou espaço — o
 // lookahead impede que o `.git` de `projeto.git` vire parte do nome.

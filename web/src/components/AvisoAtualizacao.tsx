@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { cliqueFora } from '../lib/desktop';
+
+const PAGINA_DA_VERSAO = 'https://github.com/rafatcastro/learnflix-v2/releases/latest';
 
 type Estado = { tipo: 'nada' } | { tipo: 'disponivel'; versao: string } | { tipo: 'instalando' } | { tipo: 'falhou' };
 
@@ -75,7 +78,27 @@ export default function AvisoAtualizacao() {
         </>
       )}
       {estado.tipo === 'instalando' && <span>Baixando a atualização… o Learnflix reabre sozinho.</span>}
-      {estado.tipo === 'falhou' && <span>Não foi possível atualizar agora. Tente de novo mais tarde.</span>}
+      {estado.tipo === 'falhou' && (
+        // Fica até a pessoa fechar, mas nunca preso: sem o "Fechar" a faixa cobria
+        // o topo da janela até reabrir o app.
+        <>
+          <span>Não foi possível atualizar agora.</span>
+          <a
+            href={PAGINA_DA_VERSAO}
+            onClick={(e) => cliqueFora(e, PAGINA_DA_VERSAO)}
+            className="rounded px-2 py-1 font-medium text-blue-400 outline-none hover:text-blue-300 focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            Baixar no site
+          </a>
+          <button
+            type="button"
+            onClick={() => setEstado({ tipo: 'nada' })}
+            className="rounded px-2 py-1 text-neutral-400 outline-none hover:text-neutral-200 focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            Fechar
+          </button>
+        </>
+      )}
     </div>
   );
 }
