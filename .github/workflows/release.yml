@@ -9,8 +9,14 @@ on:
     branches: [main]
     # Mudança só de documentação não muda o app: não vale uma release.
     paths-ignore: ['**.md', 'docs/**', 'LICENSE']
-  # Permite ensaiar o build da matriz sem publicar nada.
+  # Manual: ensaia o build da matriz sem publicar nada, ou publica sem precisar
+  # de um commit novo (por exemplo, para reexecutar uma release que falhou).
   workflow_dispatch:
+    inputs:
+      publicar:
+        description: Publicar como release
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -45,7 +51,7 @@ jobs:
   # ninguém recebe uma versão com metade das plataformas anexadas.
   rascunho:
     needs: testar
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publicar
     runs-on: ubuntu-latest
     outputs:
       id: ${{ steps.criar.outputs.id }}
@@ -66,7 +72,8 @@ jobs:
 
   desktop:
     needs: [testar, rascunho]
-    # No workflow_dispatch o rascunho é pulado e a matriz só ensaia o build.
+    # Num ensaio (workflow_dispatch sem publicar) o rascunho é pulado e a matriz só
+    # ensaia o build.
     if: ${{ !failure() && !cancelled() && needs.testar.result == 'success' }}
     strategy:
       fail-fast: false
