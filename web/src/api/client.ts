@@ -82,7 +82,8 @@ export interface ImportPlan {
   newRoots: string[];           // pastas que o arquivo libera para o app ler
   driveAusentes: string[];      // cursos do Drive ou do Telegram do arquivo que não existem aqui
 }
-export type PlaybackVerdict = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean };
+// semArquivo: aula do Drive/Telegram que ainda não chegou ao disco (não há o que converter ainda).
+export type PlaybackVerdict = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean; semArquivo?: boolean };
 export type ConvertResult = { status: 'converted' | 'already_playable' | 'transcoding' };
 export type ConvertStatus =
   | { status: 'idle' | 'converted' }

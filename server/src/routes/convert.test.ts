@@ -125,9 +125,9 @@ describe('verificação e conversão — curso do Drive (não depende de ffmpeg)
     semearCursoDrive(db);
     const app = buildApp({ allowedRoots: [], thumbsDir: '/x', convertedDir: '/y' } as any, db);
     const ok = await app.inject({ method: 'POST', url: '/api/lessons/ld/verify-playback' });
-    expect(ok.json()).toEqual({ playable: true, reason: null, remuxable: false });
+    expect(ok.json()).toEqual({ playable: true, reason: null, remuxable: false, semArquivo: true });
     db.prepare("UPDATE lessons SET playable=0 WHERE id='ld'").run();
     const no = await app.inject({ method: 'POST', url: '/api/lessons/ld/verify-playback' });
-    expect(no.json()).toEqual({ playable: false, reason: 'formato', remuxable: false });
+    expect(no.json()).toEqual({ playable: false, reason: 'formato', remuxable: false, semArquivo: true });
   });
 });

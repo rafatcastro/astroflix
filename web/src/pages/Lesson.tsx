@@ -687,11 +687,13 @@ export default function Lesson() {
 
   if (!lesson.playable || (verdict && !verdict.playable)) {
     const remuxable = verdict && !verdict.playable ? verdict.remuxable : null;
+    // Aula do Drive/Telegram já baixada é um arquivo como outro qualquer: dá para converter.
+    const semArquivo = verdict && !verdict.playable ? !!verdict.semArquivo : ehRemoto;
     return (
       <div className="grid h-screen place-items-center p-6 text-center">
         <div className="max-w-md">
           <div className="mb-2 text-lg font-medium">Este vídeo está num formato que o navegador não reproduz</div>
-          {remuxable === true && !ehRemoto && (
+          {remuxable === true && !semArquivo && (
             <>
               <p className="mb-4 text-sm text-neutral-400">
                 Dá para corrigir sem recodificar: um remux rápido e sem perda de qualidade. O arquivo original não é alterado.
@@ -706,7 +708,7 @@ export default function Lesson() {
               </button>
             </>
           )}
-          {remuxable === false && !ehRemoto && (
+          {remuxable === false && !semArquivo && (
             <>
               <p className="mb-4 text-sm text-neutral-400">
                 O codec deste arquivo (H.264 10-bit ou HEVC) não toca aqui. O Learnflix pode converter a aula para um
@@ -731,10 +733,10 @@ export default function Lesson() {
               )}
             </>
           )}
-          {remuxable === false && ehRemoto && (
+          {remuxable === false && semArquivo && (
             <p className="mb-4 text-sm text-neutral-400">
-              O codec deste vídeo não toca aqui, e por vir {ehDrive ? 'do Google Drive' : 'do Telegram'} ele não pode ser
-              convertido no app.
+              O formato deste vídeo não toca direto {ehDrive ? 'do Google Drive' : 'do Telegram'}. O Learnflix já está baixando a
+              aula e, quando ela chegar, converte sozinho para um formato que toca. Volte daqui a alguns minutos.
             </p>
           )}
           {remuxable === null && <p className="mb-4 text-sm text-neutral-400">Verificando o formato do arquivo…</p>}

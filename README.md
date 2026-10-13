@@ -165,9 +165,10 @@ Telegram** e cole o link (`t.me/…`).
   legenda. PDFs e outros arquivos viram materiais; conversa, foto e figurinha ficam de fora.
 - **Grupo privado e convite**: vale qualquer grupo em que você já está. Num link de convite
   (`t.me/+…`), o app pergunta antes de entrar no grupo com a sua conta.
-- **Nada é baixado**: o vídeo é transmitido na hora, com avançar e voltar funcionando. Contas sem
-  Telegram Premium têm download mais lento, e isso é limite do próprio Telegram. As capas são as
-  miniaturas que o próprio Telegram guarda, sem precisar do ffmpeg.
+- **Baixa só o que você vai assistir**: como no Drive, abrir uma aula baixa ela e as duas seguintes
+  (e converte se o formato não tocar); até chegar, o vídeo é transmitido na hora, com avançar e
+  voltar funcionando. Contas sem Telegram Premium baixam mais devagar, e isso é limite do próprio
+  Telegram. As capas são as miniaturas que o próprio Telegram guarda, sem precisar do ffmpeg.
 - **Fora por enquanto**: tópicos de grupos-fórum (o curso vira uma lista única) e vídeos que são só
   um link externo.
 

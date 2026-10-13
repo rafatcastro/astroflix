@@ -148,8 +148,9 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   app só conhece `ClienteTelegram` e `ServicosTelegram`, e os testes injetam falsos
   (`buildApp(..., { telegram })`). `link` interpreta `t.me/…`, `mensagens` monta o curso (o
   `rel_path` começa pelo id da mensagem com 10 dígitos, que dá a ordem de postagem e não muda),
-  `blocos` alinha o `Range` em blocos de 512 KB, `status` traduz os erros RPC e `stream` repassa
-  o vídeo. Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
+  `blocos` alinha o `Range` em blocos de 512 KB, `status` traduz os erros RPC, `stream` repassa
+  o vídeo e `baixar` entra na mesma fila de download do Drive (`fonteDoTelegram`; retomar volta ao
+  último bloco inteiro). Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
   `scan/scan-telegram.ts` espelham o Drive. O `telegram_peer` do curso guarda o access hash: sem
   ele, um canal privado não é achado depois de reiniciar.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o

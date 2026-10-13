@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +10,7 @@ import type { ClienteTelegram } from '../telegram/cliente';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { FalhaTelegram, type MensagemTelegram } from '../telegram/tipos';
 import { aguardarCapasTelegram } from '../scan/scan-telegram';
+import { arquivoBaixadoDaAula } from '../drive/local';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rota-tg-'));
 afterAll(() => fs.rmSync(tmp, { recursive: true, force: true }));
@@ -62,7 +63,7 @@ function montar(opts: { conectado?: boolean; convite?: 'convite' | 'ja-membro' }
     },
   } as unknown as ServicosTelegram;
   const app = buildApp(config, db, { telegram });
-  return { app, db, pedidos, desconexoes: () => desconectou };
+  return { app, db, config, pedidos, desconexoes: () => desconectou };
 }
 
 const post = (app: any, url: string, payload: unknown) =>
@@ -163,5 +164,24 @@ describe('rotas do Telegram', () => {
     expect(rp.json()).toEqual({ error: 'curso-do-telegram' });
     const curso = await app.inject({ method: 'GET', url: `/api/courses/${id}`, headers: { host: 'localhost:7777' } });
     expect(curso.json().source).toBe('telegram');
+  });
+
+  // Sem Premium o Telegram é lento, e cada seek pedia blocos de novo: a aula
+  // aberta é baixada e passa a tocar do disco.
+  it('abrir a aula baixa o vídeo, e o stream passa a sair do disco', async () => {
+    const { app, db, config, pedidos } = montar();
+    const curso = (await post(app, '/api/telegram/courses', { link: 't.me/cursoaberto' })).json();
+    const aula = db.prepare('SELECT id, rel_path FROM lessons WHERE course_id=?').get(curso.id) as { id: string; rel_path: string };
+    const destino = arquivoBaixadoDaAula(config, curso.id, aula.id, aula.rel_path);
+
+    await app.inject({ method: 'GET', url: `/api/lessons/${aula.id}` });
+    await vi.waitFor(() => expect(fs.existsSync(destino)).toBe(true));
+    expect(fs.statSync(destino).size).toBe(TAMANHO);
+
+    const antes = pedidos.length;
+    const r = await app.inject({ method: 'GET', url: `/api/lessons/${aula.id}/stream`, headers: { range: `bytes=${BLOCO - 2}-${BLOCO + 1}` } });
+    expect(r.statusCode).toBe(206);
+    expect([...r.rawPayload]).toEqual([BLOCO - 2, BLOCO - 1, BLOCO, BLOCO + 1].map(byte));
+    expect(pedidos.length).toBe(antes);
   });
 });

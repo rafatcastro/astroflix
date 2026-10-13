@@ -223,7 +223,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       source: origemPublica(course.source),
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
-      download: course.source === 'drive' ? downloadDe(course.id) : null,
+      download: course.source === 'drive' || course.source === 'telegram' ? downloadDe(course.id) : null,
     };
   });
 

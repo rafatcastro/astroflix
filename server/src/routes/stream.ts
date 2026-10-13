@@ -53,10 +53,11 @@ export async function streamRoutes(
     `).get(id) as any;
     if (!row) return reply.code(404).send({ error: 'not_found' });
 
-    // Aula do Drive já baixada (ou convertida) toca do disco, como um curso local.
-    const doDrive = row.source === 'drive' ? arquivoLocalDaAula(config, row.course_id, id, row.rel_path) : null;
-    if (doDrive) {
-      return servirArquivo(req, reply, doDrive.arquivo, doDrive.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
+    // Aula do Drive ou do Telegram já baixada (ou convertida) toca do disco, como um curso local.
+    const remota = row.source === 'drive' || row.source === 'telegram';
+    const baixada = remota ? arquivoLocalDaAula(config, row.course_id, id, row.rel_path) : null;
+    if (baixada) {
+      return servirArquivo(req, reply, baixada.arquivo, baixada.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
     }
 
     // Ainda não baixada: o vídeo vem direto do Drive. Raízes permitidas não se

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { openDb } from '../db/index';
 import { loadConfig } from '../config';
 import { buildApp } from '../app';
-import { criarBaixador } from './baixar';
+import { baixarDoDrive, criarBaixador } from './baixar';
 import { spawnSync } from 'node:child_process';
 import { hasFfmpeg } from '../media/ffmpeg';
 import { arquivoBaixadoDaAula, arquivoBaixadoDoMaterial } from './local';
@@ -51,7 +51,7 @@ function montar() {
       return new Response(dado, { status: 200 });
     },
   } as unknown as ClienteDrive;
-  const baixador = criarBaixador({ db, config, cliente: () => cliente });
+  const baixador = criarBaixador({ db, config, fonte: async () => baixarDoDrive(cliente) });
   return { config, db, baixador, pedidos, aoBaixar: (f: typeof antes) => { antes = f; } };
 }
 
