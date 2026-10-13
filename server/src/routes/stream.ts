@@ -8,6 +8,9 @@ import { arquivoDoCurso, isWithinRoots } from './fs';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
 import { resourceKeyDoCurso } from '../drive/status';
+import type { ServicosTelegram } from '../telegram/servicos';
+import { repassarDoTelegram } from '../telegram/stream';
+import type { PeerTelegram } from '../telegram/tipos';
 
 const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -35,13 +38,16 @@ export function parseRange(header: string | undefined, size: number): { start: n
   return { start, end };
 }
 
-export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
-  const { db, config, drive } = opts;
+export async function streamRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; config: AppConfig; drive?: ServicosDrive; telegram?: ServicosTelegram },
+): Promise<void> {
+  const { db, config, drive, telegram } = opts;
 
   app.get('/api/lessons/:id/stream', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const row = db.prepare(`
-      SELECT l.rel_path, l.container, l.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key
+      SELECT l.rel_path, l.container, l.remote_id, l.size_bytes, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer
       FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?
     `).get(id) as any;
     if (!row) return reply.code(404).send({ error: 'not_found' });
@@ -55,6 +61,24 @@ export async function streamRoutes(app: FastifyInstance, opts: { db: Db; config:
       return repassarDoDrive(req, reply, cliente, row.remote_id, {
         contentType: CONTENT_TYPES[row.container] ?? 'application/octet-stream',
       }, drive);
+    }
+
+    if (row.source === 'telegram') {
+      if (!telegram) return reply.code(503).send({ error: 'sem-conexao' });
+      if (!row.remote_id || !row.telegram_peer) return reply.code(404).send({ error: 'file_missing' });
+      const tamanho = Number(row.size_bytes);
+      const range = parseRange(req.headers.range, tamanho);
+      if (req.headers.range && !range) {
+        reply.header('Content-Range', `bytes */${tamanho}`);
+        return reply.code(416).send();
+      }
+      return repassarDoTelegram(
+        req,
+        reply,
+        telegram,
+        { peer: JSON.parse(row.telegram_peer) as PeerTelegram, msgId: Number(row.remote_id), tamanho, range },
+        { contentType: CONTENT_TYPES[row.container] ?? 'application/octet-stream' },
+      );
     }
 
     // Mesma fronteira dos materiais: o arquivo precisa estar dentro da pasta do

@@ -13,6 +13,7 @@ describe('falhaDoErro', () => {
     ['USERNAME_INVALID', 'nao-encontrado'],
     ['INVITE_HASH_EXPIRED', 'convite-invalido'],
     ['INVITE_HASH_INVALID', 'convite-invalido'],
+    ['INVITE_REQUEST_SENT', 'aguardando-aprovacao'],
     ['AUTH_KEY_UNREGISTERED', 'nao-autorizado'],
     ['SESSION_REVOKED', 'nao-autorizado'],
     ['USER_DEACTIVATED', 'nao-autorizado'],

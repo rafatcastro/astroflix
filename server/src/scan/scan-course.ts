@@ -8,9 +8,11 @@ import type { MaterialKind } from './walk';
 export interface OrigemCurso {
   title: string;
   rootPath: string;
-  source: 'local' | 'drive';
+  source: 'local' | 'drive' | 'telegram';
   driveFolderId?: string;
   driveResourceKey?: string | null;
+  /** JSON de PeerTelegram: onde o grupo mora. */
+  telegramPeer?: string;
 }
 
 export interface ExtraRemoto {
@@ -18,7 +20,7 @@ export interface ExtraRemoto {
   durationSec: number | null;
 }
 
-// Ponto único de inserção: curso local e curso do Drive entram pela mesma
+// Ponto único de inserção: curso local, do Drive e do Telegram entram pela mesma
 // transação, para a estrutura (módulos, capa = 1ª aula) nunca divergir entre
 // as duas origens. `extras` é indexado por relPath, que é a identidade da aula.
 export function inserirCursoDerivado(
@@ -32,8 +34,8 @@ export function inserirCursoDerivado(
   const courseId = randomUUID();
 
   const insertCourse = db.prepare(`
-    INSERT INTO courses (id, title, root_path, structure, archived, sort_index, poster_lesson_id, created_at, updated_at, last_scanned_at, source, drive_folder_id, drive_resource_key)
-    VALUES (@id, @title, @root_path, @structure, 0, NULL, NULL, @now, @now, @now, @source, @drive_folder_id, @drive_resource_key)
+    INSERT INTO courses (id, title, root_path, structure, archived, sort_index, poster_lesson_id, created_at, updated_at, last_scanned_at, source, drive_folder_id, drive_resource_key, telegram_peer)
+    VALUES (@id, @title, @root_path, @structure, 0, NULL, NULL, @now, @now, @now, @source, @drive_folder_id, @drive_resource_key, @telegram_peer)
   `);
   const insertLesson = db.prepare(`
     INSERT INTO lessons (id, course_id, rel_path, module, title, order_index, module_order, duration_sec, size_bytes, mtime, container, playable, thumb_path, missing, remote_id)
@@ -55,6 +57,7 @@ export function inserirCursoDerivado(
       source: origem.source,
       drive_folder_id: origem.driveFolderId ?? null,
       drive_resource_key: origem.driveResourceKey ?? null,
+      telegram_peer: origem.telegramPeer ?? null,
     });
     let firstLessonId: string | null = null;
     for (const lesson of derived.lessons) {

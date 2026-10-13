@@ -12,9 +12,10 @@ export interface CourseRow {
   created_at: string;
   updated_at: string;
   last_scanned_at: string | null;
-  source?: 'local' | 'drive';
+  source?: 'local' | 'drive' | 'telegram';
   drive_folder_id?: string | null;
   drive_resource_key?: string | null;
+  telegram_peer?: string | null;
 }
 
 export interface LessonRow {

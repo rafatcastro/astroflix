@@ -6,6 +6,9 @@ import type { AppConfig } from '../config';
 import { allowedRootsFor } from './settings';
 import { arquivoDoCurso, isWithinRoots } from './fs';
 import { parseRange } from './stream';
+import type { ServicosTelegram } from '../telegram/servicos';
+import { repassarDoTelegram } from '../telegram/stream';
+import type { PeerTelegram } from '../telegram/tipos';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
 import { resourceKeyDoCurso } from '../drive/status';
@@ -25,8 +28,11 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 const INLINE = new Set(['pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'txt', 'md']);
 
-export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
-  const { db, config, drive } = opts;
+export async function materialsRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; config: AppConfig; drive?: ServicosDrive; telegram?: ServicosTelegram },
+): Promise<void> {
+  const { db, config, drive, telegram } = opts;
 
   // Serve o arquivo de um material. O caminho vem do BANCO (não do usuário), e
   // ainda assim é validado contra as raízes — o app nunca sai do acervo. ?download=1
@@ -34,10 +40,19 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
   app.get('/api/materials/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const row = db.prepare(
-      `SELECT m.rel_path, m.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key
+      `SELECT m.rel_path, m.remote_id, m.size_bytes, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer
        FROM materials m JOIN courses c ON c.id=m.course_id WHERE m.id=?`,
     ).get(id) as
-      | { rel_path: string; remote_id: string | null; root_path: string; source: string; drive_folder_id: string | null; drive_resource_key: string | null }
+      | {
+          rel_path: string;
+          remote_id: string | null;
+          size_bytes: number;
+          root_path: string;
+          source: string;
+          drive_folder_id: string | null;
+          drive_resource_key: string | null;
+          telegram_peer: string | null;
+        }
       | undefined;
     if (!row) return reply.code(404).send({ error: 'not_found' });
 
@@ -61,6 +76,21 @@ export async function materialsRoutes(app: FastifyInstance, opts: { db: Db; conf
       protegido();
       const cliente = drive.cliente(resourceKeyDoCurso(row.drive_folder_id, row.drive_resource_key));
       return repassarDoDrive(req, reply, cliente, row.remote_id, { contentType: type, disposition }, drive);
+    }
+
+    if (row.source === 'telegram') {
+      if (!telegram) return reply.code(503).send({ error: 'sem-conexao' });
+      if (!row.remote_id || !row.telegram_peer) return reply.code(404).send({ error: 'file_missing' });
+      protegido();
+      // O nome no disco não carrega o prefixo do id da mensagem.
+      const nome = name.replace(/^\d{10}-/, '');
+      return repassarDoTelegram(
+        req,
+        reply,
+        telegram,
+        { peer: JSON.parse(row.telegram_peer) as PeerTelegram, msgId: Number(row.remote_id), tamanho: Number(row.size_bytes), range: null },
+        { contentType: type, disposition: `${forceDownload ? 'attachment' : 'inline'}; filename*=UTF-8''${encodeURIComponent(nome)}` },
+      );
     }
 
     const filePath = arquivoDoCurso(row.root_path, row.rel_path);
