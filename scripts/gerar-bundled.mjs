@@ -69,6 +69,23 @@ function lerCredenciaisPadrao() {
 }
 const google = lerCredenciaisPadrao();
 
+// Mesma regra para o app do Telegram (api_id/api_hash de my.telegram.org): envs
+// TELEGRAM_* ou .telegram.local.json, nunca o git.
+function lerTelegramPadrao() {
+  let local = {};
+  try {
+    local = JSON.parse(fs.readFileSync(path.join(raiz, '.telegram.local.json'), 'utf8'));
+  } catch {
+    // arquivo ausente ou ilegível: segue só com as envs
+  }
+  const id = Number(process.env.TELEGRAM_API_ID || local.apiId);
+  return {
+    apiId: Number.isInteger(id) && id > 0 ? id : null,
+    apiHash: process.env.TELEGRAM_API_HASH || local.apiHash || null,
+  };
+}
+const telegram = lerTelegramPadrao();
+
 const entradas = arquivos.map(({ rel, completo }) => {
   const tipo = TIPOS[path.extname(rel).toLowerCase()] ?? 'application/octet-stream';
   const base64 = fs.readFileSync(completo).toString('base64');
@@ -89,6 +106,8 @@ export interface AssetEmbutido {
 export const APP_VERSION = ${JSON.stringify(versao)};
 
 export const GOOGLE_PADRAO: { clientId: string | null; clientSecret: string | null; apiKey: string | null } = ${JSON.stringify(google)};
+
+export const TELEGRAM_PADRAO: { apiId: number | null; apiHash: string | null } = ${JSON.stringify(telegram)};
 
 export const WEB_ASSETS: Record<string, AssetEmbutido> = {
 ${entradas.join('\n')}
