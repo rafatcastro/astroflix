@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Learnflix",
+  "version": "2.0.0",
+  "identifier": "io.github.rafatcastro.learnflix",
+  "build": {
+    "frontendDist": "../carregando"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Learnflix",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 560,
+        "backgroundColor": "#0a0a0a"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "createUpdaterArtifacts": true,
+    "externalBin": [
+      "binaries/learnflix-server"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Education",
+    "shortDescription": "Assista aos cursos das suas pastas, com progresso confiável.",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdBNDEyMERGMjRENDkxMDIKUldRQ2tkUWszeUJCZXQ1T3BDWkI0aGdBc092ZXJ5aUxYR215MWhyUHN3MWV1L0c4VFh3RWIvRk4K",
+      "endpoints": [
+        "https://github.com/rafatcastro/learnflix-v2/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}
