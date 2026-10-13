@@ -24,7 +24,7 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
   const courses = db
     .prepare(
       `SELECT c.id, c.title, c.root_path, c.structure, c.archived, c.sort_index, c.collection_id,
-              c.source, c.drive_folder_id, c.drive_resource_key,
+              c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer,
               (SELECT rel_path FROM lessons WHERE id = c.poster_lesson_id) AS poster_rel_path
        FROM courses c ORDER BY c.rowid`,
     )
@@ -66,7 +66,9 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
             driveFolderId: c.drive_folder_id ?? undefined,
             driveResourceKey: c.drive_resource_key ?? undefined,
           }
-        : {}),
+        : c.source === 'telegram'
+          ? { source: 'telegram' as const, telegramPeer: c.telegram_peer ?? undefined }
+          : {}),
       lessons: (lessonsDoCurso.all(c.id) as any[]).map(
         (l): ExportedLesson => ({
           relPath: l.rel_path,

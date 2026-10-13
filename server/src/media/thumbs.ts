@@ -5,6 +5,8 @@ import type { AppConfig } from '../config';
 import { hasFfmpeg, probeDurationSec, extractFrame } from './ffmpeg';
 import { arquivoDoCurso } from '../routes/fs';
 import type { ServicosDrive } from '../drive/servicos';
+import type { ServicosTelegram } from '../telegram/servicos';
+import type { PeerTelegram } from '../telegram/tipos';
 import { resourceKeyDoCurso } from '../drive/status';
 import { baixarImagemDoGoogle } from '../scan/scan-drive';
 
@@ -60,15 +62,31 @@ async function capaDoDrive(db: Db, drive: ServicosDrive, row: any, lessonId: str
   }
 }
 
+// Capa sob demanda de aula do Telegram (a que a ingestão não conseguiu baixar):
+// a miniatura que o próprio Telegram guarda com o vídeo.
+async function capaDoTelegram(db: Db, telegram: ServicosTelegram, row: any, lessonId: string, out: string): Promise<string | null> {
+  try {
+    const cliente = await telegram.cliente();
+    const bytes = await cliente.miniatura(JSON.parse(row.telegram_peer) as PeerTelegram, Number(row.remote_id));
+    if (!bytes) return null;
+    gravarCapaAtomico(out, bytes);
+    db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?').run(out, lessonId);
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export async function getOrCreateLessonThumb(
   db: Db,
   config: AppConfig,
   lessonId: string,
   drive?: ServicosDrive,
+  telegram?: ServicosTelegram,
 ): Promise<string | null> {
   const row = db
     .prepare(
-      `SELECT l.rel_path, l.mtime, l.playable, l.missing, l.duration_sec, l.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key
+      `SELECT l.rel_path, l.mtime, l.playable, l.missing, l.duration_sec, l.remote_id, c.root_path, c.source, c.drive_folder_id, c.drive_resource_key, c.telegram_peer
        FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?`,
     )
     .get(lessonId) as any;
@@ -85,6 +103,15 @@ export async function getOrCreateLessonThumb(
     let p = capasDriveEmAndamento.get(lessonId);
     if (!p) {
       p = capaDoDrive(db, drive, row, lessonId, out).finally(() => capasDriveEmAndamento.delete(lessonId));
+      capasDriveEmAndamento.set(lessonId, p);
+    }
+    return p;
+  }
+  if (row.source === 'telegram') {
+    if (!telegram || !row.remote_id || !row.telegram_peer) return null;
+    let p = capasDriveEmAndamento.get(lessonId);
+    if (!p) {
+      p = capaDoTelegram(db, telegram, row, lessonId, out).finally(() => capasDriveEmAndamento.delete(lessonId));
       capasDriveEmAndamento.set(lessonId, p);
     }
     return p;

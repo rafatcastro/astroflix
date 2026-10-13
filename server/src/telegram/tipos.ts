@@ -6,6 +6,7 @@ export type TipoFalhaTelegram =
   | 'sem-acesso'
   | 'convite'
   | 'convite-invalido'
+  | 'aguardando-aprovacao'
   | 'sem-videos'
   | 'removido'
   | 'flood'

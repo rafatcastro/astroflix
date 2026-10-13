@@ -26,10 +26,10 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     return file ? { file, courseId: row.course_id } : null;
   };
 
-  // Curso do Drive não tem arquivo local para probar nem converter.
+  // Curso do Drive ou do Telegram não tem arquivo local para probar nem converter.
   const aulaDoDrive = (id: string): { playable: boolean } | null => {
     const r = db
-      .prepare("SELECT l.playable FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source = 'drive'")
+      .prepare("SELECT l.playable FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source IN ('drive','telegram')")
       .get(id) as { playable: number } | undefined;
     return r ? { playable: !!r.playable } : null;
   };

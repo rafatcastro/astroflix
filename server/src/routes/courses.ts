@@ -10,6 +10,9 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 
+// Só os três valores conhecidos saem na API; qualquer outra coisa é curso local.
+const origemPublica = (s: unknown): 'local' | 'drive' | 'telegram' => (s === 'drive' || s === 'telegram' ? s : 'local');
+
 export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
   const { db, config } = opts;
 
@@ -147,7 +150,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         totalLessons: agg.total, completedLessons: agg.completed, inProgressLessons: agg.inprogress,
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
-        source: c.source === 'drive' ? 'drive' : 'local',
+        source: origemPublica(c.source),
         ultimaAula: ultima
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
@@ -197,7 +200,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       id: course.id, title: course.title, structure: course.structure, rootPath: course.root_path,
       totalLessons: rows.length, completedLessons, materialsCount: materials.length, modules, materials,
       collectionId: course.collection_id ?? null,
-      source: course.source === 'drive' ? 'drive' : 'local',
+      source: origemPublica(course.source),
     };
   });
 
