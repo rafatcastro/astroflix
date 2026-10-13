@@ -63,7 +63,7 @@ o app).
 | Convite | "Este é um convite. Entrar no grupo com a sua conta?" |
 | Sessão caiu | "A conexão com o Telegram caiu" + **Conectar de novo** |
 | Mensagem apagada | "Este vídeo foi removido do grupo"; o progresso fica |
-| `FLOOD_WAIT_X` | espera e tenta de novo uma vez se X ≤ 10 s; senão "O Telegram pediu uma pausa de N min" |
+| `FLOOD_WAIT_X` | o GramJS já espera sozinho as pausas de até 60 s; acima disso, "O Telegram pediu uma pausa de N min" |
 | Sem vídeos | "Não achei vídeos neste grupo." |
 | Sem rede | "Sem conexão com o Telegram." |
 

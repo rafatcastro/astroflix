@@ -18,6 +18,7 @@ describe('falhaDoErro', () => {
     ['SESSION_REVOKED', 'nao-autorizado'],
     ['USER_DEACTIVATED', 'nao-autorizado'],
     ['MSG_ID_INVALID', 'removido'],
+    ['API_ID_INVALID', 'sem-credenciais'],
   ])('%s → %s', (codigo, tipo) => {
     expect(falhaDoErro(rpc(codigo)).tipo).toBe(tipo);
   });

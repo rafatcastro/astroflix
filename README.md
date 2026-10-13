@@ -138,6 +138,25 @@ detalhes do que o app lê estão na [política de privacidade](PRIVACY.md).
 
 ---
 
+## Cursos do Telegram
+
+Grupo ou canal do Telegram com as aulas postadas também vira curso. Clique em **Adicionar ▾ → Do
+Telegram** e cole o link (`t.me/…`).
+
+- **Com a sua conta**: na primeira vez, o app mostra um QR code. No celular, abra o Telegram →
+  **Configurações → Dispositivos → Conectar dispositivo** e aponte para a tela. A sessão aparece lá
+  como "Learnflix", e você pode encerrá-la por ali ou em **Configurações → Telegram**.
+- **A ordem é a do grupo**: cada vídeo vira uma aula na ordem em que foi postado, com o título da
+  legenda. PDFs e outros arquivos viram materiais; conversa, foto e figurinha ficam de fora.
+- **Grupo privado e convite**: vale qualquer grupo em que você já está. Num link de convite
+  (`t.me/+…`), o app pergunta antes de entrar no grupo com a sua conta.
+- **Nada é baixado**: o vídeo é transmitido na hora, com avançar e voltar funcionando. Contas sem
+  Telegram Premium têm download mais lento, e isso é limite do próprio Telegram.
+
+Quem não usa Telegram não vê nada disso: o app não conecta ao Telegram até você colar um link.
+
+---
+
 ## Bibliotecas
 
 Cursos soltos viram bagunça rápido. Crie uma **biblioteca** (Programação, Inglês, Faculdade…) e
@@ -310,7 +329,8 @@ baixar, instalar e abrir.
 
 - **Sem terminal e sem Node.** O instalador traz tudo dentro.
 - **Atualiza sozinho.** Quando sai versão nova, o app avisa e se atualiza com um clique.
-- **Cursos do Google Drive.** Cole o link de uma pasta e assista sem baixar nada.
+- **Cursos do Google Drive e do Telegram.** Cole o link de uma pasta ou de um grupo e assista sem
+  baixar nada.
 - **Os mesmos dados.** Quem já usava o Learnflix abre o app e encontra a biblioteca e o progresso
   exatamente como deixou.
 
