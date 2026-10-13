@@ -12,8 +12,8 @@ Quando você cola o link de uma pasta do Google Drive e autoriza o acesso, o app
 
 - lista os arquivos da pasta que você indicou, para montar o curso (nomes, tamanhos, duração e
   miniaturas);
-- baixa os vídeos e materiais dessa pasta para o seu computador (e converte o que o player não
-  toca), para você assistir sem depender da conexão;
+- baixa para o seu computador a aula que você abre e as duas seguintes (e converte o que o player
+  não toca), para você assistir sem depender da conexão;
 - mostra o e-mail da conta conectada nas Configurações.
 
 O app **nunca** cria, altera, move, compartilha ou apaga nada no seu Drive.

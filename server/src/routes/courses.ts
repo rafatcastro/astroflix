@@ -169,7 +169,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         posterLessonId: c.poster_lesson_id, lastActivityAt: agg.last_at ?? null,
         collectionId: c.collection_id ?? null,
         source: origemPublica(c.source),
-        carregando: c.source === 'drive' && (importacaoDrive(c.id).carregando || !!drive?.baixador.estado(c.id).ativo),
+        // Baixar as próximas aulas não é "carregar o curso": o card fica quieto.
+        carregando: c.source === 'drive' && importacaoDrive(c.id).carregando,
         ultimaAula: ultima
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
