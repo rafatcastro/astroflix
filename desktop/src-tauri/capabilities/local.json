@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "local",
+  "description": "Página de abertura (desktop/carregando): só precisa chamar o comando reiniciar.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

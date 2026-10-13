@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Learnflix</title>
+    <style>
+      :root { color-scheme: dark; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        background: #0a0a0a; color: #e5e5e5;
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+        display: grid; place-items: center;
+      }
+      main { max-width: 32rem; padding: 2rem; text-align: center; }
+      h1 { font-size: 1.125rem; font-weight: 600; margin: 0 0 .5rem; }
+      p { color: #a3a3a3; margin: 0; }
+      pre {
+        text-align: left; white-space: pre-wrap; word-break: break-word; margin: 1rem 0;
+        padding: .75rem; border-radius: .5rem; background: #171717; color: #d4d4d4; font-size: 12px;
+      }
+      button {
+        min-height: 44px; padding: 0 1rem; border: 0; border-radius: .5rem;
+        background: #2563eb; color: #fff; font: inherit; cursor: pointer;
+      }
+      button:hover { background: #1d4ed8; }
+      button:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+      [hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section id="abrindo">
+        <h1>Abrindo o Learnflix…</h1>
+        <p>Preparando sua biblioteca.</p>
+      </section>
+      <section id="falha" hidden>
+        <h1>Não foi possível abrir o Learnflix</h1>
+        <p>O servidor do app não respondeu. O motivo:</p>
+        <pre id="motivo"></pre>
+        <button id="tentar" type="button">Tentar de novo</button>
+      </section>
+    </main>
+    <script>
+      // A casca (desktop/src-tauri) volta para cá com ?erro=<motivo> quando o servidor falha.
+      const erro = new URLSearchParams(location.search).get('erro');
+      if (erro) {
+        document.getElementById('abrindo').hidden = true;
+        document.getElementById('falha').hidden = false;
+        document.getElementById('motivo').textContent = erro;
+        const botao = document.getElementById('tentar');
+        botao.focus();
+        botao.addEventListener('click', () => window.__TAURI__.core.invoke('reiniciar'));
+      }
+    </script>
+  </body>
+</html>

@@ -1,6 +1,7 @@
 packages:
   - server
   - web
+  - desktop
 
 # O esbuild baixa o binário da plataforma no postinstall; sem isto o pnpm o bloqueia.
 allowBuilds:

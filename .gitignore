@@ -40,3 +40,10 @@ build/
 
 # Credenciais do app do Google criadas no console, até irem para o config.ts
 .google-oauth.local.json
+
+# App desktop: chave do atualizador (vai para os secrets da CI), sidecar e build do Rust.
+.tauri-signing.local.key
+.tauri-signing.local.key.pub
+desktop/src-tauri/binaries/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
