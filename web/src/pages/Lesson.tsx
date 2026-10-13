@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
-import { abrirFora, cliqueFora } from '../lib/desktop';
+import { abrirFora } from '../lib/desktop';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PlaybackVerdict } from '../api/client';
@@ -83,6 +83,8 @@ export default function Lesson() {
   // em acervos baixados: MPEG-TS renomeado, H.264 10-bit). null = ainda não verificado.
   const [verdict, setVerdict] = useState<PlaybackVerdict | null>(null);
   const [converting, setConverting] = useState(false);
+  // 0–1 enquanto a aula é recodificada em segundo plano; null fora disso.
+  const [progressoConversao, setProgressoConversao] = useState<number | null>(null);
   const [ending, setEnding] = useState(false);
   const [help, setHelp] = useState(false);
   const [confirmCover, setConfirmCover] = useState(false);
@@ -393,10 +395,10 @@ export default function Lesson() {
     try {
       const v = await api.verifyPlayback(id);
       setVerdict(v);
-      if (!v.playable) {
-        qc.invalidateQueries({ queryKey: ['lesson', id] });
-        qc.invalidateQueries({ queryKey: ['course'] });
-      }
+      // Também quando passa a tocar: o flag guardado pode ter vindo de uma regra
+      // antiga (HEVC era sempre "não toca") e só o lesson recarregado libera o player.
+      qc.invalidateQueries({ queryKey: ['lesson', id] });
+      qc.invalidateQueries({ queryKey: ['course'] });
       return v;
     } catch {
       return null;
@@ -462,18 +464,54 @@ export default function Lesson() {
     if (lesson && !lesson.playable && !verdict) void verifyPlayback();
   }, [lesson, verdict, verifyPlayback]);
 
+  const conversaoPronta = () => {
+    setVerdict(null);
+    setProgressoConversao(null);
+    qc.invalidateQueries({ queryKey: ['lesson', id] });
+    qc.invalidateQueries({ queryKey: ['course'] });
+    setVideoKey((k) => k + 1);
+    showNotice('success', 'Vídeo convertido — bom estudo!');
+  };
+
+  // A recodificação leva minutos e roda no servidor: aqui só acompanha. Também
+  // retoma a barra se a pessoa saiu da aula e voltou com a conversão andando.
+  const acompanharConversao = useCallback(async () => {
+    for (;;) {
+      if (!mountedRef.current) return;
+      let st;
+      try {
+        st = await api.convertStatus(id);
+      } catch {
+        st = null;
+      }
+      if (!mountedRef.current) return;
+      if (st?.status === 'transcoding') {
+        setProgressoConversao(st.progresso);
+        await new Promise((ok) => setTimeout(ok, 1000));
+        continue;
+      }
+      if (st?.status === 'converted') conversaoPronta();
+      else if (st?.status === 'failed') {
+        setProgressoConversao(null);
+        showNotice('error', 'Falha ao converter o vídeo. Tente de novo.');
+      } else setProgressoConversao(null);
+      return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  useEffect(() => {
+    if (verdict && !verdict.playable) void acompanharConversao();
+  }, [verdict, acompanharConversao]);
+
   const doConvert = async () => {
     setConverting(true);
     try {
       const r = await api.convertLesson(id);
-      if (r.status === 'converted' || r.status === 'already_playable') {
-        setVerdict(null);
-        qc.invalidateQueries({ queryKey: ['lesson', id] });
-        qc.invalidateQueries({ queryKey: ['course'] });
-        showNotice('success', 'Vídeo convertido — bom estudo!');
-      } else {
-        setVerdict({ playable: false, reason: r.reason ?? 'codec', remuxable: false });
-      }
+      if (r.status === 'transcoding') {
+        setProgressoConversao(0);
+        void acompanharConversao();
+      } else conversaoPronta();
     } catch {
       showNotice('error', 'Falha ao converter. Tente novamente.');
     }
@@ -645,21 +683,35 @@ export default function Lesson() {
               </button>
             </>
           )}
-          {remuxable === false && (
+          {remuxable === false && !ehRemoto && (
+            <>
+              <p className="mb-4 text-sm text-neutral-400">
+                O codec deste arquivo (H.264 10-bit ou HEVC) não toca aqui. O Learnflix pode converter a aula para um
+                formato que toca: leva alguns minutos, e o arquivo original não é alterado.
+              </p>
+              {progressoConversao !== null ? (
+                <div className="mx-auto mb-4 max-w-xs" role="status">
+                  <div className="mb-1.5 text-sm text-neutral-300">Convertendo… {Math.round(progressoConversao * 100)}%</div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-neutral-800">
+                    <div className="h-full bg-blue-600" style={{ width: `${Math.max(2, progressoConversao * 100)}%` }} />
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void doConvert()}
+                  disabled={converting}
+                  className="mb-4 inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors motion-reduce:transition-none hover:bg-blue-500 disabled:opacity-40"
+                >
+                  Converter para assistir
+                </button>
+              )}
+            </>
+          )}
+          {remuxable === false && ehRemoto && (
             <p className="mb-4 text-sm text-neutral-400">
-              O codec deste arquivo (H.264 10-bit ou HEVC) precisa ser recodificado, e recodificar é lento e com perda —
-              por isso o Learnflix não faz isso por você. Converta a aula para H.264 8-bit com o{' '}
-              <a
-                href="https://handbrake.fr"
-                onClick={(e) => cliqueFora(e, 'https://handbrake.fr')}
-                target="_blank"
-                rel="noreferrer"
-                className="underline decoration-neutral-600 underline-offset-2 hover:text-neutral-200"
-              >
-                HandBrake
-              </a>{' '}
-              (ou o VLC), substitua o arquivo na pasta do curso e use "Re-escanear agora" no menu do curso — o progresso
-              é preservado.
+              O codec deste vídeo não toca aqui, e por vir {ehDrive ? 'do Google Drive' : 'do Telegram'} ele não pode ser
+              convertido no app.
             </p>
           )}
           {remuxable === null && <p className="mb-4 text-sm text-neutral-400">Verificando o formato do arquivo…</p>}

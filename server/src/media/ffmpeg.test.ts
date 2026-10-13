@@ -39,7 +39,7 @@ describe('ffmpeg (integração — pulado sem ffmpeg)', () => {
 });
 
 describe('classifyPlayback (pura)', () => {
-  const base = { formatName: 'mov,mp4,m4a,3gp,3g2,mj2', videoCodec: 'h264', profile: 'High', pixFmt: 'yuv420p', audioCodec: 'aac' };
+  const base = { formatName: 'mov,mp4,m4a,3gp,3g2,mj2', videoCodec: 'h264', profile: 'High', pixFmt: 'yuv420p', codecTag: 'avc1', audioCodec: 'aac' };
   it('mp4 h264 8-bit → tocável', () => {
     expect(classifyPlayback(base)).toEqual({ playable: true });
   });
@@ -54,6 +54,17 @@ describe('classifyPlayback (pura)', () => {
   });
   it('hevc em mp4 → não tocável (Chrome não confiável), requer transcode', () => {
     expect(classifyPlayback({ ...base, videoCodec: 'hevc', profile: 'Main' })).toEqual({ playable: false, reason: 'codec', remuxable: false });
+  });
+  // A janela do macOS (WebKit) toca HEVC: só não toca se a marca for hev1.
+  const hevc = { ...base, videoCodec: 'hevc', profile: 'Main 10', pixFmt: 'yuv420p10le' };
+  it('hevc hvc1 num player que toca HEVC → tocável', () => {
+    expect(classifyPlayback({ ...hevc, codecTag: 'hvc1' }, { hevc: true })).toEqual({ playable: true });
+  });
+  it('hevc hev1 num player que toca HEVC → remux sem perda trocando a marca', () => {
+    expect(classifyPlayback({ ...hevc, codecTag: 'hev1' }, { hevc: true })).toEqual({ playable: false, reason: 'container', remuxable: true });
+  });
+  it('MPEG-TS com hevc num player que toca HEVC → remuxável', () => {
+    expect(classifyPlayback({ ...hevc, formatName: 'mpegts', codecTag: '[36][0][0][0]' }, { hevc: true })).toEqual({ playable: false, reason: 'container', remuxable: true });
   });
 });
 

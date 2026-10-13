@@ -62,7 +62,23 @@ export interface ImportPlan {
   driveAusentes: string[];      // cursos do Drive ou do Telegram do arquivo que não existem aqui
 }
 export type PlaybackVerdict = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean };
-export type ConvertResult = { status: 'converted' | 'already_playable' | 'transcode_required'; reason?: 'container' | 'codec' };
+export type ConvertResult = { status: 'converted' | 'already_playable' | 'transcoding' };
+export type ConvertStatus =
+  | { status: 'idle' | 'converted' }
+  | { status: 'transcoding'; progresso: number }
+  | { status: 'failed'; error: string };
+
+// O que o player desta janela decodifica, perguntado a ele mesmo: o WebKit do
+// macOS toca HEVC, a webview do Windows só com a extensão instalada. Supor o
+// pior (como num Chrome) mandava converter vídeo que já tocava.
+const tocaHevc = (() => {
+  try {
+    return document.createElement('video').canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') !== '';
+  } catch {
+    return false;
+  }
+})();
+const capacidades = tocaHevc ? '?hevc=1' : '';
 
 // Só declara Content-Type: application/json quando há corpo — um POST/DELETE sem corpo
 // com esse header faz o Fastify rejeitar com FST_ERR_CTP_EMPTY_JSON_BODY (400).
@@ -183,14 +199,10 @@ export const api = {
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),
-  verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback`, { method: 'POST' }),
-  // 409 = precisa recodificar por fora; é resposta válida, não erro de rede.
-  convertLesson: async (id: string): Promise<ConvertResult> => {
-    const res = await fetch(`/api/lessons/${id}/convert`, { method: 'POST' });
-    if (res.status === 409) return (await res.json()) as ConvertResult;
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-    return (await res.json()) as ConvertResult;
-  },
+  verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),
+  // 202 = recodificação começou em segundo plano; acompanhe por convertStatus.
+  convertLesson: (id: string) => jsonFetch<ConvertResult>(`/api/lessons/${id}/convert${capacidades}`, { method: 'POST' }),
+  convertStatus: (id: string) => jsonFetch<ConvertStatus>(`/api/lessons/${id}/convert`),
   resetCourseProgress: (id: string) => jsonFetch<{ deleted: number }>(`/api/courses/${id}/progress/reset`, { method: 'POST' }),
   resetAllProgress: () => jsonFetch<{ deleted: number }>('/api/progress/reset', { method: 'POST' }),
   resetLibrary: () => jsonFetch<{ courses: number }>('/api/library/reset', { method: 'POST' }),
