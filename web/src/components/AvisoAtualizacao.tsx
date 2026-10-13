@@ -41,7 +41,12 @@ export default function AvisoAtualizacao() {
     const { invoke } = await import('@tauri-apps/api/core');
     let servidorParado = false;
     try {
-      await update.download();
+      // Pergunta de novo na hora do clique: o app pode ter ficado aberto por horas
+      // e já ter saído outra versão. O pacote e a assinatura têm de ser da mesma
+      // conferência, senão a assinatura não bate e a atualização falha sempre.
+      const { check } = await import('@tauri-apps/plugin-updater');
+      const atual = (await check()) ?? update;
+      await atual.download();
       // No Windows o instalador encerra o app sem passar pelo evento de saída: o
       // servidor tem de parar antes, ou seguraria o próprio executável aberto.
       // Só lá: no macOS e no Linux parar antes não serve para nada, e se a
@@ -50,7 +55,7 @@ export default function AvisoAtualizacao() {
         await invoke('parar_servidor_para_atualizar');
         servidorParado = true;
       }
-      await update.install();
+      await atual.install();
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
     } catch (e) {
