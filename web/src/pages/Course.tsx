@@ -10,6 +10,7 @@ import LessonGrid from '../components/LessonGrid';
 import MaterialsSection from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
+import { mensagemErroDrive } from '../api/driveAuth';
 import HelpLink from '../components/HelpLink';
 import { ArrowLeft, Play, Check, List, LayoutGrid } from '../components/icons';
 
@@ -38,6 +39,12 @@ export default function Course() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const source = data?.source;
+  // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
+  const carregando = !!data?.importacao?.carregando;
+  useEffect(() => {
+    if (!carregando) qc.invalidateQueries({ queryKey: ['courses'] });
+  }, [carregando, qc]);
+
   useEffect(() => {
     // Cada re-escaneio do Drive/Telegram percorre a origem inteira pela rede (cota, flood); lá ele é
     // só manual, pelo menu.
@@ -121,6 +128,20 @@ export default function Course() {
         </span>
       )}
 
+      {data.importacao?.carregando && (
+        <div className="mt-4" role="status">
+          <Banner tone="info">
+            Lendo a pasta do Drive… {allLessons.length > 0 ? `${allLessons.length} aula(s) até agora; as outras vão aparecendo.` : 'as aulas vão aparecendo aqui.'}
+          </Banner>
+        </div>
+      )}
+      {!data.importacao?.carregando && data.importacao?.erro && (
+        <div className="mt-4">
+          <Banner>
+            A leitura da pasta parou no meio: {mensagemErroDrive(data.importacao.erro)} Use <b>Re-escanear agora</b> no menu ⋯ para terminar.
+          </Banner>
+        </div>
+      )}
       {rootIssue && (
         <div className="mt-4">
           <Banner>

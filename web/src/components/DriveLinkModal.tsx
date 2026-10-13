@@ -132,7 +132,7 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
               disabled={busy || !link.trim()}
               className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
             >
-              {busy ? 'Lendo a pasta…' : 'Adicionar'}
+              {busy ? 'Abrindo a pasta…' : 'Adicionar'}
             </button>
           </div>
         </form>
