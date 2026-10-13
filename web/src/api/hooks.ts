@@ -8,7 +8,7 @@ export const useCourse = (id: string) =>
   useQuery({
     queryKey: ['course', id],
     queryFn: () => api.getCourse(id),
-    refetchInterval: (q) => (q.state.data?.importacao?.carregando ? 1500 : false),
+    refetchInterval: (q) => (q.state.data?.importacao?.carregando || q.state.data?.download?.ativo ? 1500 : false),
   });
 export const useCollections = () => useQuery({ queryKey: ['collections'], queryFn: api.listCollections });
 export const useCourseRoots = () => useQuery({ queryKey: ['courseRoots'], queryFn: api.listCourseRoots });

@@ -127,8 +127,11 @@ Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pas
 - **Pasta privada**: o app abre a autorização do Google no seu navegador; depois de autorizar, é só
   voltar para o Learnflix. A permissão é só de leitura
   (`drive.readonly`); o Learnflix nunca cria, altera nem apaga nada no seu Drive.
-- **Nada é baixado**: os vídeos são transmitidos na hora em que você abre a aula. Só as capas são
-  geradas e guardadas na sua máquina.
+- **O curso vem para o computador**: depois de colar o link, o Learnflix baixa as aulas na ordem do
+  curso para a pasta de dados do app e, se algum vídeo estiver num formato que o player não toca,
+  já o converte. Cada aula que chega passa a tocar sem internet; as que ainda não chegaram tocam
+  direto do Drive enquanto isso. Se o app fechar no meio, o download continua de onde parou na
+  próxima vez. Excluir o curso apaga as cópias.
 
 **O Google mostra um aviso na autorização.** O app ainda não foi verificado pelo Google, então
 aparece "O Google não verificou este app": clique em **Avançado → Continuar**. Enquanto não for

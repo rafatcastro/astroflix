@@ -12,7 +12,8 @@ Quando você cola o link de uma pasta do Google Drive e autoriza o acesso, o app
 
 - lista os arquivos da pasta que você indicou, para montar o curso (nomes, tamanhos, duração e
   miniaturas);
-- transmite os vídeos e materiais dessa pasta para o player, no momento em que você abre cada um;
+- baixa os vídeos e materiais dessa pasta para o seu computador (e converte o que o player não
+  toca), para você assistir sem depender da conexão;
 - mostra o e-mail da conta conectada nas Configurações.
 
 O app **nunca** cria, altera, move, compartilha ou apaga nada no seu Drive.
@@ -40,7 +41,8 @@ Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
 - a lista de aulas e o seu progresso;
 - as miniaturas baixadas;
 - o token de acesso do Google e o seu e-mail;
-- a sessão do Telegram e o seu nome de usuário.
+- a sessão do Telegram e o seu nome de usuário;
+- as cópias dos cursos do Google Drive (`downloads/`) e os vídeos convertidos (`converted/`).
 
 Nada disso é enviado ao projeto Learnflix nem a terceiros. O app só se comunica com:
 

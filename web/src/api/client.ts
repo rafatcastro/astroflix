@@ -33,6 +33,8 @@ export interface CourseDetail {
   source: 'local' | 'drive' | 'telegram';
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
   importacao: { carregando: boolean; erro: string | null } | null;
+  // Cópia local do curso do Drive: aulas no disco e se o download continua.
+  download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
 }
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
@@ -71,7 +73,7 @@ export type ConvertStatus =
 // O que o player desta janela decodifica, perguntado a ele mesmo: o WebKit do
 // macOS toca HEVC, a webview do Windows só com a extensão instalada. Supor o
 // pior (como num Chrome) mandava converter vídeo que já tocava.
-const tocaHevc = (() => {
+export const tocaHevc = (() => {
   try {
     return document.createElement('video').canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') !== '';
   } catch {
@@ -202,6 +204,8 @@ export const api = {
   verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),
   // 202 = recodificação começou em segundo plano; acompanhe por convertStatus.
   convertLesson: (id: string) => jsonFetch<ConvertResult>(`/api/lessons/${id}/convert${capacidades}`, { method: 'POST' }),
+  salvarCapacidades: (cap: { hevc: boolean }) =>
+    jsonFetch<void>('/api/player/capacidades', { method: 'PUT', body: JSON.stringify(cap) }),
   convertStatus: (id: string) => jsonFetch<ConvertStatus>(`/api/lessons/${id}/convert`),
   resetCourseProgress: (id: string) => jsonFetch<{ deleted: number }>(`/api/courses/${id}/progress/reset`, { method: 'POST' }),
   resetAllProgress: () => jsonFetch<{ deleted: number }>('/api/progress/reset', { method: 'POST' }),

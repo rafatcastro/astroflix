@@ -40,7 +40,7 @@ export default function Course() {
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
-  const carregando = !!data?.importacao?.carregando;
+  const carregando = !!data?.importacao?.carregando || !!data?.download?.ativo;
   useEffect(() => {
     if (!carregando) qc.invalidateQueries({ queryKey: ['courses'] });
   }, [carregando, qc]);
@@ -133,6 +133,21 @@ export default function Course() {
           <Banner tone="info">
             Lendo a pasta do Drive… {allLessons.length > 0 ? `${allLessons.length} aula(s) até agora; as outras vão aparecendo.` : 'as aulas vão aparecendo aqui.'}
           </Banner>
+        </div>
+      )}
+      {!data.importacao?.carregando && data.download && data.download.baixadas < data.download.total && (
+        <div className="mt-4" role="status">
+          {data.download.erro && !data.download.ativo ? (
+            <Banner>
+              O download parou em {data.download.baixadas} de {data.download.total} aulas: {mensagemErroDrive(data.download.erro)} Ele
+              continua sozinho na próxima vez que o app abrir, ou agora mesmo com <b>Re-escanear agora</b> no menu ⋯.
+            </Banner>
+          ) : (
+            <Banner tone="info">
+              Baixando para o computador: {data.download.baixadas} de {data.download.total} aulas. As que já chegaram tocam
+              sem internet; as outras tocam direto do Drive enquanto isso.
+            </Banner>
+          )}
         </div>
       )}
       {!data.importacao?.carregando && data.importacao?.erro && (
