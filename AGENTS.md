@@ -134,11 +134,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local. Colar o link cria o curso assim que a raiz responde; a listagem continua em segundo plano
-  (`importacaoDrive`). Depois de lida, a pasta é **baixada** (`baixar.ts`, uma fila, na ordem do
-  curso, retomando `.part` com Range) para `DATA_DIR/downloads/<curso>/<id da aula>` (`local.ts`)
+  (`importacaoDrive`). **Abrir uma aula** (`GET /api/lessons/:id` → `baixador.pedirAula`) baixa
+  ela e as `JANELA` (2) seguintes não concluídas (`baixar.ts`, uma fila, retomando `.part` com
+  Range), nunca o curso inteiro: a primeira versão baixava tudo e um curso passou de 40 GB. Vai
+  para `DATA_DIR/downloads/<curso>/<id da aula>` (`local.ts`)
   e convertida se não tocar (`media/preparar.ts`, mesma fila de recodificação do player). Stream e
-  materiais preferem o arquivo local; o que ainda não chegou vem do Drive. Ao abrir, o app retoma
-  os downloads (`buildApp(..., { retomarDownloads })`, só no `index.ts`). Aula concluída tem a
+  materiais preferem o arquivo local; o que ainda não chegou vem do Drive (materiais não são
+  baixados). Ao abrir, o app só limpa as concluídas (`buildApp(..., { retomarDownloads })`, só no
+  `index.ts`), sem baixar nada. Aula concluída tem a
   cópia apagada (menos a assistida por último) e não é rebaixada; o banco guarda os metadados.
 - `telegram/`: cursos do Telegram, com a **conta da pessoa** (MTProto, GramJS). Tudo do GramJS
   fica em `gramjs.ts` (importado sob demanda: nada conecta até alguém colar um link); o resto do

@@ -143,17 +143,16 @@ export default function Course() {
           </Banner>
         </div>
       )}
-      {!data.importacao?.carregando && data.download && data.download.baixadas < data.download.total && (
+      {!data.importacao?.carregando && data.download && (data.download.ativo || data.download.erro) && (
         <div className="mt-4" role="status">
           {data.download.erro && !data.download.ativo ? (
             <Banner>
-              O download parou em {data.download.baixadas} de {data.download.total} aulas: {mensagemErroDrive(data.download.erro)} Ele
-              continua sozinho na próxima vez que o app abrir, ou agora mesmo com <b>Re-escanear agora</b> no menu ⋯.
+              O download das próximas aulas parou: {mensagemErroDrive(data.download.erro)} Elas continuam tocando direto do Drive, e o
+              download tenta de novo quando você abrir uma aula.
             </Banner>
           ) : (
             <Banner tone="info">
-              Baixando para o computador: {data.download.baixadas} de {data.download.total} aulas. As que já chegaram tocam
-              sem internet; as outras tocam direto do Drive enquanto isso.
+              Baixando a aula aberta e as próximas para tocarem sem internet. O resto do curso só é baixado quando você chegar lá.
             </Banner>
           )}
         </div>

@@ -15,6 +15,8 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; drive?
       WHERE l.id = ?
     `).get(id) as any;
     if (!r) { reply.code(404); return { error: 'not_found' }; }
+    // Abrir a aula é o que baixa: ela e as próximas, nunca o curso inteiro (ver baixar.ts).
+    if (r.course_source === 'drive') drive?.baixador.pedirAula(id);
 
     const prev = db.prepare('SELECT id FROM lessons WHERE course_id=? AND order_index<? ORDER BY order_index DESC LIMIT 1').get(r.course_id, r.order_index) as any;
     const next = db.prepare('SELECT id FROM lessons WHERE course_id=? AND order_index>? ORDER BY order_index ASC LIMIT 1').get(r.course_id, r.order_index) as any;

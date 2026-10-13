@@ -7,15 +7,19 @@ import type { AppConfig } from '../config';
 import type { Capacidades } from '../media/ffmpeg';
 import { prepararParaTocar } from '../media/preparar';
 import type { ClienteDrive } from './api';
-import { arquivoBaixadoDaAula, arquivoBaixadoDoMaterial, arquivoLocalDaAula } from './local';
+import { arquivoBaixadoDaAula, arquivoLocalDaAula } from './local';
 import { resourceKeyDoCurso } from './status';
 import { FalhaDrive } from './tipos';
 
-// Todo curso do Drive é baixado para DATA_DIR/downloads e, se preciso, convertido
+// As aulas do Drive são baixadas para DATA_DIR/downloads e, se preciso, convertidas
 // para tocar. Assistir pela rede dependia da cota do Google (que bloqueia pastas
 // muito acessadas), de conexão boa e do seek ir e voltar ao Drive; com o arquivo
 // local, o player é o mesmo dos cursos do disco. Enquanto uma aula não chega, ela
-// continua tocando direto do Drive, então nada espera o curso inteiro.
+// continua tocando direto do Drive.
+//
+// Só sob demanda: a aula que a pessoa abre e as JANELA seguintes. A primeira versão
+// baixava o curso inteiro ao colar o link (e todos os cursos ao abrir o app): um
+// curso só passou de 40 GB e tomou a internet da casa por horas.
 
 export interface EstadoDownload {
   /** Ainda baixando ou convertendo alguma aula deste curso. */
@@ -26,18 +30,25 @@ export interface EstadoDownload {
 
 export interface Baixador {
   /**
-   * Põe o curso na fila (idempotente). Chamado ao colar o link, ao re-escanear, ao
-   * abrir o app e ao (des)marcar uma aula como concluída, que limpa ou rebaixa a cópia.
+   * A pessoa abriu esta aula: baixa ela e as próximas JANELA (as que já estavam
+   * pedidas e ainda não começaram deixam de estar).
+   */
+  pedirAula(lessonId: string): void;
+  /**
+   * Passa o curso pela fila sem pedir aula nova: limpa as concluídas e termina o
+   * que já estava pedido. Chamado ao (des)marcar uma aula como concluída.
    */
   enfileirar(courseId: string): void;
   estado(courseId: string): EstadoDownload;
-  /** Retoma todos os cursos do Drive, com o que faltar de cada um. */
+  /** Ao abrir o app: só limpa as concluídas de cada curso do Drive. Não baixa nada. */
   retomarTodos(): void;
   /** Para os testes: espera a fila esvaziar. */
   aguardar(): Promise<void>;
 }
 
 const CHAVE_HEVC = 'player.hevc';
+/** Aulas seguintes à aberta que já vão sendo baixadas. */
+export const JANELA = 2;
 
 /** O que o player desta máquina toca, informado pela interface ao abrir. */
 export function capacidadesSalvas(db: Db): Capacidades {
@@ -63,6 +74,8 @@ export function criarBaixador(deps: {
   // Pedido de novo enquanto o curso já estava sendo baixado (re-escaneou e
   // apareceu aula nova): roda mais uma volta no fim, em vez de perder o pedido.
   const deNovo = new Set<string>();
+  // Aulas pedidas e ainda não baixadas, por curso.
+  const pedidas = new Map<string, Set<string>>();
   let rodando: Promise<void> | null = null;
 
   const existe = (courseId: string) => !!db.prepare('SELECT 1 FROM courses WHERE id=?').get(courseId);
@@ -142,12 +155,16 @@ export function criarBaixador(deps: {
 
     for (const a of aulas) {
       if (!existe(courseId)) return; // excluído no meio: não baixa mais nada
+      // Lido a cada volta: abrir outra aula no meio troca a janela, e o que saiu
+      // dela não é mais baixado.
+      if (!pedidas.get(courseId)?.has(a.id)) continue;
       // Aula concluída não volta para o disco: foi apagada de propósito, e o
       // progresso (e o resto dos metadados) continua no banco.
       if (concluidas.has(a.id)) continue;
       if (arquivoLocalDaAula(config, courseId, a.id, a.rel_path)) continue;
       const destino = arquivoBaixadoDaAula(config, courseId, a.id, a.rel_path);
       await baixarArquivo(cliente, a.remote_id, destino, Number(a.size_bytes ?? 0));
+      pedidas.get(courseId)?.delete(a.id);
       try {
         const convertido = path.join(config.convertedDir, `${a.id}.mp4`);
         if (await prepararParaTocar(destino, convertido, capacidadesSalvas(db))) {
@@ -161,16 +178,7 @@ export function criarBaixador(deps: {
         // baixado e, se não tocar, oferece converter de novo.
       }
     }
-
-    const materiais = db
-      .prepare('SELECT id, rel_path, remote_id, size_bytes FROM materials WHERE course_id=? AND remote_id IS NOT NULL ORDER BY rel_path')
-      .all(courseId) as Array<{ id: string; rel_path: string; remote_id: string; size_bytes: number | null }>;
-    for (const m of materiais) {
-      if (!existe(courseId)) return;
-      const destino = arquivoBaixadoDoMaterial(config, courseId, m.id, m.rel_path);
-      if (fs.existsSync(destino)) continue;
-      await baixarArquivo(cliente, m.remote_id, destino, Number(m.size_bytes ?? 0));
-    }
+    // Materiais não são baixados: abrem direto do Drive quando a pessoa clica.
   }
 
   async function laco(): Promise<void> {
@@ -191,6 +199,23 @@ export function criarBaixador(deps: {
   }
 
   const baixador: Baixador = {
+    pedirAula(lessonId) {
+      const aula = db
+        .prepare("SELECT l.course_id, l.order_index FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=? AND c.source='drive'")
+        .get(lessonId) as { course_id: string; order_index: number } | undefined;
+      if (!aula || !config.downloadsDir) return;
+      // A aberta e as próximas ainda não concluídas (concluída não volta para o disco).
+      const janela = db
+        .prepare(
+          `SELECT l.id FROM lessons l LEFT JOIN progress p ON p.lesson_id = l.id
+           WHERE l.course_id=? AND l.missing=0 AND l.remote_id IS NOT NULL AND l.order_index >= ?
+             AND (l.id = ? OR COALESCE(p.completed, 0) = 0)
+           ORDER BY l.order_index LIMIT ?`,
+        )
+        .all(aula.course_id, aula.order_index, lessonId, JANELA + 1) as Array<{ id: string }>;
+      pedidas.set(aula.course_id, new Set(janela.map((a) => a.id)));
+      baixador.enfileirar(aula.course_id);
+    },
     enfileirar(courseId) {
       if (!config.downloadsDir) return; // config de teste montada à mão: nada a baixar
       if (fila[0] === courseId) deNovo.add(courseId);
