@@ -291,20 +291,17 @@ export default function Course() {
                             <span className="sm:hidden">⚠</span>
                             <span className="hidden sm:inline">arquivo não encontrado</span>
                           </span>
-                        ) : !l.playable ? (
-                          <span className="text-neutral-400" title="precisa converter">
-                            <span className="sm:hidden">⟳</span>
-                            <span className="hidden sm:inline">precisa converter</span>
+                        ) : l.completed ? (
+                          <span className="text-neutral-400" title="concluída">
+                            <span className="sm:hidden">✓</span>
+                            <span className="hidden sm:inline">✓ concluída</span>
                           </span>
-                        ) : (
-                          <span
-                            className="text-neutral-400"
-                            title={l.completed ? 'concluída' : l.position > 0 ? 'em progresso' : 'não iniciada'}
-                          >
-                            <span className="sm:hidden">{l.completed ? '✓' : l.position > 0 ? '▓' : '○'}</span>
-                            <span className="hidden sm:inline">{l.completed ? '✓ concluída' : l.position > 0 ? 'em progresso' : 'não iniciada'}</span>
+                        ) : l.position > 0 ? (
+                          <span className="text-neutral-400" title="em progresso">
+                            <span className="sm:hidden">▓</span>
+                            <span className="hidden sm:inline">em progresso</span>
                           </span>
-                        )}
+                        ) : null}
                       </span>
                     </Link>
                     <label className="grid h-11 w-11 shrink-0 place-items-center" title="Marcar como concluída">
