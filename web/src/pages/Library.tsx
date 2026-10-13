@@ -8,6 +8,7 @@ import DirPicker from '../components/DirPicker';
 import CourseCardMenu from '../components/CourseCardMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
 import TelegramLinkModal from '../components/TelegramLinkModal';
+import EmDesenvolvimento from '../components/EmDesenvolvimento';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TextField from '../components/TextField';
 import { api, type BatchImportResult, type Collection, type CourseRoot, type CourseSummary } from '../api/client';
@@ -641,7 +642,7 @@ export default function Library() {
             </button>
             {temTelegram && (
               <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('telegram'); }}>
-                Do Telegram
+                Do Telegram<EmDesenvolvimento />
                 <div className="text-xs text-neutral-500">Cole o link de um grupo ou canal</div>
               </button>
             )}
@@ -890,7 +891,7 @@ export default function Library() {
                     onClick={() => setPicking('telegram')}
                     className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
                   >
-                    Do Telegram
+                    Do Telegram<EmDesenvolvimento />
                   </button>
                 )}
                 <HelpLink topico="primeiros-passos" className="mt-1 text-sm text-neutral-500 hover:text-neutral-300">
