@@ -31,7 +31,7 @@ Baixe o instalador na **[página da última versão](https://github.com/rafatcas
 Abra o Learnflix como qualquer outro programa — pelo Dock, pelo menu Iniciar ou pelo menu de
 aplicativos. Ele abre na própria janela.
 
-![Tela inicial vazia do Learnflix, com os botões Adicionar curso e Importar pasta de cursos](docs/tela-inicial.png)
+![Tela inicial vazia do Learnflix, com os botões para adicionar cursos](docs/tela-inicial.png)
 
 *É isso que aparece na primeira vez: sem cadastro, sem configuração — só apontar onde estão seus cursos.*
 
@@ -94,14 +94,16 @@ aula. Veja [Backup e migração](#backup-e-migração).
 
 ## Adicionando seus cursos
 
-**Um curso** — clique em **Adicionar curso** e navegue até a pasta dele. Cada vídeo dentro vira uma
-aula; se os vídeos estiverem em subpastas, elas viram os módulos do curso. Arquivos que não são
-vídeo (PDFs, slides, exercícios, código) aparecem como **materiais**, para abrir ou baixar.
+Clique em **Adicionar ▾ → Dos arquivos** e escolha a pasta na janela do próprio sistema (Finder,
+Explorer ou o seletor do Linux).
 
-**Vários de uma vez** — se você tem uma pasta com muitos cursos dentro, use **Importar em lote** e
-aponte para a pasta-mãe: cada subpasta com vídeos vira um curso. O Learnflix guarda essa pasta, e
-depois basta clicar em **Verificar novos cursos** para trazer o que apareceu de novo. Rodar de novo
-nunca duplica nada.
+- **Um curso**: se a pasta tem vídeos, ela vira um curso. Cada vídeo vira uma aula, e subpastas
+  viram os módulos. Arquivos que não são vídeo (PDFs, slides, exercícios, código) aparecem como
+  **materiais**, para abrir ou baixar.
+- **Vários de uma vez**: se os vídeos estão só nas subpastas, o app pergunta se a pasta é um curso
+  com módulos ou uma pasta com vários cursos. No segundo caso, cada subpasta com vídeos vira um
+  curso, e o Learnflix guarda essa pasta: depois basta clicar em **Verificar novos cursos** para
+  trazer o que apareceu de novo. Rodar de novo nunca duplica nada.
 
 A ordem das aulas segue o nome dos arquivos, com ordenação numérica de verdade — `aula 2` vem antes
 de `aula 10`, e não depois.
@@ -143,11 +145,11 @@ detalhes do que o app lê estão na [política de privacidade](PRIVACY.md).
 Grupo ou canal do Telegram com as aulas postadas também vira curso. Clique em **Adicionar ▾ → Do
 Telegram** e cole o link (`t.me/…`).
 
-> **Ainda em teste.** O recurso aparece com o selo **Em desenvolvimento** e ainda não foi validado
-> com contas reais. Enquanto isso, o instalador não vem com o app do Telegram configurado: para
-> experimentar, crie o seu em [my.telegram.org](https://my.telegram.org) → **API development tools**
-> e cole o `api_id` e o `api_hash` em **Configurações → Telegram → Usar um app próprio do Telegram**.
-> A opção **Do Telegram** aparece na biblioteca logo depois.
+> **Ainda em teste.** Por enquanto a opção só aparece rodando o app pelo código (`pnpm dev`, veja
+> [Desenvolvimento](#desenvolvimento)), com o selo **Em desenvolvimento**, até ser validada com
+> contas reais. Para experimentar, crie um app em [my.telegram.org](https://my.telegram.org) →
+> **API development tools** e cole o `api_id` e o `api_hash` em **Configurações → Telegram → Usar
+> um app próprio do Telegram**.
 
 - **Com a sua conta**: na primeira vez, o app mostra um QR code. No celular, abra o Telegram →
   **Configurações → Dispositivos → Conectar dispositivo** e aponte para a tela. A sessão aparece lá
