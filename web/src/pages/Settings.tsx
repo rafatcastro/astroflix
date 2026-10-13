@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type CredencialDrive, type ImportPlan } from '../api/client';
 import { getPref, setPref } from '../lib/prefs';
 import DirPicker from '../components/DirPicker';
+import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Banner from '../components/Banner';
@@ -51,7 +52,7 @@ function PreviaDoImport({ plan }: { plan: ImportPlan }) {
       {plan.driveAusentes.length > 0 && (
         <li>
           <strong className="text-neutral-200">{plan.driveAusentes.length}</strong> curso
-          {plural(plan.driveAusentes.length)} do Google Drive — adicione o link e importe de novo para trazer o progresso
+          {plural(plan.driveAusentes.length)} do Google Drive ou do Telegram — adicione o link e importe de novo para trazer o progresso
         </li>
       )}
       {plan.newRoots.length > 0 && (
@@ -173,6 +174,117 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
           </button>
         </div>
       </details>
+    </section>
+  );
+}
+
+function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
+  const qc = useQueryClient();
+  const { data: status } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
+  const [conectando, setConectando] = useState(false);
+  const [apiId, setApiId] = useState('');
+  const [apiHash, setApiHash] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const atualizar = () => qc.invalidateQueries({ queryKey: ['telegramStatus'] });
+
+  const desconectar = async () => {
+    try {
+      await api.telegramDesconectar();
+      atualizar();
+      onNotice('Telegram desconectado. A sessão do Learnflix foi encerrada também no Telegram.');
+    } catch {
+      onNotice('Falha ao desconectar. Tente novamente.');
+    }
+  };
+
+  // Mesma regra do Google: manda só o que foi digitado, porque campo vazio APAGA o valor salvo.
+  const salvar = async (restaurar = false) => {
+    const c = restaurar ? { apiId: '', apiHash: '' } : Object.fromEntries(
+      Object.entries({ apiId: apiId.trim(), apiHash: apiHash.trim() }).filter(([, v]) => v !== ''),
+    );
+    if (Object.keys(c).length === 0) return;
+    setSalvando(true);
+    try {
+      await api.telegramSalvarCredenciais(c);
+      setApiId('');
+      setApiHash('');
+      atualizar();
+      onNotice(restaurar ? 'App padrão do Telegram restaurado.' : 'App do Telegram salvo. Conecte a conta de novo.');
+    } catch {
+      onNotice('Falha ao salvar. Tente novamente.');
+    }
+    setSalvando(false);
+  };
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Telegram</h2>
+      <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        {status?.conectado ? (
+          <>
+            <span className="truncate">{status.usuario ? `Conectado como ${status.usuario}` : 'Conectado'}</span>
+            <button
+              type="button"
+              onClick={() => void desconectar()}
+              className="min-h-[44px] shrink-0 rounded px-3 text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              Desconectar
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="py-2 text-neutral-400">{status ? 'Nenhuma conta conectada' : 'Carregando…'}</span>
+            {status && (
+              <button
+                type="button"
+                onClick={() => setConectando(true)}
+                className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Conectar
+              </button>
+            )}
+          </>
+        )}
+      </div>
+      <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        <summary className="min-h-[44px] cursor-pointer py-2 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+          Usar um app próprio do Telegram
+        </summary>
+        <div className="space-y-3 pb-2 pt-1">
+          <p className="text-neutral-500">Crie em my.telegram.org → API development tools. Trocar o app desconecta a conta.</p>
+          <label className="block">
+            <span className="mb-1 block text-neutral-400">api_id</span>
+            <TextField inputMode="numeric" autoComplete="off" value={apiId} placeholder={status?.credenciais.apiId ? 'configurado' : ''} onChange={(e) => setApiId(e.target.value)} />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-neutral-400">api_hash</span>
+            <TextField type="password" autoComplete="off" value={apiHash} placeholder={status?.credenciais.apiHash ? 'configurado' : ''} onChange={(e) => setApiHash(e.target.value)} />
+          </label>
+          <button
+            type="button"
+            onClick={() => void salvar()}
+            disabled={salvando}
+            className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+          >
+            Salvar
+          </button>
+          <button
+            type="button"
+            onClick={() => void salvar(true)}
+            disabled={salvando}
+            className="ml-2 min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+          >
+            Restaurar padrão
+          </button>
+        </div>
+      </details>
+      {conectando && (
+        <TelegramLinkModal
+          soLogin
+          onClose={() => setConectando(false)}
+          onConectado={() => onNotice('Telegram conectado.')}
+        />
+      )}
     </section>
   );
 }
@@ -325,6 +437,7 @@ export default function Settings() {
       </section>
 
       <SecaoDrive onNotice={setNotice} />
+      <SecaoTelegram onNotice={setNotice} />
 
       <section className="mb-8">
         <h2 className="mb-1 text-sm font-semibold text-neutral-300">Backup e migração</h2>

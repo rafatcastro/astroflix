@@ -58,7 +58,7 @@ ninguém cria tag à mão. Um runner por plataforma gera o sidecar
 (`build:binario` → `scripts/preparar-sidecar.mjs`, que dá o nome com o target triple do Rust), a
 versão é gravada no `package.json`, no `tauri.conf.json` e no `Cargo.toml`
 (`scripts/sincronizar-versao.mjs <versão>`) e o `tauri-action` anexa os instaladores e o `latest.json` do
-atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*` e
+atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*`, `TELEGRAM_*` e
 `TAURI_SIGNING_PRIVATE_KEY` (a chave fica localmente em `.tauri-signing.local.key`, ignorada pelo
 git; a pública está no `tauri.conf.json`).
 
@@ -78,6 +78,9 @@ Lidas em `server/src/config.ts`:
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
 
+- `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`: opcionais, só para cursos do Telegram. Mesma
+  precedência e mesma regra de segredo das `GOOGLE_*`: `telegram.credenciais` → env →
+  `TELEGRAM_PADRAO` (de `.telegram.local.json`, ignorado pelo git; no CI, dos secrets).
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
   Drive. Precedência, campo a campo: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
   `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
@@ -131,6 +134,15 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local.
+- `telegram/`: cursos do Telegram, com a **conta da pessoa** (MTProto, GramJS). Tudo do GramJS
+  fica em `gramjs.ts` (importado sob demanda: nada conecta até alguém colar um link); o resto do
+  app só conhece `ClienteTelegram` e `ServicosTelegram`, e os testes injetam falsos
+  (`buildApp(..., { telegram })`). `link` interpreta `t.me/…`, `mensagens` monta o curso (o
+  `rel_path` começa pelo id da mensagem com 10 dígitos, que dá a ordem de postagem e não muda),
+  `blocos` alinha o `Range` em blocos de 512 KB, `status` traduz os erros RPC e `stream` repassa
+  o vídeo. Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
+  `scan/scan-telegram.ts` espelham o Drive. O `telegram_peer` do curso guarda o access hash: sem
+  ele, um canal privado não é achado depois de reiniciar.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.
@@ -168,8 +180,9 @@ O schema fica em `server/src/db/schema.ts` e os tipos de linha em `server/src/ty
 interno estável e a aula é identificada pelo `rel_path` dentro do curso. Mover a pasta de origem e
 re-apontar preserva o histórico.
 
-- `courses.source` (`'local'` | `'drive'`) distingue a origem; aulas do Drive guardam o ID do
-  arquivo em `lessons.remote_id`. O progresso continua preso ao `rel_path`, nunca ao ID do Drive,
+- `courses.source` (`'local'` | `'drive'` | `'telegram'`) distingue a origem; aulas remotas
+  guardam o ID do arquivo (Drive) ou da mensagem (Telegram) em `lessons.remote_id`. A v3
+  reconstruiu `courses` para o CHECK aceitar `telegram` (o SQLite não altera CHECK). O progresso continua preso ao `rel_path`, nunca ao ID do Drive,
   então re-escanear depois de o dono reenviar o arquivo preserva o histórico.
 - `progress` é uma tabela por aula, com `position_sec`, `furthest_sec` e
   `completed`/`auto_completed`.

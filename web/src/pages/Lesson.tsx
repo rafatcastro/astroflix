@@ -4,6 +4,8 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PlaybackVerdict } from '../api/client';
 import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
+import { mensagemErroTelegram } from '../api/telegramTextos';
+import TelegramLinkModal from '../components/TelegramLinkModal';
 import { getPref, setPref } from '../lib/prefs';
 import PlaylistSidebar from '../components/PlaylistSidebar';
 import EndOfLessonCountdown from '../components/EndOfLessonCountdown';
@@ -89,6 +91,7 @@ export default function Lesson() {
   // Falha de vídeo do Drive explicada pelo servidor (autorização, cota, rede) e a chave que
   // força o <video> a recarregar depois de reautorizar.
   const [driveErro, setDriveErro] = useState<{ erro: string; texto: string } | null>(null);
+  const [conectandoTelegram, setConectandoTelegram] = useState(false);
   const [videoKey, setVideoKey] = useState(0);
   const [reautorizando, setReautorizando] = useState(false);
   const [urlAuth, setUrlAuth] = useState<string | null>(null);
@@ -403,8 +406,11 @@ export default function Lesson() {
   // O <video> falhou em algo que o flag dizia tocável — descobre o motivo real
   // e troca a tela preta por um estado acionável.
   const ehDrive = lesson?.courseSource === 'drive';
+  const ehTelegram = lesson?.courseSource === 'telegram';
+  // Sem arquivo local: nem remux, nem frame como capa, e o erro do vídeo se explica pela origem.
+  const ehRemoto = ehDrive || ehTelegram;
   const onVideoError = useCallback(() => {
-    if (!ehDrive) {
+    if (!ehRemoto) {
       if (!verdict) void verifyPlayback();
       return;
     }
@@ -414,9 +420,10 @@ export default function Lesson() {
       try {
         const r = await fetch(`/api/lessons/${id}/stream`, { headers: { Range: 'bytes=0-0' } });
         if (!(r.headers.get('content-type') ?? '').includes('application/json')) throw new Error('sem-json');
-        const j = (await r.json()) as { error?: string };
+        const j = (await r.json()) as { error?: string; esperaSeg?: number };
         if (j.error) {
-          if (mountedRef.current) setDriveErro({ erro: j.error, texto: mensagemErroDrive(j.error) });
+          const texto = ehTelegram ? mensagemErroTelegram(j.error, j.esperaSeg) : mensagemErroDrive(j.error);
+          if (mountedRef.current) setDriveErro({ erro: j.error, texto });
           return;
         }
       } catch {
@@ -424,7 +431,7 @@ export default function Lesson() {
       }
       if (!verdict) void verifyPlayback();
     })();
-  }, [ehDrive, id, verdict, verifyPlayback]);
+  }, [ehRemoto, ehTelegram, id, verdict, verifyPlayback]);
 
   const reautorizar = async () => {
     setReautorizando(true);
@@ -563,7 +570,16 @@ export default function Lesson() {
             </p>
           )}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
-            {driveErro.erro === 'nao-autorizado' && (
+            {driveErro.erro === 'nao-autorizado' && ehTelegram && (
+              <button
+                type="button"
+                onClick={() => setConectandoTelegram(true)}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Conectar de novo
+              </button>
+            )}
+            {driveErro.erro === 'nao-autorizado' && !ehTelegram && (
               <button
                 type="button"
                 onClick={() => void reautorizar()}
@@ -573,7 +589,7 @@ export default function Lesson() {
                 Autorizar de novo
               </button>
             )}
-            {(driveErro.erro === 'sem-conexao' || driveErro.erro === 'cota-esgotada') && (
+            {(driveErro.erro === 'sem-conexao' || driveErro.erro === 'cota-esgotada' || driveErro.erro === 'flood') && (
               <button
                 type="button"
                 onClick={() => {
@@ -594,6 +610,16 @@ export default function Lesson() {
             </button>
           </div>
         </div>
+        {conectandoTelegram && (
+          <TelegramLinkModal
+            soLogin
+            onClose={() => setConectandoTelegram(false)}
+            onConectado={() => {
+              setDriveErro(null);
+              setVideoKey((k) => k + 1);
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -604,7 +630,7 @@ export default function Lesson() {
       <div className="grid h-screen place-items-center p-6 text-center">
         <div className="max-w-md">
           <div className="mb-2 text-lg font-medium">Este vídeo está num formato que o navegador não reproduz</div>
-          {remuxable === true && !ehDrive && (
+          {remuxable === true && !ehRemoto && (
             <>
               <p className="mb-4 text-sm text-neutral-400">
                 Dá para corrigir sem recodificar: um remux rápido e sem perda de qualidade. O arquivo original não é alterado.
@@ -773,7 +799,7 @@ export default function Lesson() {
             {/* Ferramentas */}
             <div className="flex items-center gap-1">
               {/* Definir capa — ação ocasional, ocultada no celular para caber a barra */}
-              {!ehDrive && (
+              {!ehRemoto && (
                 <div className="hidden sm:block">
                   <IconButton label="Usar este frame como capa do curso" onClick={() => setConfirmCover(true)}>
                     <Camera />

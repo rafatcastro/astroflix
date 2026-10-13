@@ -1,6 +1,6 @@
 # Política de privacidade do Learnflix
 
-**Última atualização:** 12 de outubro de 2026
+**Última atualização:** 13 de outubro de 2026
 
 O Learnflix é um aplicativo que roda inteiramente no seu computador. Não existe servidor do Learnflix
 na internet, conta do Learnflix ou coleta de dados pelo projeto.
@@ -17,6 +17,21 @@ Quando você cola o link de uma pasta do Google Drive e autoriza o acesso, o app
 
 O app **nunca** cria, altera, move, compartilha ou apaga nada no seu Drive.
 
+## O que o app acessa no Telegram
+
+Quando você cola o link de um grupo ou canal do Telegram, o app pede para você conectar a **sua
+conta** do Telegram (por QR code). A sessão aparece como "Learnflix" em Telegram → Configurações →
+Dispositivos. Com ela, o app:
+
+- lê as mensagens com vídeo ou arquivo do grupo que você indicou, para montar o curso (legenda,
+  nome, tamanho, duração e miniatura);
+- transmite os vídeos e arquivos desse grupo para o player, no momento em que você abre cada um;
+- entra num grupo por link de convite **só quando você confirma**;
+- mostra o seu nome de usuário nas Configurações.
+
+O app **nunca** envia, apaga ou altera mensagens, não lê suas conversas particulares e não mexe nos
+seus contatos.
+
 ## Onde os dados ficam
 
 Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
@@ -24,16 +39,22 @@ Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
 
 - a lista de aulas e o seu progresso;
 - as miniaturas baixadas;
-- o token de acesso do Google e o seu e-mail.
+- o token de acesso do Google e o seu e-mail;
+- a sessão do Telegram e o seu nome de usuário.
 
-Nada disso é enviado ao projeto Learnflix nem a terceiros. Os únicos servidores com que o app se
-comunica são os do próprio Google, para ler os arquivos que você pediu.
+Nada disso é enviado ao projeto Learnflix nem a terceiros. O app só se comunica com:
+
+- os servidores do Google e do Telegram, para ler o que você pediu;
+- o GitHub, para conferir se há uma versão nova do app (sem enviar nenhum dado seu).
 
 ## Como revogar
 
 Em **Configurações → Google Drive → Desconectar**, o app revoga o acesso e apaga o token salvo. Você
 também pode revogar a qualquer momento em
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions).
+
+Em **Configurações → Telegram → Desconectar**, o app encerra a sessão no Telegram e apaga a cópia
+local. Você também pode encerrá-la pelo próprio Telegram, em Configurações → Dispositivos.
 
 ## Uso dos dados do Google
 

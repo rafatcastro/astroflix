@@ -4,6 +4,9 @@
 // contato com o app passa a impressão de que algo quebrou.
 //
 // Silenciamos exatamente esse aviso, e só ele: qualquer outro continua passando.
+// (Mais um da mesma família: o GramJS, do Telegram, consulta `localStorage`, e o
+// Node novo avisa que ele não existe sem --localstorage-file — o GramJS segue sem
+// ele, então o aviso também não diz nada a quem usa.)
 //
 // Este módulo precisa ser o PRIMEIRO import do processo. Em ESM as dependências
 // são avaliadas na ordem em que aparecem, então importá-lo antes de qualquer
@@ -13,5 +16,6 @@ const original = process.emitWarning;
 process.emitWarning = ((aviso: string | Error, ...resto: unknown[]) => {
   const texto = typeof aviso === 'string' ? aviso : (aviso?.message ?? '');
   if (texto.includes('SQLite is an experimental feature')) return;
+  if (texto.includes('localStorage is not available')) return;
   return (original as (...args: unknown[]) => void).call(process, aviso, ...resto);
 }) as typeof process.emitWarning;
