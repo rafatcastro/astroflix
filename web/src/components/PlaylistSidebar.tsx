@@ -1,62 +1,85 @@
+import { useEffect, useRef } from 'react';
 import { useCourse } from '../api/hooks';
 import { api } from '../api/client';
+import { formatDuration } from '../lib/format';
 
+// Lista de aulas ao lado do vídeo (estilo YouTube): fica sempre à vista, então
+// trocar de aula não pede abrir painel nem sair da tela cheia. A aula atual vem
+// destacada e a lista rola até ela, inclusive ao avançar sozinha para a próxima.
 export default function PlaylistSidebar({
   courseId,
   currentLessonId,
-  open,
-  onClose,
   onJump,
 }: {
   courseId: string;
   currentLessonId: string;
-  open: boolean;
-  onClose: () => void;
   onJump: (lessonId: string) => void;
 }) {
   const { data } = useCourse(courseId);
-  if (!open) return null;
+  const atualRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    atualRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [currentLessonId, data]);
+
+  if (!data) return <p className="p-3 text-sm text-neutral-500">Carregando…</p>;
+  const todas = data.modules.flatMap((m) => m.lessons);
+  const posicao = new Map(todas.map((l, i) => [l.id, i + 1]));
+
   return (
-    <>
-      {/* Backdrop tocável — só no celular, onde a sidebar vira drawer full-width. */}
-      <div className="fixed inset-0 z-10 bg-black/60 sm:hidden" onClick={onClose} />
-      <div
-        className="absolute top-0 right-0 h-screen w-full max-w-sm overflow-y-auto border-l border-neutral-800 bg-neutral-950/95 sm:w-72 z-20"
-        style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-      >
-        <div className="flex items-center justify-between p-3 border-b border-neutral-800 sticky top-0 bg-neutral-950">
-          <span className="text-sm font-medium truncate">{data?.title ?? 'Aulas'}</span>
-          <button onClick={onClose} className="grid h-11 w-11 shrink-0 place-items-center text-neutral-400">
-            ✕
-          </button>
-        </div>
-        {data?.modules.map((m) => (
-          <div key={m.name ?? '__flat__'}>
-            {m.name && <div className="px-3 py-1 text-xs text-neutral-500 mt-2">{m.name}</div>}
+    <div>
+      {data.modules.map((m) => {
+        const feitas = m.lessons.filter((l) => l.completed).length;
+        return (
+          <section key={m.name ?? '__flat__'}>
+            {m.name && (
+              <div className="sticky top-0 z-10 flex items-baseline justify-between gap-2 bg-neutral-950 px-3 pb-1 pt-3 text-xs">
+                <span className="truncate font-medium text-neutral-300">{m.name}</span>
+                <span className="shrink-0 text-neutral-500">
+                  {feitas}/{m.lessons.length}
+                </span>
+              </div>
+            )}
             {m.lessons.map((l) => {
-              const status = l.completed ? '✓' : l.position > 0 ? '▓' : '○';
-              const isCurrent = l.id === currentLessonId;
+              const atual = l.id === currentLessonId;
+              const estado = atual ? '▶' : l.completed ? '✓' : l.position > 0 ? '◐' : '';
               return (
                 <button
                   key={l.id}
+                  ref={atual ? atualRef : undefined}
+                  type="button"
                   onClick={() => onJump(l.id)}
-                  className={`w-full text-left flex items-center gap-2 px-3 py-2 text-sm ${isCurrent ? 'bg-blue-600/30' : 'hover:bg-neutral-800'}`}
+                  aria-current={atual ? 'true' : undefined}
+                  className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
+                    atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
+                  }`}
                 >
-                  <span className="w-4 text-center text-neutral-400">{status}</span>
-                  <img
-                    src={api.lessonThumbUrl(l.id)}
-                    alt=""
-                    className="w-12 aspect-video object-cover rounded bg-neutral-800 shrink-0"
-                    loading="lazy"
-                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-                  />
-                  <span className="flex-1 truncate">{l.title}</span>
+                  <span className={`w-5 shrink-0 text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
+                    {estado || posicao.get(l.id)}
+                  </span>
+                  <span className="relative shrink-0">
+                    <img
+                      src={api.lessonThumbUrl(l.id)}
+                      alt=""
+                      className="aspect-video w-24 rounded bg-neutral-800 object-cover"
+                      loading="lazy"
+                      onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
+                    />
+                    {l.durationSec != null && (
+                      <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
+                        {formatDuration(l.durationSec)}
+                      </span>
+                    )}
+                  </span>
+                  <span className={`line-clamp-2 min-w-0 flex-1 ${l.completed && !atual ? 'text-neutral-400' : 'text-neutral-100'}`}>
+                    {l.title}
+                  </span>
                 </button>
               );
             })}
-          </div>
-        ))}
-      </div>
-    </>
+          </section>
+        );
+      })}
+    </div>
   );
 }

@@ -11,7 +11,7 @@ import PlaylistSidebar from '../components/PlaylistSidebar';
 import EndOfLessonCountdown from '../components/EndOfLessonCountdown';
 import HelpLink from '../components/HelpLink';
 import { ATALHOS } from '../help/content';
-import { ArrowLeft, Camera, SkipBack, SkipForward, Check, PanelRight, Repeat, HelpCircle, X, Expand, Cards } from '../components/icons';
+import { ArrowLeft, Camera, SkipBack, SkipForward, Check, Repeat, HelpCircle, X, Expand, Cards } from '../components/icons';
 import FlashcardsPanel from '../components/FlashcardsPanel';
 
 type SaveState = 'idle' | 'saved' | 'error';
@@ -61,10 +61,8 @@ export default function Lesson() {
   const mountedRef = useRef(true);
   const noticeTimer = useRef(0);
   const savedTimer = useRef(0);
-  const chromeTimer = useRef(0);
   const seekFlashTimer = useRef(0);
   const lastTapRef = useRef<{ left: number; right: number }>({ left: 0, right: 0 });
-  const [chrome, setChrome] = useState(true);
   // Gesto "segurar = 2×" (estilo YouTube): timer do long-press + taxa anterior.
   const boostTimer = useRef(0);
   const boostRef = useRef(false);
@@ -77,8 +75,8 @@ export default function Lesson() {
   const [coarsePointer] = useState<boolean>(
     () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches,
   );
-  const [sidebar, setSidebar] = useState<boolean>(() => getPref('player.sidebar', false));
-  const [cards, setCards] = useState(false);
+  // Coluna ao lado do vídeo: a lista de aulas ou os flashcards da aula.
+  const [aba, setAba] = useState<'aulas' | 'flashcards'>('aulas');
   const [autoplay, setAutoplay] = useState<boolean>(() => getPref('player.autoplay', true));
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Veredito real de reprodução (formato de DENTRO do arquivo — a extensão mente
@@ -273,12 +271,6 @@ export default function Lesson() {
       if (e.key === 'Escape') {
         if (help) return setHelp(false);
         if (confirmCover) return setConfirmCover(false);
-        if (cards) return setCards(false);
-        if (sidebar) {
-          setSidebar(false);
-          setPref('player.sidebar', false);
-          return;
-        }
         if (lesson) {
           save();
           navigate(`/course/${lesson.courseId}`);
@@ -320,53 +312,29 @@ export default function Lesson() {
           if (lesson?.prevLessonId) goTo(lesson.prevLessonId);
           break;
         case 'c':
-          toggleCards();
+          setAba((a) => (a === 'flashcards' ? 'aulas' : 'flashcards'));
           break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lesson, navigate, save, goTo, sidebar, cards, help, confirmCover, toggleFullscreen, ajudaAberta]);
+  }, [lesson, navigate, save, goTo, help, confirmCover, toggleFullscreen, ajudaAberta]);
 
-  // Revela o chrome e agenda o auto-esconder (2,5 s). Modelo "revelar + sumir
-  // sozinho" (estilo YouTube), nunca "alternar": qualquer interação no palco só
-  // mostra a barra, que some sozinha. Isso evita acoplar o chrome custom aos
-  // controles nativos do <video> — o clique nos controles nativos é retargetado
-  // para o próprio <video>, então "alternar" fecharia a barra ao tocar no play.
-  const wake = useCallback(() => {
-    setChrome(true);
-    window.clearTimeout(chromeTimer.current);
-    chromeTimer.current = window.setTimeout(() => setChrome(false), 2500);
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('mousemove', wake);
-    wake();
-    return () => {
-      window.removeEventListener('mousemove', wake);
-      window.clearTimeout(chromeTimer.current);
-    };
-  }, [wake]);
-
-  // No touch/caneta o mousemove não dispara, então sem isto a barra sumiria de
-  // vez após o timeout inicial. Um toque no palco (incl. nos controles nativos,
-  // cujo clique é retargetado ao <video>) apenas revela o chrome via wake().
-  //
   // Os gestos de toque moram AQUI, por coordenada, e não em camadas sobre o
   // vídeo: qualquer elemento cobrindo o <video> impedia o Chrome Android de
   // mostrar os controles nativos no retrato (toque nunca chegava ao vídeo).
   const onStagePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     if (e.pointerType === 'mouse') return;
-    wake();
     pressingRef.current = true;
-    // Faixa útil dos gestos exclui o chrome (topo) e o transporte nativo do
-    // <video> (rodapé): tocar/arrastar controles nunca dispara gesto.
-    const h = window.innerHeight;
-    if (e.clientY < 96 || e.clientY > h - 72) return;
+    // Faixa útil dos gestos exclui o transporte nativo do <video> (rodapé):
+    // tocar/arrastar controles nunca dispara gesto. Medida no palco, que não
+    // ocupa mais a tela inteira (a lista de aulas fica ao lado).
+    const r = e.currentTarget.getBoundingClientRect();
+    if (e.clientY > r.bottom - 72) return;
     // Double-tap nos terços laterais = ±10s. O toque também chega ao <video>
     // (revela os controles nativos) — mesmo comportamento do YouTube.
-    const w = window.innerWidth;
-    const side = e.clientX < w / 3 ? 'left' : e.clientX > (2 * w) / 3 ? 'right' : null;
+    const x = e.clientX - r.left;
+    const side = x < r.width / 3 ? 'left' : x > (2 * r.width) / 3 ? 'right' : null;
     if (side) {
       const now = Date.now();
       if (now - lastTapRef.current[side] < 300) {
@@ -579,23 +547,6 @@ export default function Lesson() {
     }, 650);
   }, []);
 
-  // Lista de aulas e flashcards ocupam o mesmo lado da tela: abrir um fecha o outro.
-  const toggleSidebar = () =>
-    setSidebar((s) => {
-      const n = !s;
-      setPref('player.sidebar', n);
-      if (n) setCards(false);
-      return n;
-    });
-  function toggleCards() {
-    setCards((c) => {
-      if (!c) {
-        setSidebar(false);
-        setPref('player.sidebar', false);
-      }
-      return !c;
-    });
-  }
   const toggleAutoplay = () =>
     setAutoplay((a) => {
       const n = !a;
@@ -801,78 +752,26 @@ export default function Lesson() {
     );
   }
 
+  const ABA = 'flex-1 border-b-2 px-3 py-2.5 text-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600';
+
+  // Página de assistir no estilo YouTube: o vídeo à esquerda e, ao lado, a lista
+  // de aulas e os flashcards em abas. Antes o player ocupava a tela inteira e a
+  // lista abria por cima do vídeo, então trocar de aula pedia abrir um painel.
+  // Tela cheia continua no F (só o vídeo).
   return (
-    <div
-      className="relative h-screen bg-black"
-      onPointerDown={onStagePointerDown}
-      onPointerUp={endStagePress}
-      onPointerCancel={endStagePress}
-      onContextMenu={(e) => {
-        if (pressingRef.current) e.preventDefault();
-      }}
-    >
-      <video
-        key={videoKey}
-        ref={videoRef}
-        src={`/api/lessons/${id}/stream`}
-        className="w-full h-screen object-contain bg-black"
-        controls
-        autoPlay
-        playsInline
-        onLoadedMetadata={onLoaded}
-        onTimeUpdate={onTimeUpdate}
-        onPause={() => save()}
-        onEnded={onEnded}
-        onError={onVideoError}
-      />
-
-      {coarsePointer && (
-        // Só INDICADORES (pointer-events-none): nada pode cobrir o <video>,
-        // senão o Chrome Android nunca mostra os controles nativos no retrato.
-        <div className="pointer-events-none absolute inset-0 z-10" aria-hidden="true">
-          <div className="absolute inset-y-0 left-0 flex w-1/3 items-center justify-center">
-            <span
-              className={`rounded-full bg-black/70 px-4 py-2 text-sm text-white transition-opacity duration-300 motion-reduce:transition-none ${seekFlash === 'back' ? 'opacity-100' : 'opacity-0'}`}
-            >
-              -10s
-            </span>
-          </div>
-          <div className="absolute inset-y-0 right-0 flex w-1/3 items-center justify-center">
-            <span
-              className={`rounded-full bg-black/70 px-4 py-2 text-sm text-white transition-opacity duration-300 motion-reduce:transition-none ${seekFlash === 'fwd' ? 'opacity-100' : 'opacity-0'}`}
-            >
-              +10s
-            </span>
-          </div>
-          {boost && (
-            <span className="absolute left-1/2 top-24 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm font-medium text-white">
-              2×
-            </span>
-          )}
-        </div>
-      )}
-
-      <div
-        className={`absolute top-0 inset-x-0 z-20 pb-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 motion-reduce:transition-none ${chrome || sidebar || cards || saveState === 'error' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-        style={{
-          paddingTop: 'max(1rem, env(safe-area-inset-top))',
-          paddingLeft: 'max(1rem, env(safe-area-inset-left))',
-          paddingRight: 'max(1rem, env(safe-area-inset-right))',
-        }}
-      >
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm sm:flex-nowrap sm:gap-3">
+    <div className="relative flex min-h-screen flex-col bg-studio-black lg:h-screen lg:flex-row">
+      <main className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
+        <div
+          className="flex items-center gap-3 px-4 pb-3 text-sm"
+          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+        >
           <IconButton label="Voltar ao curso (Esc)" onClick={() => navigate(`/course/${lesson.courseId}`)}>
             <ArrowLeft />
           </IconButton>
-          {/* No celular o título cai para uma 2ª linha (w-full order-last) com largura
-              total; no desktop fica inline entre o voltar e os controles. */}
-          <span className="order-last w-full min-w-0 truncate text-neutral-300 sm:order-none sm:w-auto sm:flex-1">
-            {lesson.courseTitle} · {lesson.title}
-          </span>
-
+          <span className="min-w-0 flex-1 truncate text-neutral-400">{lesson.courseTitle}</span>
           {saveState === 'saved' && (
             <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-400">
-              <Check size={14} /> <span className="hidden sm:inline">Salvo</span>
+              <Check size={14} /> Salvo
             </span>
           )}
           {saveState === 'error' && (
@@ -883,18 +782,69 @@ export default function Lesson() {
               </button>
             </span>
           )}
+          {/* Atalhos de teclado — irrelevante no touch, ocultado no celular */}
+          <div className="hidden sm:block">
+            <IconButton label="Atalhos de teclado (?)" onClick={() => setHelp(true)}>
+              <HelpCircle />
+            </IconButton>
+          </div>
+        </div>
 
-          <div className="ml-auto flex shrink-0 items-center gap-2 sm:ml-0 sm:gap-4">
-            {/* Navegação entre aulas */}
-            <div className="flex items-center gap-1">
-              <IconButton label="Aula anterior (P)" disabled={!lesson.prevLessonId} onClick={() => lesson.prevLessonId && goTo(lesson.prevLessonId)}>
-                <SkipBack />
-              </IconButton>
-              <IconButton label="Próxima aula (N)" disabled={!lesson.nextLessonId} onClick={() => lesson.nextLessonId && goTo(lesson.nextLessonId)}>
-                <SkipForward />
-              </IconButton>
+        <div
+          className="relative bg-black"
+          onPointerDown={onStagePointerDown}
+          onPointerUp={endStagePress}
+          onPointerCancel={endStagePress}
+          onContextMenu={(e) => {
+            if (pressingRef.current) e.preventDefault();
+          }}
+        >
+          <video
+            key={videoKey}
+            ref={videoRef}
+            src={`/api/lessons/${id}/stream`}
+            className="aspect-video max-h-[calc(100vh-12rem)] w-full bg-black object-contain"
+            controls
+            autoPlay
+            playsInline
+            onLoadedMetadata={onLoaded}
+            onTimeUpdate={onTimeUpdate}
+            onPause={() => save()}
+            onEnded={onEnded}
+            onError={onVideoError}
+          />
+
+          {coarsePointer && (
+            // Só INDICADORES (pointer-events-none): nada pode cobrir o <video>,
+            // senão o Chrome Android nunca mostra os controles nativos no retrato.
+            <div className="pointer-events-none absolute inset-0 z-10" aria-hidden="true">
+              <div className="absolute inset-y-0 left-0 flex w-1/3 items-center justify-center">
+                <span
+                  className={`rounded-full bg-black/70 px-4 py-2 text-sm text-white transition-opacity duration-300 motion-reduce:transition-none ${seekFlash === 'back' ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  -10s
+                </span>
+              </div>
+              <div className="absolute inset-y-0 right-0 flex w-1/3 items-center justify-center">
+                <span
+                  className={`rounded-full bg-black/70 px-4 py-2 text-sm text-white transition-opacity duration-300 motion-reduce:transition-none ${seekFlash === 'fwd' ? 'opacity-100' : 'opacity-0'}`}
+                >
+                  +10s
+                </span>
+              </div>
+              {boost && (
+                <span className="absolute left-1/2 top-6 -translate-x-1/2 rounded-full bg-black/70 px-4 py-2 text-sm font-medium text-white">
+                  2×
+                </span>
+              )}
             </div>
+          )}
+        </div>
 
+        <div className="px-4 py-4">
+          {lesson.module && <div className="text-xs text-neutral-500">{lesson.module}</div>}
+          <h1 className="mt-1 text-lg font-semibold tracking-tight text-neutral-100 text-balance">{lesson.title}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             {/* Ação principal da aula */}
             <button
               type="button"
@@ -906,73 +856,81 @@ export default function Lesson() {
               }`}
             >
               <Check size={18} />
-              <span className="hidden sm:inline">{lesson.completed ? 'Concluída' : 'Concluir'}</span>
+              {lesson.completed ? 'Concluída' : 'Concluir'}
             </button>
-
-            {/* Ferramentas */}
-            <div className="flex items-center gap-1">
-              {/* Definir capa — ação ocasional, ocultada no celular para caber a barra */}
-              {!ehRemoto && (
-                <div className="hidden sm:block">
-                  <IconButton label="Usar este frame como capa do curso" onClick={() => setConfirmCover(true)}>
-                    <Camera />
-                  </IconButton>
-                </div>
-              )}
-              <IconButton
-                label={autoplay ? 'Auto-avançar ao fim: ligado' : 'Auto-avançar ao fim: desligado'}
-                onClick={toggleAutoplay}
-                active={autoplay}
-              >
-                <Repeat off={!autoplay} />
-              </IconButton>
-              <IconButton
-                label={isFullscreen ? 'Sair da tela cheia (F)' : 'Tela cheia (F)'}
-                onClick={toggleFullscreen}
-                active={isFullscreen}
-              >
-                <Expand />
-              </IconButton>
-              <IconButton label="Flashcards da aula (C)" onClick={toggleCards} active={cards}>
-                <Cards />
-              </IconButton>
-              <IconButton label="Lista de aulas (☰)" onClick={toggleSidebar} active={sidebar}>
-                <PanelRight />
-              </IconButton>
-              {/* Atalhos de teclado — irrelevante no touch, ocultado no celular */}
+            <IconButton label="Aula anterior (P)" disabled={!lesson.prevLessonId} onClick={() => lesson.prevLessonId && goTo(lesson.prevLessonId)}>
+              <SkipBack />
+            </IconButton>
+            <IconButton label="Próxima aula (N)" disabled={!lesson.nextLessonId} onClick={() => lesson.nextLessonId && goTo(lesson.nextLessonId)}>
+              <SkipForward />
+            </IconButton>
+            <span className="mx-1 h-6 w-px bg-neutral-800" aria-hidden="true" />
+            <IconButton
+              label={autoplay ? 'Auto-avançar ao fim: ligado' : 'Auto-avançar ao fim: desligado'}
+              onClick={toggleAutoplay}
+              active={autoplay}
+            >
+              <Repeat off={!autoplay} />
+            </IconButton>
+            <IconButton
+              label={isFullscreen ? 'Sair da tela cheia (F)' : 'Tela cheia (F)'}
+              onClick={toggleFullscreen}
+              active={isFullscreen}
+            >
+              <Expand />
+            </IconButton>
+            {/* Definir capa — ação ocasional, ocultada no celular */}
+            {!ehRemoto && (
               <div className="hidden sm:block">
-                <IconButton label="Atalhos de teclado (?)" onClick={() => setHelp(true)}>
-                  <HelpCircle />
+                <IconButton label="Usar este frame como capa do curso" onClick={() => setConfirmCover(true)}>
+                  <Camera />
                 </IconButton>
               </div>
-            </div>
+            )}
           </div>
         </div>
-      </div>
+      </main>
 
-      <PlaylistSidebar
-        courseId={lesson.courseId}
-        currentLessonId={id}
-        open={sidebar}
-        onClose={() => {
-          setSidebar(false);
-          setPref('player.sidebar', false);
-        }}
-        onJump={(lid) => goTo(lid)}
-      />
-
-      <FlashcardsPanel
-        lessonId={id}
-        courseId={lesson.courseId}
-        open={cards}
-        onClose={() => setCards(false)}
-        tempoAtual={() => videoRef.current?.currentTime ?? 0}
-        onIrPara={(seg) => {
-          const v = videoRef.current;
-          if (v) v.currentTime = seg;
-        }}
-        onPausar={() => videoRef.current?.pause()}
-      />
+      <aside className="flex min-h-[50vh] flex-col border-t border-neutral-800 bg-neutral-950 lg:h-screen lg:w-96 lg:shrink-0 lg:border-l lg:border-t-0 xl:w-[26rem]">
+        <div role="tablist" aria-label="Ao lado do vídeo" className="flex shrink-0 border-b border-neutral-800">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={aba === 'aulas'}
+            onClick={() => setAba('aulas')}
+            className={`${ABA} ${aba === 'aulas' ? 'border-blue-500 text-neutral-100' : 'border-transparent text-neutral-400 hover:text-neutral-200'}`}
+          >
+            Aulas
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={aba === 'flashcards'}
+            onClick={() => setAba('flashcards')}
+            title="Flashcards da aula (C)"
+            className={`${ABA} ${aba === 'flashcards' ? 'border-blue-500 text-neutral-100' : 'border-transparent text-neutral-400 hover:text-neutral-200'}`}
+          >
+            <Cards size={14} className="mr-1.5 inline -translate-y-px" />
+            Flashcards
+          </button>
+        </div>
+        <div role="tabpanel" className="min-h-0 flex-1 overflow-y-auto">
+          {aba === 'aulas' ? (
+            <PlaylistSidebar courseId={lesson.courseId} currentLessonId={id} onJump={(lid) => goTo(lid)} />
+          ) : (
+            <FlashcardsPanel
+              lessonId={id}
+              courseId={lesson.courseId}
+              tempoAtual={() => videoRef.current?.currentTime ?? 0}
+              onIrPara={(seg) => {
+                const v = videoRef.current;
+                if (v) v.currentTime = seg;
+              }}
+              onPausar={() => videoRef.current?.pause()}
+            />
+          )}
+        </div>
+      </aside>
 
       {notice && (
         <div
