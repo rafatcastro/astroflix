@@ -14,7 +14,7 @@ import { api, type BatchImportResult, type Collection, type CourseRoot, type Cou
 import FfmpegBanner from '../components/FfmpegBanner';
 import Banner from '../components/Banner';
 import HelpLink from '../components/HelpLink';
-import { Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as SettingsIcon } from '../components/icons';
+import { Cards, Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as SettingsIcon } from '../components/icons';
 
 // Parede de capas responsiva sem cliffs de breakpoint: as colunas se ajustam ao
 // espaço, mantendo o tamanho do card constante (auto-fill).
@@ -799,6 +799,14 @@ export default function Library() {
               <Download size={18} />
             </a>
           )}
+          <Link
+            to="/flashcards"
+            aria-label="Flashcards"
+            title="Flashcards"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+          >
+            <Cards size={18} />
+          </Link>
           <Link
             to="/settings"
             aria-label="Configurações"

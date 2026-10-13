@@ -8,7 +8,7 @@ import { getAllowedRootsExtra } from '../routes/settings';
 import { isWithinRoots } from '../routes/fs';
 import { matchCourse } from './identify';
 import { mergeProgress } from './merge';
-import type { ExportedCourse, ExportedLesson, LibraryExport, ProgressState } from './format';
+import type { ExportedCourse, ExportedFlashcard, ExportedLesson, LibraryExport, ProgressState } from './format';
 
 // O arquivo de export não carrega fatos do disco (tamanho, mtime), porque eles só
 // valem na máquina de origem. Uma aula importada sem a pasta por perto nasce com
@@ -168,6 +168,29 @@ export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): voi
     'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
   );
 
+  // Importar duas vezes não duplica: o mesmo card é a mesma nota do Anki ou, se
+  // ainda não tinha chegado lá, o mesmo texto no mesmo lugar.
+  const cardJaExiste = db.prepare(`
+    SELECT 1 FROM flashcards
+    WHERE course_id IS ? AND ((? IS NOT NULL AND anki_note_id = ?) OR (frente = ? AND verso = ? AND lesson_id IS ?))
+  `);
+  const insertCard = db.prepare(`
+    INSERT INTO flashcards (id, course_id, lesson_id, minuto_sec, frente, verso, anki_note_id, pendente, criado_em, atualizado_em)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const importarCards = (courseId: string | null, cards: ExportedFlashcard[] | undefined): void => {
+    for (const f of cards ?? []) {
+      const aula = courseId && f.lessonRelPath ? (idDaAula.get(courseId, f.lessonRelPath) as { id: string } | undefined) : undefined;
+      const lessonId = aula?.id ?? null;
+      if (cardJaExiste.get(courseId, f.ankiNoteId, f.ankiNoteId, f.frente, f.verso, lessonId)) continue;
+      // Sem nota no Anki ainda: vai como pendente na próxima vez que o Anki abrir.
+      insertCard.run(
+        randomUUID(), courseId, lessonId, lessonId ? f.minutoSec : null, f.frente, f.verso,
+        f.ankiNoteId, f.ankiNoteId == null ? 'criar' : null, f.criadoEm, now,
+      );
+    }
+  };
+
   const inserirAula = (courseId: string, l: ExportedLesson, orderIndex: number): void => {
     insertLesson.run({
       id: randomUUID(),
@@ -276,6 +299,8 @@ export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): voi
         });
       }
 
+      importarCards(courseId, c.flashcards);
+
       // Só entra em biblioteca quem ainda não está em nenhuma: se a pessoa
       // organizou de outro jeito nesta máquina, foi ela quem decidiu por último.
       const colecaoLocal = c.collectionId ? idLocalDaColecao.get(c.collectionId) : undefined;
@@ -288,6 +313,8 @@ export function applyImport(db: Db, data: LibraryExport, raizes?: string[]): voi
         if (capa) defineCapa.run(capa.id, courseId);
       }
     }
+
+    importarCards(null, data.flashcardsGerais);
 
     for (const r of data.courseRoots) {
       insertCourseRoot.run(randomUUID(), r.path, r.createdAt, r.lastCheckedAt);

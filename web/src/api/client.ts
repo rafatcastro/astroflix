@@ -36,6 +36,25 @@ export interface CourseDetail {
   // Cópia local do curso do Drive: aulas no disco e se o download continua.
   download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
 }
+// Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
+export interface Flashcard {
+  id: string;
+  courseId: string | null; courseTitle: string | null;
+  lessonId: string | null; lessonTitle: string | null;
+  minutoSec: number | null;
+  frente: string; verso: string;
+  noAnki: boolean;
+  criadoEm: string;
+}
+export type EstadoAnki = 'conectado' | 'fechado' | 'erro';
+export interface ListaFlashcards { cards: Flashcard[]; anki: EstadoAnki; pendentes: number; }
+export type FiltroFlashcards = { lessonId: string } | { courseId: string } | { geral: true } | Record<string, never>;
+export interface NovoFlashcard { frente: string; verso: string; courseId?: string; lessonId?: string; minutoSec?: number; }
+const qsFlashcards = (f: FiltroFlashcards): string =>
+  'lessonId' in f ? `?lessonId=${encodeURIComponent(f.lessonId)}`
+  : 'courseId' in f ? `?courseId=${encodeURIComponent(f.courseId)}`
+  : 'geral' in f ? '?geral=1' : '';
+
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
 export interface BrowseResult { path: string | null; parent: string | null; dirs: DirEntry[]; }
@@ -223,6 +242,13 @@ export const api = {
   exportLibraryUrl: '/api/library/export',
   importPreview: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import/preview', { method: 'POST', body: JSON.stringify(data) }),
+  listarFlashcards: (f: FiltroFlashcards) => jsonFetch<ListaFlashcards>(`/api/flashcards${qsFlashcards(f)}`),
+  criarFlashcard: (c: NovoFlashcard) =>
+    jsonFetch<{ card: Flashcard; anki: EstadoAnki }>('/api/flashcards', { method: 'POST', body: JSON.stringify(c) }),
+  editarFlashcard: (id: string, c: { frente: string; verso: string }) =>
+    jsonFetch<{ card: Flashcard; anki: EstadoAnki }>(`/api/flashcards/${id}`, { method: 'PATCH', body: JSON.stringify(c) }),
+  apagarFlashcard: (id: string) => jsonFetch<{ anki: EstadoAnki }>(`/api/flashcards/${id}`, { method: 'DELETE' }),
+  ankiStatus: () => jsonFetch<{ estado: EstadoAnki; pendentes: number }>('/api/anki/status'),
   driveCriarCurso,
   driveStatus: () => jsonFetch<DriveStatus>('/api/drive/status'),
   driveDesconectar: () => jsonFetch<void>('/api/drive/auth', { method: 'DELETE' }),

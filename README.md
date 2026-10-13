@@ -185,6 +185,27 @@ progresso intacto. Biblioteca é organização, não posse.
 
 ---
 
+## Flashcards com o Anki
+
+Anote enquanto assiste: na aula, aperte **C** (ou o botão de cards no topo), escreva a frente e o
+verso e salve com **⌘/Ctrl + Enter**. O vídeo pausa enquanto você escreve, e o card guarda o minuto
+em que foi criado: clicar no minuto volta o vídeo até ali.
+
+Os cards vão para o **Anki**, onde você revisa (no computador ou, pelo AnkiWeb, no celular):
+
+- **Baralhos**: os cards de um curso vão para `Learnflix::Cursos::<nome do curso>`, e os gerais
+  para `Learnflix::Cursos`. Revisar `Learnflix::Cursos` pega tudo.
+- **Gerais e do curso todo**: ficam na tela **Flashcards**, aberta pelo botão de cards da
+  biblioteca ou pelo link **Flashcards** no topo do curso.
+- **Os dois lados conversam**: editar ou apagar um card no Anki também muda no Learnflix.
+
+**Para conectar**, instale o [Anki](https://apps.ankiweb.net) no computador e, nele, o complemento
+**AnkiConnect** (Ferramentas → Complementos → Obter complementos → código `2055492159`). Deixe o
+Anki aberto enquanto estuda. Com o Anki fechado, nada se perde: o card fica guardado no Learnflix e
+vai na próxima vez que o Anki abrir. Quem não usa Anki não precisa configurar nada.
+
+---
+
 ## Capas e durações (ffmpeg)
 
 O app funciona inteiro sem o ffmpeg — mas com ele instalado cada aula ganha uma miniatura e a
@@ -269,6 +290,7 @@ Enquanto assiste:
 | `F` | Tela cheia |
 | `M` | Mudo |
 | `N` / `P` | Próxima / aula anterior |
+| `C` | Flashcards da aula |
 | `?` | Mostra esta lista na tela |
 | `Esc` | Sai da tela cheia / volta ao curso |
 
@@ -376,6 +398,8 @@ baixar, instalar e abrir.
 - **Cursos do Google Drive.** Cole o link de uma pasta e assista sem baixar nada.
 - **Cursos do Telegram (em desenvolvimento).** Cole o link de um grupo ou canal e entre com a sua
   conta pelo QR code; os vídeos viram aulas na ordem em que foram postados.
+- **Flashcards com o Anki.** Escreva cards durante a aula; eles vão para o seu Anki, presos ao
+  minuto do vídeo.
 - **Os mesmos dados.** Quem já usava o Learnflix abre o app e encontra a biblioteca e o progresso
   exatamente como deixou.
 

@@ -12,7 +12,7 @@ import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
 import HelpLink from '../components/HelpLink';
-import { ArrowLeft, Play, Check, List, LayoutGrid } from '../components/icons';
+import { ArrowLeft, Play, Check, List, LayoutGrid, Cards } from '../components/icons';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
   const notCompleted = lessons.filter((l) => !l.completed && !l.missing && l.playable);
@@ -118,7 +118,15 @@ export default function Course() {
         >
           <ArrowLeft size={16} /> Biblioteca
         </Link>
-        <CourseMenu course={data} onEditCover={editCover} onNotice={(t) => setNotice(t)} />
+        <div className="flex items-center gap-1">
+          <Link
+            to={`/flashcards?curso=${id}`}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            <Cards size={16} /> Flashcards
+          </Link>
+          <CourseMenu course={data} onEditCover={editCover} onNotice={(t) => setNotice(t)} />
+        </div>
       </div>
 
       <h1 className="mt-4 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">{data.title}</h1>

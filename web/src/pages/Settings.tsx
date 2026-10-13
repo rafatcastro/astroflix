@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { cliqueFora } from '../lib/desktop';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type CredencialDrive, type ImportPlan } from '../api/client';
 import { getPref, setPref } from '../lib/prefs';
@@ -71,6 +71,65 @@ const CAMPOS_DRIVE: { chave: CredencialDrive; rotulo: string; segredo?: boolean 
   { chave: 'clientSecret', rotulo: 'Segredo do cliente OAuth', segredo: true },
   { chave: 'apiKey', rotulo: 'Chave de API', segredo: true },
 ];
+
+// O Anki só é tocado aqui quando a seção aparece, e só na própria máquina
+// (AnkiConnect escuta em localhost). Os flashcards funcionam sem ele: o card fica
+// guardado e vai quando o Anki abrir.
+function SecaoAnki() {
+  const { hash } = useLocation();
+  const ref = useRef<HTMLElement>(null);
+  const { data, refetch, isFetching } = useQuery({ queryKey: ['ankiStatus'], queryFn: api.ankiStatus, refetchOnWindowFocus: true });
+  // Vindo do aviso "Como conectar" (/settings#anki): leva direto para cá.
+  useEffect(() => {
+    if (hash === '#anki') ref.current?.scrollIntoView({ block: 'start' });
+  }, [hash]);
+
+  const estado = !data
+    ? 'Verificando…'
+    : data.estado === 'conectado'
+      ? 'Conectado ao Anki'
+      : data.estado === 'fechado'
+        ? 'O Anki não respondeu (fechado ou sem o AnkiConnect)'
+        : 'O Anki respondeu com erro';
+  return (
+    <section id="anki" ref={ref} className="mb-8 scroll-mt-6">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Anki</h2>
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        <span className={data?.estado === 'conectado' ? 'text-green-400' : 'text-neutral-300'}>
+          {estado}
+          {data && data.pendentes > 0 ? ` · ${data.pendentes} card${plural(data.pendentes)} esperando` : ''}
+        </span>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          disabled={isFetching}
+          className="min-h-[44px] shrink-0 rounded px-3 text-neutral-400 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+        >
+          Testar de novo
+        </button>
+      </div>
+      <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm" open={data?.estado === 'fechado'}>
+        <summary className="min-h-[44px] cursor-pointer py-2 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+          Como conectar
+        </summary>
+        <ol className="list-decimal space-y-1.5 pb-2 pl-5 text-neutral-400">
+          <li>
+            Instale o{' '}
+            <a href="https://apps.ankiweb.net" onClick={(e) => cliqueFora(e, 'https://apps.ankiweb.net')} className="underline hover:text-neutral-200">
+              Anki
+            </a>{' '}
+            no computador e entre na sua conta do AnkiWeb (Sincronizar).
+          </li>
+          <li>
+            No Anki, vá em <strong className="text-neutral-300">Ferramentas → Complementos → Obter complementos</strong> e cole o código{' '}
+            <code className="text-neutral-200">2055492159</code> (AnkiConnect). Reinicie o Anki.
+          </li>
+          <li>Deixe o Anki aberto enquanto estuda. Os cards entram no baralho Learnflix::Cursos e sincronizam com o AnkiWeb.</li>
+        </ol>
+      </details>
+    </section>
+  );
+}
 
 function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
@@ -438,6 +497,7 @@ export default function Settings() {
       </section>
 
       <SecaoDrive onNotice={setNotice} />
+      <SecaoAnki />
       <SecaoTelegram onNotice={setNotice} />
 
       <section className="mb-8">

@@ -11,7 +11,8 @@ import PlaylistSidebar from '../components/PlaylistSidebar';
 import EndOfLessonCountdown from '../components/EndOfLessonCountdown';
 import HelpLink from '../components/HelpLink';
 import { ATALHOS } from '../help/content';
-import { ArrowLeft, Camera, SkipBack, SkipForward, Check, PanelRight, Repeat, HelpCircle, X, Expand } from '../components/icons';
+import { ArrowLeft, Camera, SkipBack, SkipForward, Check, PanelRight, Repeat, HelpCircle, X, Expand, Cards } from '../components/icons';
+import FlashcardsPanel from '../components/FlashcardsPanel';
 
 type SaveState = 'idle' | 'saved' | 'error';
 type Notice = { kind: 'success' | 'error'; text: string };
@@ -77,6 +78,7 @@ export default function Lesson() {
     () => typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches,
   );
   const [sidebar, setSidebar] = useState<boolean>(() => getPref('player.sidebar', false));
+  const [cards, setCards] = useState(false);
   const [autoplay, setAutoplay] = useState<boolean>(() => getPref('player.autoplay', true));
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Veredito real de reprodução (formato de DENTRO do arquivo — a extensão mente
@@ -257,6 +259,12 @@ export default function Lesson() {
       // Painel de ajuda aberto: ele é dono do teclado (inclusive do Esc, que
       // fecha o painel e não a aula). O player fica inteiramente suspenso.
       if (ajudaAberta) return;
+      // Escrevendo um flashcard: as teclas são texto, não atalhos do player.
+      const alvo = e.target as HTMLElement | null;
+      if (alvo && (alvo.tagName === 'TEXTAREA' || alvo.tagName === 'INPUT' || alvo.isContentEditable)) {
+        if (e.key === 'Escape') alvo.blur();
+        return;
+      }
       if (e.key === '?') {
         e.preventDefault();
         setHelp((h) => !h);
@@ -265,6 +273,7 @@ export default function Lesson() {
       if (e.key === 'Escape') {
         if (help) return setHelp(false);
         if (confirmCover) return setConfirmCover(false);
+        if (cards) return setCards(false);
         if (sidebar) {
           setSidebar(false);
           setPref('player.sidebar', false);
@@ -310,11 +319,14 @@ export default function Lesson() {
         case 'p':
           if (lesson?.prevLessonId) goTo(lesson.prevLessonId);
           break;
+        case 'c':
+          toggleCards();
+          break;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lesson, navigate, save, goTo, sidebar, help, confirmCover, toggleFullscreen, ajudaAberta]);
+  }, [lesson, navigate, save, goTo, sidebar, cards, help, confirmCover, toggleFullscreen, ajudaAberta]);
 
   // Revela o chrome e agenda o auto-esconder (2,5 s). Modelo "revelar + sumir
   // sozinho" (estilo YouTube), nunca "alternar": qualquer interação no palco só
@@ -531,12 +543,23 @@ export default function Lesson() {
     }, 650);
   }, []);
 
+  // Lista de aulas e flashcards ocupam o mesmo lado da tela: abrir um fecha o outro.
   const toggleSidebar = () =>
     setSidebar((s) => {
       const n = !s;
       setPref('player.sidebar', n);
+      if (n) setCards(false);
       return n;
     });
+  function toggleCards() {
+    setCards((c) => {
+      if (!c) {
+        setSidebar(false);
+        setPref('player.sidebar', false);
+      }
+      return !c;
+    });
+  }
   const toggleAutoplay = () =>
     setAutoplay((a) => {
       const n = !a;
@@ -792,7 +815,7 @@ export default function Lesson() {
       )}
 
       <div
-        className={`absolute top-0 inset-x-0 z-20 pb-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 motion-reduce:transition-none ${chrome || sidebar || saveState === 'error' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+        className={`absolute top-0 inset-x-0 z-20 pb-4 bg-gradient-to-b from-black/80 to-transparent transition-opacity duration-300 motion-reduce:transition-none ${chrome || sidebar || cards || saveState === 'error' ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         style={{
           paddingTop: 'max(1rem, env(safe-area-inset-top))',
           paddingLeft: 'max(1rem, env(safe-area-inset-left))',
@@ -872,6 +895,9 @@ export default function Lesson() {
               >
                 <Expand />
               </IconButton>
+              <IconButton label="Flashcards da aula (C)" onClick={toggleCards} active={cards}>
+                <Cards />
+              </IconButton>
               <IconButton label="Lista de aulas (☰)" onClick={toggleSidebar} active={sidebar}>
                 <PanelRight />
               </IconButton>
@@ -895,6 +921,19 @@ export default function Lesson() {
           setPref('player.sidebar', false);
         }}
         onJump={(lid) => goTo(lid)}
+      />
+
+      <FlashcardsPanel
+        lessonId={id}
+        courseId={lesson.courseId}
+        open={cards}
+        onClose={() => setCards(false)}
+        tempoAtual={() => videoRef.current?.currentTime ?? 0}
+        onIrPara={(seg) => {
+          const v = videoRef.current;
+          if (v) v.currentTime = seg;
+        }}
+        onPausar={() => videoRef.current?.pause()}
       />
 
       {notice && (

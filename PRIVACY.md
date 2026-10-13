@@ -33,6 +33,14 @@ Dispositivos. Com ela, o app:
 O app **nunca** envia, apaga ou altera mensagens, não lê suas conversas particulares e não mexe nos
 seus contatos.
 
+## O que o app faz com o Anki
+
+Se você usa flashcards, o app fala com o **Anki aberto no seu computador**, pelo complemento
+AnkiConnect, sem passar pela internet. Ele cria o tipo de nota "Learnflix" e os baralhos
+`Learnflix::Cursos…`, adiciona, edita e apaga **só os cards que você criou no Learnflix**, lê esses
+mesmos cards para mostrar as edições feitas no Anki e pede ao Anki para sincronizar com a sua conta
+do AnkiWeb. Uma cópia dos cards fica no banco do app (`app.db`).
+
 ## Onde os dados ficam
 
 Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
