@@ -147,16 +147,10 @@ detalhes do que o app lê estão na [política de privacidade](PRIVACY.md).
 
 ---
 
-## Cursos do Telegram *(em desenvolvimento)*
+## Cursos do Telegram
 
 Grupo ou canal do Telegram com as aulas postadas também vira curso. Clique em **Adicionar ▾ → Do
 Telegram** e cole o link (`t.me/…`).
-
-> **Ainda em teste.** Por enquanto a opção só aparece rodando o app pelo código (`pnpm dev`, veja
-> [Desenvolvimento](#desenvolvimento)), com o selo **Em desenvolvimento**, até ser validada com
-> contas reais. Para experimentar, crie um app em [my.telegram.org](https://my.telegram.org) →
-> **API development tools** e cole o `api_id` e o `api_hash` em **Configurações → Telegram → Usar
-> um app próprio do Telegram**.
 
 - **Com a sua conta**: na primeira vez, o app mostra um QR code. No celular, abra o Telegram →
   **Configurações → Dispositivos → Conectar dispositivo** e aponte para a tela. A sessão aparece lá
@@ -396,8 +390,9 @@ baixar, instalar e abrir.
 
 - **Sem terminal e sem Node.** O instalador traz tudo dentro.
 - **Atualiza sozinho.** Quando sai versão nova, o app avisa e se atualiza com um clique.
-- **Cursos do Google Drive.** Cole o link de uma pasta e assista sem baixar nada.
-- **Cursos do Telegram (em desenvolvimento).** Cole o link de um grupo ou canal e entre com a sua
+- **Cursos do Google Drive.** Cole o link de uma pasta; cada aula que você abre (e as duas
+  seguintes) é baixada para tocar sem depender da internet.
+- **Cursos do Telegram.** Cole o link de um grupo ou canal e entre com a sua
   conta pelo QR code; os vídeos viram aulas na ordem em que foram postados.
 - **Flashcards com o Anki.** Escreva cards durante a aula; eles vão para o seu Anki, presos ao
   minuto do vídeo.
