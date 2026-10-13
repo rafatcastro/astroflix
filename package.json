@@ -36,7 +36,10 @@
     "start": "node dist/learnflix.cjs",
     "build:binario": "node scripts/build-binario.mjs",
     "test": "node scripts/gerar-bundled.mjs && pnpm --filter server test && pnpm --filter web test",
-    "repo": "node scripts/definir-repo.mjs"
+    "repo": "node scripts/definir-repo.mjs",
+    "desktop:preparar": "pnpm build && pnpm build:binario && node scripts/preparar-sidecar.mjs && node scripts/sincronizar-versao.mjs",
+    "desktop:dev": "pnpm desktop:preparar && pnpm --filter desktop tauri dev",
+    "desktop:build": "pnpm desktop:preparar && pnpm --filter desktop tauri build"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
