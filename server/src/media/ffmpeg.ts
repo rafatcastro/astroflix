@@ -54,7 +54,14 @@ export interface MediaFormat {
   videoCodec: string | null;
   profile: string | null;
   pixFmt: string | null;
+  /** codec_tag_string do vídeo: o WebKit só toca HEVC marcado como hvc1, não hev1. */
+  codecTag: string | null;
   audioCodec: string | null;
+}
+
+/** O que o player da janela decodifica além do básico (H.264 8-bit), perguntado ao próprio <video>. */
+export interface Capacidades {
+  hevc: boolean;
 }
 
 // Formato REAL do arquivo (o container/codec de dentro, não a extensão — que mente:
@@ -64,7 +71,7 @@ export function probeFormat(videoPath: string): Promise<MediaFormat | null> {
     const p = spawn('ffprobe', [
       '-v', 'error',
       '-show_entries', 'format=format_name',
-      '-show_entries', 'stream=codec_type,codec_name,profile,pix_fmt',
+      '-show_entries', 'stream=codec_type,codec_name,profile,pix_fmt,codec_tag_string',
       '-of', 'json',
       videoPath,
     ]);
@@ -83,6 +90,7 @@ export function probeFormat(videoPath: string): Promise<MediaFormat | null> {
           videoCodec: video?.codec_name ?? null,
           profile: video?.profile ?? null,
           pixFmt: video?.pix_fmt ?? null,
+          codecTag: video?.codec_tag_string ?? null,
           audioCodec: audio?.codec_name ?? null,
         });
       } catch {
@@ -94,40 +102,51 @@ export function probeFormat(videoPath: string): Promise<MediaFormat | null> {
 
 export type Playback = { playable: true } | { playable: false; reason: 'container' | 'codec'; remuxable: boolean };
 
-// Reproduzibilidade REAL no <video> do navegador. Regras conservadoras, guiadas
-// pelos casos observados no acervo:
-// - MPEG-TS (mesmo com .mp4 na extensão): navegador não demuxa TS. Se os codecs
-//   de dentro são h264+aac, um remux -c copy (sem recodificar) resolve.
-// - H.264 além de 8-bit 4:2:0 (High 10/4:2:2/4:4:4): navegador não decodifica;
-//   precisa de transcodificação de verdade.
-// - HEVC/H.265: sem suporte confiável no Chrome — requer transcode.
-export function classifyPlayback(fmt: MediaFormat): Playback {
+// Reproduzibilidade REAL no <video> da janela. Regras guiadas pelos casos do acervo:
+// - MPEG-TS (mesmo com .mp4 na extensão): o player não demuxa TS. Se os codecs
+//   de dentro ele toca, um remux -c copy (sem recodificar) resolve.
+// - H.264 além de 8-bit 4:2:0 (High 10/4:2:2/4:4:4): ninguém decodifica; só
+//   recodificando.
+// - HEVC/H.265: depende do player. A janela do macOS (WebKit) toca, desde que o
+//   vídeo venha marcado como hvc1 (hev1 precisa só de um remux trocando a marca);
+//   a do Windows só com a extensão HEVC instalada. Por isso quem diz é `cap`, que a
+//   interface pergunta ao próprio <video> em vez de supor o pior.
+const AUDIO_EM_MP4 = new Set(['aac', 'mp3']);
+
+export function classifyPlayback(fmt: MediaFormat, cap: Capacidades = { hevc: false }): Playback {
+  const hevc = fmt.videoCodec === 'hevc' || fmt.videoCodec === 'h265';
+  const audioOk = fmt.audioCodec === null || AUDIO_EM_MP4.has(fmt.audioCodec);
+  const videoOk = (fmt.videoCodec === 'h264' && !h264AlemDe8Bit(fmt)) || (hevc && cap.hevc);
   if (fmt.formatName.includes('mpegts')) {
-    const remuxable = fmt.videoCodec === 'h264' && (fmt.audioCodec === null || fmt.audioCodec === 'aac');
-    return { playable: false, reason: 'container', remuxable };
+    return { playable: false, reason: 'container', remuxable: videoOk && audioOk };
   }
-  if (fmt.videoCodec === 'hevc' || fmt.videoCodec === 'h265') {
+  if (hevc) {
+    if (!cap.hevc) return { playable: false, reason: 'codec', remuxable: false };
+    if ((fmt.codecTag ?? '').toLowerCase() !== 'hvc1') return { playable: false, reason: 'container', remuxable: audioOk };
+    return { playable: true };
+  }
+  if (fmt.videoCodec === 'h264' && h264AlemDe8Bit(fmt)) {
     return { playable: false, reason: 'codec', remuxable: false };
   }
-  if (fmt.videoCodec === 'h264') {
-    const p = (fmt.profile ?? '').toLowerCase();
-    const px = fmt.pixFmt ?? '';
-    if (p.includes('10') || p.includes('422') || p.includes('444') || /10le|12le|422|444/.test(px)) {
-      return { playable: false, reason: 'codec', remuxable: false };
-    }
-  }
   return { playable: true };
+}
+
+function h264AlemDe8Bit(fmt: MediaFormat): boolean {
+  const p = (fmt.profile ?? '').toLowerCase();
+  return p.includes('10') || p.includes('422') || p.includes('444') || /10le|12le|422|444/.test(fmt.pixFmt ?? '');
 }
 
 // Remux TS→MP4 sem recodificar (-c copy): rápido, zero perda. Pega a primeira
 // trilha de vídeo e a primeira de áudio (TS dual-audio vira áudio único) e move
 // o moov pro início (+faststart) para o navegador começar a tocar sem baixar tudo.
-export function remuxToMp4(inPath: string, outPath: string): Promise<void> {
+// HEVC sai marcado como hvc1, a única marca que o WebKit aceita.
+export function remuxToMp4(inPath: string, outPath: string, opts: { hevc?: boolean } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const args = [
       '-y', '-i', inPath,
       '-map', '0:v:0', '-map', '0:a:0?',
       '-c', 'copy',
+      ...(opts.hevc ? ['-tag:v', 'hvc1'] : []),
       '-movflags', '+faststart',
       '-f', 'mp4',
       outPath,
@@ -138,11 +157,51 @@ export function remuxToMp4(inPath: string, outPath: string): Promise<void> {
   });
 }
 
+// Recodifica para H.264 8-bit + AAC, o que toda janela toca. É o último recurso
+// (lento e com alguma perda), para H.264 10-bit e para HEVC onde o player não o
+// decodifica. `aoAvancar` recebe 0–1, lido do -progress do ffmpeg.
+export function transcodeToMp4(
+  inPath: string,
+  outPath: string,
+  duracaoSec: number | null,
+  aoAvancar?: (fracao: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-y', '-i', inPath,
+      '-map', '0:v:0', '-map', '0:a:0?',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '160k',
+      '-movflags', '+faststart',
+      '-progress', 'pipe:1', '-nostats',
+      '-f', 'mp4',
+      outPath,
+    ];
+    const p = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+    let resto = '';
+    p.stdout.on('data', (d) => {
+      resto += String(d);
+      const linhas = resto.split('\n');
+      resto = linhas.pop() ?? '';
+      for (const l of linhas) {
+        const m = /^out_time_us=(\d+)/.exec(l);
+        if (m && duracaoSec && aoAvancar) aoAvancar(Math.min(1, Number(m[1]) / 1e6 / duracaoSec));
+      }
+    });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg transcode saiu com código ${code}`))));
+  });
+}
+
 // Validação do convertido antes de servi-lo no lugar do original: precisa ser
 // tocável de verdade E ter a mesma duração do original (±2s).
-export async function validateConverted(originalPath: string, convertedPath: string): Promise<boolean> {
+export async function validateConverted(
+  originalPath: string,
+  convertedPath: string,
+  cap: Capacidades = { hevc: false },
+): Promise<boolean> {
   const fmt = await probeFormat(convertedPath);
-  if (!fmt || !classifyPlayback(fmt).playable) return false;
+  if (!fmt || !classifyPlayback(fmt, cap).playable) return false;
   const [dOrig, dConv] = await Promise.all([probeDurationSec(originalPath), probeDurationSec(convertedPath)]);
   if (dOrig === null || dConv === null) return false;
   return Math.abs(dOrig - dConv) <= 2;

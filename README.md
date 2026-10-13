@@ -275,10 +275,10 @@ por exemplo. O navegador não toca, e o Learnflix explica o motivo em vez de mos
 Quando dá para consertar sem perda de qualidade, aparece o botão **Converter agora (sem perda)**: a
 conversão leva segundos, é gravada à parte e **o arquivo original não é tocado**.
 
-Quando o codec em si é incompatível (H.264 10-bit, HEVC), a única saída é recodificar de verdade —
-lento e com perda. O Learnflix não faz isso por você: converta a aula para H.264 8-bit com o
-[HandBrake](https://handbrake.fr) ou o VLC, substitua o arquivo na pasta do curso e use
-**Re-escanear agora** no menu do curso. O progresso é preservado.
+Quando o codec em si não toca na janela (H.264 10-bit, ou HEVC no Windows sem a extensão HEVC),
+aparece **Converter para assistir**: o Learnflix recodifica a aula para H.264 com o ffmpeg, com uma
+barra de andamento. Leva alguns minutos, e o original também não é tocado. No Mac, HEVC toca
+direto: o app pergunta ao player o que ele reproduz em vez de supor o pior.
 
 ---
 
