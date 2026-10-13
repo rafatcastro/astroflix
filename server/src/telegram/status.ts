@@ -22,6 +22,8 @@ export function statusDaFalhaTelegram(tipo: TipoFalhaTelegram): number {
 }
 
 const POR_CODIGO: Array<[RegExp, TipoFalhaTelegram]> = [
+  // api_id/api_hash recusados: é o app do Telegram que está mal configurado.
+  [/^(API_ID_INVALID|API_ID_PUBLISHED_FLOOD)$/, 'sem-credenciais'],
   [/^(CHANNEL_PRIVATE|CHANNEL_INVALID|CHAT_FORBIDDEN|CHAT_ID_INVALID|PEER_ID_INVALID|CHANNEL_PUBLIC_GROUP_NA)$/, 'sem-acesso'],
   [/^(USERNAME_NOT_OCCUPIED|USERNAME_INVALID)$/, 'nao-encontrado'],
   [/^INVITE_HASH_(EXPIRED|INVALID|EMPTY)$/, 'convite-invalido'],
