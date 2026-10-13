@@ -101,8 +101,10 @@ export default function CourseMenu({
       if ('status' in res) return onNotice('Pasta indisponível — se ela mudou de lugar, re-aponte pelo menu.');
       invalidate();
       onNotice(res.added || res.missing || res.relinked ? `Atualizado: +${res.added} novas, ${res.missing} faltando.` : 'Nada mudou.');
-    } catch {
-      onNotice('Falha na operação. Tente novamente.');
+    } catch (e) {
+      onNotice(e instanceof Error && e.message === 'carregando'
+        ? 'A pasta ainda está sendo lida. Espere terminar e tente de novo.'
+        : 'Falha na operação. Tente novamente.');
     }
   };
 

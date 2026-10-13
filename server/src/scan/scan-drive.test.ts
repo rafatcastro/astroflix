@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { openDb } from '../db/index';
 import { loadConfig } from '../config';
-import { aguardarCapas, createCourseFromDrive, reconcileDriveCourse, type DepsIngestao } from './scan-drive';
+import { aguardarCapas, createCourseFromDrive, importacaoDrive, reconcileDriveCourse, type DepsIngestao } from './scan-drive';
+import { FalhaDrive } from '../drive/tipos';
 import type { ArquivoDrive, ClienteDrive } from '../drive/api';
 
 const PASTA = 'application/vnd.google-apps.folder';
@@ -76,6 +77,7 @@ describe('createCourseFromDrive', () => {
   it('cria curso drive com módulos, remote_id e duração', async () => {
     const { deps, db } = montar((async () => new Response('img')) as typeof fetch);
     const { id, existente } = await createCourseFromDrive(db, deps, link, 'https://drive.google.com/x');
+    await aguardarCapas();
     expect(existente).toBe(false);
     const c: any = db.prepare('SELECT * FROM courses WHERE id=?').get(id);
     expect(c).toMatchObject({
@@ -141,6 +143,7 @@ describe('reconcileDriveCourse', () => {
   it('rescan drive: aula nova entra, sumida fica missing, progresso preservado', async () => {
     const { deps, db, arvore } = montar(imgs);
     const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
     const v1: any = db.prepare("SELECT id FROM lessons WHERE course_id=? AND rel_path LIKE '%ola%'").get(id);
     db.prepare('INSERT INTO progress (lesson_id, position_sec, furthest_sec, completed, auto_completed, updated_at) VALUES (?,?,?,?,?,?)')
       .run(v1.id, 42, 42, 0, 0, 'x');
@@ -163,6 +166,7 @@ describe('reconcileDriveCourse', () => {
   it('rescan drive atualiza remote_id de arquivo re-enviado com o mesmo nome', async () => {
     const { deps, db, arvore } = montar(imgs);
     const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
     const antes: any = db.prepare("SELECT id FROM lessons WHERE remote_id='v2'").get();
     arvore.m1 = [arvore.m1[0], arq('v2-novo', '02 - setup.mp4', { videoMediaMetadata: { durationMillis: '5000' } })];
     await reconcileDriveCourse(db, deps, id);
@@ -180,5 +184,46 @@ describe('reconcileDriveCourse', () => {
     expect(b).toEqual({ id: a.id, existente: true });
     expect((db.prepare('SELECT archived FROM courses WHERE id=?').get(a.id) as any).archived).toBe(0);
     expect((db.prepare('SELECT COUNT(*) n FROM courses').get() as any).n).toBe(1);
+  });
+
+  // Colar o link não pode esperar a pasta inteira: o curso nasce com a raiz e as
+  // aulas entram enquanto as subpastas são listadas.
+  it('volta antes de listar as subpastas e as aulas vão entrando', async () => {
+    const { deps, db } = montar(imgs);
+    let soltar!: () => void;
+    const portao = new Promise<void>((ok) => { soltar = ok; });
+    const listar = deps.cliente.listarFilhos;
+    deps.cliente.listarFilhos = async (id) => {
+      if (id === 'm1') await portao;
+      return listar(id);
+    };
+
+    const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    const aulas = () => (db.prepare('SELECT COUNT(*) n FROM lessons WHERE course_id=?').get(id) as any).n;
+    expect((db.prepare('SELECT title FROM courses WHERE id=?').get(id) as any).title).toBe('Curso Drive');
+    expect(importacaoDrive(id)).toEqual({ carregando: true, erro: null });
+    expect(aulas()).toBe(0);
+
+    soltar();
+    await aguardarCapas();
+    expect(aulas()).toBe(2);
+    expect(importacaoDrive(id)).toEqual({ carregando: false, erro: null });
+  });
+
+  it('erro na raiz volta na hora (o modal mostra); erro no meio fica no estado do curso', async () => {
+    const { deps, db } = montar(imgs);
+    const original = deps.cliente.getArquivo;
+    deps.cliente.getArquivo = async () => { throw new FalhaDrive('sem-acesso'); };
+    await expect(createCourseFromDrive(db, deps, link, 'l')).rejects.toMatchObject({ tipo: 'sem-acesso' });
+    expect((db.prepare('SELECT COUNT(*) n FROM courses').get() as any).n).toBe(0);
+
+    deps.cliente.getArquivo = original;
+    deps.cliente.listarFilhos = async (pasta) => {
+      if (pasta === 'm1') throw new FalhaDrive('cota-esgotada');
+      return [arq('m1', 'Modulo 1', { mimeType: PASTA })];
+    };
+    const { id } = await createCourseFromDrive(db, deps, link, 'l');
+    await aguardarCapas();
+    expect(importacaoDrive(id)).toEqual({ carregando: false, erro: 'cota-esgotada' });
   });
 });
