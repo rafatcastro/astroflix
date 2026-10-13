@@ -40,9 +40,16 @@ export function arquivoDoCurso(rootPath: string, relPath: string): string | null
 
 const ehVideo = (nome: string) => VIDEO_EXTS.has(path.extname(nome).toLowerCase());
 
-// Para no primeiro vídeo: a pergunta é só "tem vídeo aqui dentro?", e uma estante
-// de cursos num HD de rede pode ter milhares de arquivos.
-function temVideo(dir: string): boolean {
+// Para no primeiro vídeo: a pergunta é só "tem vídeo aqui dentro?". E tem teto:
+// a leitura é síncrona e trava o servidor inteiro enquanto corre, e escolher uma
+// pasta grande (a home inteira, um HD de backup) varria tudo sem achar nada.
+// Curso de verdade tem o vídeo a poucos níveis (curso/módulo/aula); 4 cobre com folga.
+const PROFUNDIDADE_MAX = 4;
+const PASTAS_MAX = 2000;
+
+function temVideo(dir: string, orcamento: { pastas: number }, nivel = 1): boolean {
+  if (nivel > PROFUNDIDADE_MAX || orcamento.pastas <= 0) return false;
+  orcamento.pastas--;
   let entradas: fs.Dirent[];
   try {
     entradas = fs.readdirSync(dir, { withFileTypes: true });
@@ -53,7 +60,9 @@ function temVideo(dir: string): boolean {
     if (e.name.startsWith('.')) continue;
     if (e.isFile() && ehVideo(e.name)) return true;
   }
-  return entradas.some((e) => e.isDirectory() && !e.name.startsWith('.') && temVideo(path.join(dir, e.name)));
+  return entradas.some(
+    (e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules' && temVideo(path.join(dir, e.name), orcamento, nivel + 1),
+  );
 }
 
 export async function fsRoutes(app: FastifyInstance, opts: { config: AppConfig; db: Db }): Promise<void> {
@@ -105,7 +114,10 @@ export async function fsRoutes(app: FastifyInstance, opts: { config: AppConfig; 
     const visiveis = entries.filter((e) => !e.name.startsWith('.'));
     return {
       videosNaRaiz: visiveis.some((e) => e.isFile() && ehVideo(e.name)),
-      subpastasComVideo: visiveis.filter((e) => e.isDirectory() && temVideo(path.join(target, e.name))).length,
+      subpastasComVideo: (() => {
+        const orcamento = { pastas: PASTAS_MAX };
+        return visiveis.filter((e) => e.isDirectory() && temVideo(path.join(target, e.name), orcamento)).length;
+      })(),
     };
   });
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "interface",
-  "description": "A interface servida pelo sidecar em localhost: abrir links fora, escolher pasta, checar atualização, parar o servidor antes de instalar e reiniciar depois.",
+  "description": "A interface servida pelo sidecar em localhost: abrir links fora, escolher pasta, checar atualização, parar o servidor antes de instalar (Windows), religá-lo se a instalação falhar e reiniciar depois.",
   "windows": [
     "main"
   ],
@@ -16,6 +16,7 @@
     "dialog:allow-open",
     "updater:default",
     "process:allow-restart",
-    "allow-parar-servidor-para-atualizar"
+    "allow-parar-servidor-para-atualizar",
+    "allow-reiniciar"
   ]
 }
