@@ -6,3 +6,11 @@ packages:
 # O esbuild baixa o binário da plataforma no postinstall; sem isto o pnpm o bloqueia.
 allowBuilds:
   esbuild: true
+  # Dependências do GramJS (Telegram), negadas de propósito: bufferutil e
+  # utf-8-validate são aceleradores nativos opcionais do pacote websocket, que
+  # têm versão em JS puro (e o GramJS no Node conecta por TCP, nem usa websocket);
+  # compilá-los traria módulo nativo para o executável único. O postinstall do
+  # es5-ext só imprime uma mensagem.
+  bufferutil: false
+  utf-8-validate: false
+  es5-ext: false
