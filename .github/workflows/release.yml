@@ -151,4 +151,15 @@ jobs:
             jq -e --arg p "$p" '.platforms[$p].url' latest.json >/dev/null \
               || { echo "::error::latest.json sem a plataforma $p"; exit 1; }
           done
+          # O tauri-action aponta os pacotes para releases/latest/download/…, que
+          # passa a ser a release SEGUINTE assim que outra sai. O app guarda a
+          # assinatura da versão que viu ao abrir; clicar em Atualizar depois de uma
+          # release nova baixava outro arquivo e a assinatura nunca batia. Com o
+          # endereço preso à tag, o arquivo é sempre o que foi assinado.
+          jq --arg tag "${TAG}" \
+            '.platforms |= map_values(.url |= sub("/releases/latest/download/"; "/releases/download/" + $tag + "/"))' \
+            latest.json > latest.fixo.json
+          mv latest.fixo.json latest.json
+          if grep -q '/releases/latest/download/' latest.json; then echo "::error::latest.json ainda aponta para latest"; exit 1; fi
+          gh release upload "${TAG}" latest.json --clobber
           gh release edit "${TAG}" --draft=false --latest
