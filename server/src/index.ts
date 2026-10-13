@@ -10,8 +10,15 @@ import { buildApp } from './app';
 import { escutarComFallback } from './listen';
 import { mensagemDeBoot } from './banner';
 import { hasFfmpeg } from './media/ffmpeg';
+import { linhaDaUrl, pathComExtras } from './desktop';
 
 const config = loadConfig();
+
+// Antes da primeira detecção do ffmpeg (o resultado fica em cache): aberto pelo
+// Dock, o app desktop não herda o PATH do terminal — ver desktop.ts.
+if (config.desktop) {
+  process.env.PATH = pathComExtras(process.env.PATH ?? '', process.platform, fs.existsSync, process.env);
+}
 
 // Antes de abrir o banco: se o app subiu de dentro da pasta do v1 e ainda não há
 // banco novo, o histórico de lá é adotado. Depois do openDb seria tarde — ele
@@ -55,6 +62,7 @@ async function subir(): Promise<void> {
       }).join('\n'),
     );
 
+    if (config.desktop) console.log(linhaDaUrl(url));
     if (abrindo) abrirNavegador(url);
   } catch (err) {
     console.error(`\n${err instanceof Error ? err.message : err}\n`);
