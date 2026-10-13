@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Junta o servidor inteiro — código, dependências e a interface embutida — num
-// único dist/learnflix.js.
+// único dist/learnflix.cjs.
 //
-// É esse arquivo que o `npx learnflix` executa e que, mais adiante, vira o
-// executável único. Nada de node_modules no destino, nada de compilar na
-// instalação: o único requisito continua sendo o Node.
+// É esse arquivo que o `pnpm start` executa e que, mais adiante, vira o
+// executável único (o sidecar do app desktop). Nada de node_modules no
+// destino, nada de compilar na instalação.
 import esbuild from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';

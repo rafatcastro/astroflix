@@ -10,45 +10,26 @@ usando pastas locais, nada é enviado para lugar nenhum, sem conta e sem login.
 > criado por [OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA). Todo o crédito pelo app
 > original é desse projeto; aqui ficam as mudanças feitas por cima dele.
 
-**Instalar é uma linha no terminal** — igual no macOS, no Windows e no Linux. Não precisa clonar
-este repositório, nem descompactar nada, nem compilar: é colar o comando e o app abre.
+**É um programa normal**: baixe o instalador do seu sistema, instale e abra. Não precisa de
+terminal, de Node nem de compilar nada — e ele se atualiza sozinho.
 
 ![Biblioteca do Learnflix com dezenas de cursos em grade, cada um com capa, número de aulas e percentual concluído](docs/biblioteca.png)
 
 ---
 
-## Como rodar
+## Como instalar
 
-**Cole uma linha no terminal. É a instalação inteira.**
+Baixe o instalador na **[página da última versão](https://github.com/rafatcastro/learnflix-v2/releases/latest)**:
 
-Se você tem Node 22.5 ou maior:
+| Sistema | Arquivo |
+|---|---|
+| macOS (Apple Silicon: M1, M2…) | `Learnflix_<versão>_aarch64.dmg` |
+| macOS (Intel) | `Learnflix_<versão>_x64.dmg` |
+| Windows | `Learnflix_<versão>_x64-setup.exe` (ou o `.msi`) |
+| Linux | `Learnflix_<versão>_amd64.AppImage` (ou o `.deb`) |
 
-```bash
-npx learnflix
-```
-
-Se não tem — e não quer instalar nada antes:
-
-```bash
-# macOS e Linux
-curl -fsSL https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.sh | sh
-```
-
-```powershell
-# Windows (PowerShell)
-irm https://raw.githubusercontent.com/rafatcastro/learnflix-v2/main/install.ps1 | iex
-```
-
-O navegador abre sozinho em `http://localhost:7777`. **Sem clonar repositório, sem extrair ZIP, sem
-instalar dependências, sem compilar nada.**
-
-|  | Baixa | Demora | Nas próximas vezes |
-|---|---|---|---|
-| `npx learnflix` | 577 KB | cerca de 1 segundo | `npx learnflix` |
-| instalador | ~110 MB | alguns segundos | `learnflix`, de qualquer pasta |
-
-O instalador é maior porque o Node vai embutido no arquivo — é exatamente o que dispensa você de
-instalá-lo. Ele ainda confere a soma SHA-256 do download antes de pôr qualquer coisa no seu PATH.
+Abra o Learnflix como qualquer outro programa — pelo Dock, pelo menu Iniciar ou pelo menu de
+aplicativos. Ele abre na própria janela.
 
 ![Tela inicial vazia do Learnflix, com os botões Adicionar curso e Importar pasta de cursos](docs/tela-inicial.png)
 
@@ -56,38 +37,45 @@ instalá-lo. Ele ainda confere a soma SHA-256 do download antes de pôr qualquer
 
 <br>
 
-**Para parar**, `Ctrl+C` no terminal. **Se a porta 7777 estiver ocupada**, o app sobe na seguinte e
-diz qual endereço usar — você não precisa fazer nada.
-
-**Para atualizar**, rode `npx learnflix@latest` ou o instalador de novo. Seus cursos e seu progresso
-não são tocados: eles moram fora da pasta do programa.
+**Para atualizar**, não precisa fazer nada: quando sai uma versão nova, aparece um aviso discreto no
+topo da janela — **Atualizar** baixa, instala e reabre o app. Seus cursos e seu progresso não são
+tocados: eles moram fora da pasta do programa.
 
 <details>
-<summary>Não tenho Node e prefiro instalar mesmo assim</summary>
+<summary>O macOS diz que o app "está danificado" ou é de "desenvolvedor não identificado"</summary>
 
 <br>
 
-É uma vez só na vida da máquina, e aí o `npx learnflix` passa a funcionar:
+O Learnflix ainda não tem o certificado pago da Apple, então o Gatekeeper desconfia dele na primeira
+vez. Arraste o app para **Aplicativos** e tente abrir; quando o aviso aparecer, vá em **Ajustes do
+Sistema → Privacidade e Segurança** e clique em **Abrir mesmo assim**. Se aparecer "está danificado
+e não pode ser aberto", rode uma vez no Terminal:
 
-| Sistema | Comando |
-|---|---|
-| macOS | `brew install node` |
-| Windows | `winget install OpenJS.NodeJS.LTS` |
-| Linux | o pacote da sua distro, ou [nodejs.org](https://nodejs.org) |
+```bash
+xattr -dr com.apple.quarantine /Applications/Learnflix.app
+```
 
-Prefere clicar? O instalador **LTS** em [nodejs.org](https://nodejs.org) é próximo-próximo-concluir.
-Feche e reabra o terminal depois.
+Depois disso ele abre normalmente, inclusive pelo Dock.
 
 </details>
 
 <details>
-<summary>O Windows mostrou "aplicativo não reconhecido"</summary>
+<summary>O Windows mostrou "o Windows protegeu o computador"</summary>
 
 <br>
 
-É o SmartScreen: ele desconfia de todo executável novo sem um certificado pago de assinatura.
-**Mais informações → Executar assim mesmo**. No macOS isso não acontece — arquivo baixado por `curl`
-não recebe a marca de quarentena que o Gatekeeper usa.
+É o SmartScreen: ele desconfia de todo instalador novo sem um certificado pago de assinatura.
+**Mais informações → Executar assim mesmo**.
+
+</details>
+
+<details>
+<summary>Linux: o AppImage não abre</summary>
+
+<br>
+
+Dê permissão de execução (`chmod +x Learnflix_*.AppImage`) e abra. Em Debian/Ubuntu, o `.deb`
+instala com `sudo apt install ./Learnflix_*.deb` e põe o app no menu.
 
 </details>
 
@@ -134,7 +122,8 @@ Também dá para assistir a uma pasta que está no Google Drive. Clique em **Adi
 Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pasta.
 
 - **Pasta pública**: abre direto, sem login.
-- **Pasta privada**: o app pede a autorização do Google num popup. A permissão é só de leitura
+- **Pasta privada**: o app abre a autorização do Google no seu navegador; depois de autorizar, é só
+  voltar para o Learnflix. A permissão é só de leitura
   (`drive.readonly`); o Learnflix nunca cria, altera nem apaga nada no seu Drive.
 - **Nada é baixado**: os vídeos são transmitidos na hora em que você abre a aula. Só as capas são
   geradas e guardadas na sua máquina.
@@ -171,7 +160,7 @@ dá para acrescentar a qualquer momento:
 | Windows | `winget install Gyan.FFmpeg` |
 | Linux | `sudo apt install ffmpeg` (ou o gerenciador da sua distro) |
 
-Instale, reinicie o Learnflix e as capas aparecem sozinhas nos cursos que você abrir. Você também
+Instale, feche e abra o Learnflix de novo e as capas aparecem sozinhas nos cursos que você abrir. Você também
 pode escolher outro quadro como capa do curso pelo menu ⋯.
 
 ---
@@ -265,52 +254,39 @@ lento e com perda. O Learnflix não faz isso por você: converta a aula para H.2
 
 ## Configuração
 
-Tudo opcional, por variável de ambiente:
-
-| Variável | Padrão | Para que serve |
-|---|---|---|
-| `PORT` | `7777` | Porta do serviço |
-| `ALLOWED_ROOTS` | todo disco montado — veja abaixo | Restringe as pastas que o seletor pode navegar |
-| `DATA_DIR` | `~/.learnflix` | Onde ficam o banco e as miniaturas |
-| `OPEN_BROWSER` | `1` | `0` para não abrir o navegador sozinho |
-
 **HD externo funciona sem configurar nada.** Por padrão o seletor enxerga todos os discos montados:
 as unidades (`C:`, `D:`, `E:`…) no Windows, `/Volumes` no macOS, `/media` e `/mnt` no Linux, mais a
 sua pasta de usuário. Plugou o HD com o app já aberto? Ele aparece — não precisa reiniciar.
 
-`ALLOWED_ROOTS` serve para o caminho contrário: **restringir**. Definir a variável substitui a
-detecção automática, útil se você roda o app num computador compartilhado e quer limitar o alcance a
-uma pasta só:
-
-```bash
-PORT=8080 ALLOWED_ROOTS="/Volumes/HD-Cursos" npx learnflix
-```
-
-Você também pode acrescentar pastas-raiz pela tela de **Configurações**, sem mexer em variável
-nenhuma.
+Você também pode acrescentar pastas-raiz pela tela de **Configurações**.
 
 ---
 
 ## Desenvolvimento
 
-Monorepo com dois workspaces: `server` (Fastify + SQLite) e `web` (React + Vite).
+Monorepo com três workspaces: `server` (Fastify + SQLite), `web` (React + Vite) e `desktop` (a casca
+do app, em [Tauri](https://tauri.app)). Precisa de Node 22.5+, pnpm e, para o app desktop, do
+[Rust](https://rustup.rs).
 
 ```bash
 git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && pnpm install
-pnpm dev           # Vite em :5173 com hot reload, API em :7777
-pnpm test          # testes dos dois workspaces
-pnpm build         # tipos + interface + dist/learnflix.cjs (o arquivo único)
-pnpm start         # roda o arquivo empacotado
+pnpm dev             # Vite em :5173 com hot reload, API em :7777 — abre no navegador
+pnpm test            # testes do servidor e da interface
+pnpm build           # tipos + interface + dist/learnflix.cjs (o servidor num arquivo só)
+pnpm desktop:dev     # o app desktop de verdade, com a janela do Tauri
+pnpm desktop:build   # gera o instalador desta máquina em desktop/src-tauri/target/release/bundle
 ```
 
 O servidor existe porque o navegador não consegue ler pastas do disco sozinho: ele lê as pastas
 (sempre só-leitura), transmite o vídeo por HTTP Range para o seek funcionar, gera as miniaturas e é
 dono do banco. A interface conversa com ele por uma API JSON.
 
-O `pnpm build` gera `server/src/bundled.ts` — a interface em base64 mais a versão — e depois
-empacota tudo em `dist/learnflix.cjs` com o esbuild. É esse arquivo que o `npx` executa. O servidor
-tem **uma única dependência de execução** (Fastify) e nenhum módulo nativo: o SQLite vem embutido no
-próprio Node.
+O app desktop é uma janela que sobe esse mesmo servidor — empacotado num executável único, com o
+Node dentro — e carrega a interface dele. Por isso o dia a dia de desenvolvimento continua no
+`pnpm dev`, no navegador: o que funciona ali funciona na janela.
+
+As versões saem por tag (`git tag v2.1.0 && git push --tags`): a CI gera os instaladores dos três
+sistemas e o arquivo que o atualizador consulta.
 
 O código e os comentários estão em português.
 
@@ -321,31 +297,22 @@ O código e os comentários estão em português.
 Fale comigo — **[abra uma issue aqui](https://github.com/rafatcastro/learnflix-v2/issues/new)**.
 Não precisa saber programar nem formatar nada: diga o que aconteceu, em que sistema, e eu respondo.
 
-Se o app não abriu, ajuda muito colar **o que apareceu no terminal** — é ali que ele diz o motivo.
+Se o app não abriu, ajuda muito colar **a mensagem que apareceu na janela** — é ali que ele diz o
+motivo.
 
 ---
 
 ## O que mudou nesta versão
 
-O Learnflix agora **roda com um comando só**. Antes era baixar o repositório, descompactar, achar o
-script certo do seu sistema e esperar a primeira compilação; hoje é `npx learnflix`, ou uma linha de
-instalação para quem nem tem o Node.
+O Learnflix agora é **um programa de verdade**, com janela própria, ícone no Dock e na barra de
+tarefas e atualização automática. Antes era preciso abrir o terminal e rodar um comando; hoje é
+baixar, instalar e abrir.
 
-O que isso significa na prática:
-
-- **Nada compila na sua máquina.** O banco de dados agora usa o SQLite que já vem dentro do Node, e
-  não uma biblioteca que precisava ser compilada na instalação. Foi essa troca que derrubou a
-  instalação de cerca de um minuto para menos de um segundo — e que permitiu empacotar o app inteiro
-  num arquivo só.
-- **Dá para usar sem ter o Node.** O instalador de uma linha traz um executável que já leva tudo
-  dentro.
-- **Seus dados saíram da pasta do programa** e foram para `~/.learnflix`. Atualizar passou a ser
-  trocar o executável, sem encostar no seu progresso.
-- **A biblioteca virou um arquivo.** Exporte pelo botão **↓** na estante e leve para outro
-  computador — cursos, bibliotecas e o ponto exato de cada aula.
-
-O app em si é o mesmo: as mesmas telas, os mesmos atalhos, o mesmo jeito de organizar. O que mudou
-foi tudo o que ficava entre você e a primeira aula.
+- **Sem terminal e sem Node.** O instalador traz tudo dentro.
+- **Atualiza sozinho.** Quando sai versão nova, o app avisa e se atualiza com um clique.
+- **Cursos do Google Drive.** Cole o link de uma pasta e assista sem baixar nada.
+- **Os mesmos dados.** Quem já usava o Learnflix abre o app e encontra a biblioteca e o progresso
+  exatamente como deixou.
 
 ---
 
