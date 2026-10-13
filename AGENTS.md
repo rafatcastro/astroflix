@@ -9,7 +9,9 @@ progresso confiável. Cada pasta escolhida vira um "curso"; o app escaneia, list
 módulos, materiais, duração e capas), transmite o vídeo por HTTP Range e guarda posição e conclusão
 no SQLite. Cursos podem ser agrupados em **bibliotecas** (coleções).
 
-O projeto roda **com um comando só** (`npx learnflix`): o único pré-requisito é o Node 22. Assistir
+O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
+da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
+carrega a interface dele. Assistir
 cursos locais funciona sem conta, sem rede e sem serviço externo. Recursos que usam rede (por
 exemplo, baixar uma pasta do Google Drive) são **opcionais**: quem não usa nunca precisa configurar
 nada para eles, e nenhuma mudança pode transformá-los em pré-requisito do resto do app.
@@ -22,8 +24,9 @@ opcionais), e pode fazer commit e **push direto na `main`**, sem branch nem Pull
 
 ## Comandos
 
-Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com dois
-workspaces (`pnpm-workspace.yaml`): `server` e `web`.
+Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com três
+workspaces (`pnpm-workspace.yaml`): `server`, `web` e `desktop`. Para o app desktop, também o Rust
+(rustup; no Homebrew ele é keg-only, então `export PATH="$(brew --prefix rustup)/bin:$PATH"`).
 
 ```bash
 pnpm install               # primeira vez
@@ -32,8 +35,10 @@ pnpm build                 # web → gerar-bundled → tipos do server → esbui
 pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
 pnpm test                  # testes dos dois workspaces
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
+pnpm desktop:dev           # build + sidecar + janela do Tauri (sem hot reload; para UI use pnpm dev)
+pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm repo                  # audita onde o nome do repositório GitHub aparece
-pnpm repo dono/repo        # troca o repositório em package.json, install.sh, install.ps1 e README.md
+pnpm repo dono/repo        # troca o repositório em package.json, README.md e tauri.conf.json
 ```
 
 Um teste só:
@@ -47,9 +52,18 @@ cada workspace. O servidor nunca emite JS: roda via `tsx` em dev e é empacotado
 (`scripts/empacotar.mjs`) no build. Os imports são ESM **sem extensão de arquivo**
 (`moduleResolution: "Bundler"`).
 
-O pacote publicado contém só `dist/learnflix.cjs` (campo `files`). Os documentos do repositório
-nunca chegam a quem instala. As releases (binários + instaladores `install.sh`/`install.ps1`) saem
-de `.github/workflows/release.yml`.
+O pacote não é publicado no npm (`"private": true`). As releases saem de
+`.github/workflows/release.yml`, disparado por tag `v*`: um runner por plataforma gera o sidecar
+(`build:binario` → `scripts/preparar-sidecar.mjs`, que dá o nome com o target triple do Rust), a
+versão é copiada do `package.json` para o `tauri.conf.json`/`Cargo.toml`
+(`scripts/sincronizar-versao.mjs`) e o `tauri-action` anexa os instaladores e o `latest.json` do
+atualizador a uma release em rascunho, publicada só no fim. Secrets: `GOOGLE_*` e
+`TAURI_SIGNING_PRIVATE_KEY` (a chave fica localmente em `.tauri-signing.local.key`, ignorada pelo
+git; a pública está no `tauri.conf.json`).
+
+**No macOS, o sidecar precisa dos entitlements de JIT** (`desktop/src-tauri/Entitlements.plist`): o
+Tauri o reassina com Hardened Runtime, e sem `allow-jit` o V8 morre com SIGTRAP antes de imprimir
+qualquer coisa.
 
 ## Variáveis de ambiente
 
@@ -63,6 +77,10 @@ Lidas em `server/src/config.ts`:
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
 - `OPEN_BROWSER`.
+- `LEARNFLIX_DESKTOP=1`: posto pelo app desktop. Não abre o navegador, acrescenta ao PATH os lugares
+  comuns do ffmpeg (app aberto pelo Dock não herda o PATH do terminal) e escreve
+  `LEARNFLIX_URL=<url>` na saída padrão, que é a linha que o `lib.rs` espera para navegar a janela
+  (`server/src/desktop.ts`).
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
   Drive. Precedência, campo a campo: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
   `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
@@ -102,9 +120,9 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   (mesmo curso por caminho ou por impressão digital das aulas), `merge` (vence quem foi mais longe)
   e `import` (`planImport` puro + `applyImport`). Exposto por `routes/backup.ts`.
 - `drive/`: cursos do Google Drive (rede opcional, sempre `fetch` injetável nos testes). `link`
-  extrai o ID da pasta, `api` é o cliente da Drive API com retry, `auth` faz OAuth com PKCE pelo
-  popup, `walk` lista a pasta, `stream` repassa o `Range` do vídeo, `status`/`tipos` mapeiam os
-  erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
+  extrai o ID da pasta, `api` é o cliente da Drive API com retry, `auth` faz OAuth com PKCE (popup
+  no navegador, navegador do sistema no desktop), `walk` lista a pasta, `stream` repassa o `Range`
+  do vídeo, `status`/`tipos` mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
@@ -121,6 +139,18 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   - `natural-sort.ts` ordena com consciência numérica (`Intl.Collator`).
   - `scan-course.ts` junta tudo numa transação só.
   - `reconcile.ts` e `repoint-prefix.ts` cuidam de re-escanear e re-apontar.
+
+### Desktop (`desktop/`)
+
+- `src-tauri/src/lib.rs`: instância única, sobe o sidecar `learnflix-server`, lê o stdout até
+  `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
+  erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
+  sair.
+- `capabilities/interface.json` libera opener, updater e process para a origem `http://localhost:*`
+  (a interface vem do servidor, não do bundle).
+- Na interface, `web/src/lib/desktop.ts` (`emDesktop`, `abrirFora`, `cliqueFora`) é o único ponto
+  que sabe do Tauri: login do Google e downloads abrem no navegador do sistema (o Google bloqueia
+  OAuth em webview), e `AvisoAtualizacao.tsx` oferece a versão nova. Fora do Tauri nada muda.
 
 ### Modelo de dados (SQLite)
 

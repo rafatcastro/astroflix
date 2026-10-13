@@ -1,8 +1,9 @@
 {
   "name": "learnflix",
-  "version": "2.0.0",
+  "version": "2.1.0",
+  "private": true,
   "type": "module",
-  "description": "Assista aos cursos que estão nas suas pastas, com progresso confiável.",
+  "description": "Programa desktop para assistir aos cursos que estão nas suas pastas, com progresso confiável.",
   "license": "MIT",
   "author": "OnaitsirC-MiromA",
   "repository": {
@@ -24,12 +25,6 @@
   "engines": {
     "node": ">=22.5.0"
   },
-  "bin": {
-    "learnflix": "dist/learnflix.cjs"
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "dev": "node scripts/gerar-bundled.mjs && concurrently -k -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
     "build": "pnpm --filter web build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",

@@ -1,23 +1,25 @@
 #!/usr/bin/env node
 // Define (ou audita) o repositório do projeto no GitHub.
 //
-//   npm run repo                       # mostra onde o nome aparece e se batem
+//   pnpm repo                          # mostra onde o nome aparece e se batem
 //   pnpm repo usuario/projeto    # troca em todos os lugares de uma vez
 //
-// O nome precisa aparecer em quatro arquivos por natureza: a metadata do npm, os
-// dois instaladores (que baixam das releases) e o README (que mostra o comando
-// para copiar). Este script é o "um lugar só" — ninguém edita os quatro à mão.
+// O nome precisa aparecer em três arquivos por natureza: a metadata do
+// package.json, o README (links das releases) e o tauri.conf.json (o endpoint
+// de onde o atualizador do app baixa o latest.json). Este script é o "um lugar
+// só" — ninguém edita os três à mão. Errar o do tauri.conf.json é o pior: o app
+// instalado procuraria atualizações num repositório que não é o dele.
 //
 // A varredura é GENÉRICA de propósito: procura qualquer URL do GitHub nesses
 // arquivos, em vez de uma lista de lugares conhecidos. Uma lista esquece — a
-// primeira versão deste script esqueceu as URLs nos comentários dos próprios
-// instaladores, e a auditoria ainda assim disse que estava tudo consistente.
+// primeira versão deste script esqueceu as URLs nos comentários dos antigos
+// instaladores de uma linha, e a auditoria ainda assim disse que estava tudo consistente.
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 
 const raiz = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
-const ARQUIVOS = ['package.json', 'install.sh', 'install.ps1', 'README.md'];
+const ARQUIVOS = ['package.json', 'README.md', 'desktop/src-tauri/tauri.conf.json'];
 
 // O nome do repositório termina em `.git`, `#`, `/`, aspas ou espaço — o
 // lookahead impede que o `.git` de `projeto.git` vire parte do nome.
@@ -28,8 +30,6 @@ const PADROES = [
   // foi assim que as URLs dos instaladores no README ficaram para trás.
   new RegExp(`(raw\\.githubusercontent\\.com/)([\\w.-]+/[\\w.-]+?)${FIM}`, 'g'),
   new RegExp(`(github\\.com/)([\\w.-]+/[\\w.-]+?)${FIM}`, 'g'),
-  new RegExp(`(^REPO=")([^"]+)(?=")`, 'gm'),
-  new RegExp(`(^\\$Repo = ')([^']+)(?=')`, 'gm'),
 ];
 
 // Este repositório é um fork: o README dá crédito ao projeto original com links
