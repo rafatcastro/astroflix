@@ -534,6 +534,18 @@ export default function Lesson() {
     setConverting(false);
   };
 
+  // Clicar na aula é o pedido de conversão: em vez de um botão "Converter" na
+  // tela, a aula já começa a ser preparada e a tela mostra só o andamento. Uma vez
+  // por aula: se falhar, a tela oferece tentar de novo (sem repetir em loop).
+  const conversaoPedida = useRef<string | null>(null);
+  useEffect(() => {
+    if (!verdict || verdict.playable || verdict.semArquivo) return;
+    if (conversaoPedida.current === id) return;
+    conversaoPedida.current = id;
+    void doConvert();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verdict, id]);
+
   // Espelha ArrowLeft/ArrowRight (~L229-234): mesmo delta de 10s, sem clamp
   // (o próprio <video> satura em 0/duration). O flash visual soma sozinho.
   const seekBy = useCallback((dir: 'back' | 'fwd') => {
@@ -679,46 +691,42 @@ export default function Lesson() {
     return (
       <div className="grid h-screen place-items-center p-6 text-center">
         <div className="max-w-md">
-          <div className="mb-2 text-lg font-medium">Este vídeo está num formato que o navegador não reproduz</div>
-          {remuxable === true && !semArquivo && (
-            <>
-              <p className="mb-4 text-sm text-neutral-400">
-                Dá para corrigir sem recodificar: um remux rápido e sem perda de qualidade. O arquivo original não é alterado.
-              </p>
-              <button
-                type="button"
-                onClick={() => void doConvert()}
-                disabled={converting}
-                className="mb-4 inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors motion-reduce:transition-none hover:bg-blue-500 disabled:opacity-40"
-              >
-                {converting ? 'Convertendo…' : 'Converter agora (sem perda)'}
-              </button>
-            </>
-          )}
-          {remuxable === false && !semArquivo && (
-            <>
-              <p className="mb-4 text-sm text-neutral-400">
-                O codec deste arquivo (H.264 10-bit ou HEVC) não toca aqui. O Learnflix pode converter a aula para um
-                formato que toca: leva alguns minutos, e o arquivo original não é alterado.
-              </p>
-              {progressoConversao !== null ? (
-                <div className="mx-auto mb-4 max-w-xs" role="status">
-                  <div className="mb-1.5 text-sm text-neutral-300">Convertendo… {Math.round(progressoConversao * 100)}%</div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-neutral-800">
-                    <div className="h-full bg-blue-600" style={{ width: `${Math.max(2, progressoConversao * 100)}%` }} />
-                  </div>
-                </div>
-              ) : (
+          {!semArquivo && remuxable !== null ? (
+            // Abrir a aula já pediu a conversão (ver o efeito acima): aqui só o andamento.
+            notice?.kind === 'error' ? (
+              <>
+                <div className="mb-2 text-lg font-medium">Não foi possível preparar este vídeo</div>
                 <button
                   type="button"
                   onClick={() => void doConvert()}
                   disabled={converting}
                   className="mb-4 inline-flex h-11 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors motion-reduce:transition-none hover:bg-blue-500 disabled:opacity-40"
                 >
-                  Converter para assistir
+                  Tentar de novo
                 </button>
-              )}
-            </>
+              </>
+            ) : (
+              <div className="mx-auto mb-4 max-w-xs" role="status">
+                <div className="mb-1 text-lg font-medium">Preparando o vídeo…</div>
+                <p className="mb-4 text-sm text-neutral-400">
+                  {remuxable
+                    ? 'Ajustando o arquivo para tocar aqui. Leva só alguns segundos.'
+                    : 'Convertendo para um formato que toca aqui. Pode levar alguns minutos; o original não é alterado.'}
+                </p>
+                <div className="h-1.5 overflow-hidden rounded-full bg-neutral-800">
+                  {progressoConversao !== null ? (
+                    <div className="h-full bg-blue-600" style={{ width: `${Math.max(2, progressoConversao * 100)}%` }} />
+                  ) : (
+                    <div className="h-full w-1/3 animate-pulse bg-blue-600 motion-reduce:animate-none" />
+                  )}
+                </div>
+                {progressoConversao !== null && (
+                  <div className="mt-1.5 text-xs text-neutral-500">{Math.round(progressoConversao * 100)}%</div>
+                )}
+              </div>
+            )
+          ) : (
+            <div className="mb-2 text-lg font-medium">Este vídeo está num formato que o navegador não reproduz</div>
           )}
           {remuxable === false && semArquivo && (
             <p className="mb-4 text-sm text-neutral-400">

@@ -26,7 +26,6 @@ export default function LessonGrid({
                 onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
               />
               {l.missing && <span className="absolute left-1 top-1 rounded bg-amber-900/80 px-1 text-[10px] text-amber-200">não encontrada</span>}
-              {!l.missing && !l.playable && <span className="absolute left-1 top-1 rounded bg-neutral-950/80 px-1 text-[10px] text-neutral-300">converter</span>}
             </div>
             <div className="p-2">
               <div className="text-sm truncate">{l.title}</div>
