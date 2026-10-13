@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
+import { cliqueFora } from '../lib/desktop';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PlaybackVerdict } from '../api/client';
@@ -623,6 +624,7 @@ export default function Lesson() {
               por isso o Learnflix não faz isso por você. Converta a aula para H.264 8-bit com o{' '}
               <a
                 href="https://handbrake.fr"
+                onClick={(e) => cliqueFora(e, 'https://handbrake.fr')}
                 target="_blank"
                 rel="noreferrer"
                 className="underline decoration-neutral-600 underline-offset-2 hover:text-neutral-200"
