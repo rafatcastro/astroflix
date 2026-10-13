@@ -405,7 +405,13 @@ export default function Lesson() {
   // convert remuxa sem perda quando dá (TS→MP4), sem tocar no arquivo original.
   const verifyPlayback = useCallback(async () => {
     try {
-      const v = await api.verifyPlayback(id);
+      let v = await api.verifyPlayback(id);
+      // Aula do Drive/Telegram ainda sem arquivo: o servidor só tem o flag, que
+      // dizia "toca". Se o <video> falhou mesmo assim (MPEG-TS com cara de .mp4),
+      // é formato: a aula espera o download, que converte sozinho.
+      if (v.playable && (v as { semArquivo?: boolean }).semArquivo) {
+        v = { playable: false, reason: 'container', remuxable: false, semArquivo: true };
+      }
       setVerdict(v);
       // Também quando passa a tocar: o flag guardado pode ter vindo de uma regra
       // antiga (HEVC era sempre "não toca") e só o lesson recarregado libera o player.
@@ -515,6 +521,36 @@ export default function Lesson() {
   useEffect(() => {
     if (verdict && !verdict.playable) void acompanharConversao();
   }, [verdict, acompanharConversao]);
+
+  // Aula remota que não toca direto: abrir a aula já pediu o download, e ele
+  // converte sozinho. Antes a tela ficava parada mesmo depois da aula pronta, e
+  // parecia que o vídeo nunca ia tocar; agora ela confere e começa a tocar sozinha.
+  const esperandoArquivo = !!verdict && !verdict.playable && !!verdict.semArquivo;
+  useEffect(() => {
+    if (!esperandoArquivo) return;
+    const t = setInterval(() => {
+      void (async () => {
+        let v;
+        try {
+          v = await api.verifyPlayback(id);
+        } catch {
+          return;
+        }
+        if (!mountedRef.current || (v as { semArquivo?: boolean }).semArquivo) return;
+        if (v.playable) {
+          setVerdict(null);
+          qc.invalidateQueries({ queryKey: ['lesson', id] });
+          qc.invalidateQueries({ queryKey: ['course'] });
+          setVideoKey((k) => k + 1);
+          showNotice('success', 'A aula chegou — bom estudo!');
+        } else {
+          setVerdict(v);
+        }
+      })();
+    }, 4000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esperandoArquivo, id]);
 
   const doConvert = async () => {
     setConverting(true);
