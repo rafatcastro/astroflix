@@ -272,17 +272,17 @@ export const TOPICOS: Topico[] = [
         t: 'p',
         texto: (
           <>
-            <b>Se o codec em si é incompatível</b> — H.264 10-bit ou HEVC — a única saída é
-            recodificar de verdade, o que é lento e perde qualidade. O Learnflix não faz isso por
-            você de propósito. Converta a aula para H.264 8-bit com o HandBrake ou o VLC, substitua o
-            arquivo na pasta do curso e use <b>Re-escanear agora</b> no menu ⋯.
+            <b>Se o codec em si não toca aqui</b> — H.264 10-bit, ou HEVC no Windows sem a
+            extensão HEVC — aparece <b>Converter para assistir</b>. O Learnflix recodifica a aula
+            para H.264 com o ffmpeg, mostrando o andamento; leva alguns minutos e o original
+            continua intacto. No Mac, HEVC toca direto.
           </>
         ),
       },
       {
         t: 'nota',
         tom: 'info',
-        texto: 'Trocar o arquivo e re-escanear preserva o progresso daquela aula.',
+        texto: 'A cópia convertida fica nos dados do app, e o progresso da aula é o mesmo.',
       },
       {
         t: 'p',

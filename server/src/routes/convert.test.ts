@@ -49,11 +49,10 @@ describe('verificação e conversão de reprodução (pulado sem ffmpeg)', () =>
     db.close();
   });
 
-  it.skipIf(!hasFfmpeg())('o que não dá para remuxar responde 409 e não gera arquivo pela metade', async () => {
+  it.skipIf(!hasFfmpeg())('H.264 10-bit: convert recodifica em segundo plano, com progresso, e a aula passa a tocar', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'tc-'));
     const f = path.join(root, 'aula.mp4');
-    // H.264 10-bit: container e codec certos, mas o navegador não decodifica.
-    // Só recodificando resolveria — e recodificar está fora do escopo do app.
+    // Container e codec certos, mas nenhum player decodifica 10-bit: só recodificando.
     spawnSync('ffmpeg', ['-f', 'lavfi', '-i', 'testsrc=duration=1:size=128x72:rate=10', '-c:v', 'libx264', '-pix_fmt', 'yuv420p10le', '-y', f], { stdio: 'ignore' });
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tcD-'));
     const convertedDir = path.join(dataDir, 'converted');
@@ -63,16 +62,52 @@ describe('verificação e conversão de reprodução (pulado sem ffmpeg)', () =>
     const app = buildApp({ allowedRoots: [os.tmpdir()], thumbsDir: path.join(dataDir, 't'), convertedDir } as any, db);
 
     const res = await app.inject({ method: 'POST', url: `/api/lessons/${lid}/convert` });
-    expect(res.statusCode).toBe(409);
-    expect(res.json().status).toBe('transcode_required');
-    expect(fs.existsSync(path.join(convertedDir, `${lid}.mp4`))).toBe(false);
-    // o flag continua refletindo a realidade: a aula não toca
-    expect((db.prepare('SELECT playable FROM lessons WHERE id=?').get(lid) as any).playable).toBe(0);
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ status: 'transcoding' });
+
+    let estado: any;
+    for (let i = 0; i < 300; i++) {
+      estado = (await app.inject({ method: 'GET', url: `/api/lessons/${lid}/convert` })).json();
+      if (estado.status !== 'transcoding') break;
+      await new Promise((ok) => setTimeout(ok, 100));
+    }
+    expect(estado).toEqual({ status: 'converted' });
+    expect(fs.existsSync(path.join(convertedDir, `${lid}.mp4`))).toBe(true);
+    expect(fs.existsSync(path.join(convertedDir, `${lid}.parcial.mp4`))).toBe(false);
+    expect((db.prepare('SELECT playable FROM lessons WHERE id=?').get(lid) as any).playable).toBe(1);
+    const ver = await app.inject({ method: 'POST', url: `/api/lessons/${lid}/verify-playback` });
+    expect(ver.json()).toEqual({ playable: true });
 
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(dataDir, { recursive: true, force: true });
     db.close();
-  }, 30000);
+  }, 60000);
+
+  // O WebKit (janela do macOS) toca HEVC, mas só com a marca hvc1.
+  it.skipIf(!hasFfmpeg())('HEVC: tocável quando a janela toca HEVC; hev1 vira hvc1 com remux sem perda', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hevc-'));
+    spawnSync('ffmpeg', ['-f', 'lavfi', '-i', 'testsrc=duration=1:size=128x72:rate=10', '-c:v', 'libx265', '-tag:v', 'hev1', '-y', path.join(root, 'aula.mp4')], { stdio: 'ignore' });
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hevcD-'));
+    const convertedDir = path.join(dataDir, 'converted');
+    const db = openDb(':memory:');
+    const cid = createCourseFromPath(db, root);
+    const lid = (db.prepare('SELECT id FROM lessons WHERE course_id=?').get(cid) as any).id;
+    const app = buildApp({ allowedRoots: [os.tmpdir()], thumbsDir: path.join(dataDir, 't'), convertedDir } as any, db);
+
+    const semHevc = await app.inject({ method: 'POST', url: `/api/lessons/${lid}/verify-playback` });
+    expect(semHevc.json()).toMatchObject({ playable: false, reason: 'codec', remuxable: false });
+    const comHevc = await app.inject({ method: 'POST', url: `/api/lessons/${lid}/verify-playback?hevc=1` });
+    expect(comHevc.json()).toMatchObject({ playable: false, reason: 'container', remuxable: true });
+
+    const conv = await app.inject({ method: 'POST', url: `/api/lessons/${lid}/convert?hevc=1` });
+    expect(conv.json()).toEqual({ status: 'converted' });
+    const out = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=codec_tag_string', '-of', 'csv=p=0', path.join(convertedDir, `${lid}.mp4`)]);
+    expect(String(out.stdout).trim()).toBe('hvc1');
+
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(dataDir, { recursive: true, force: true });
+    db.close();
+  }, 60000);
 });
 
 describe('verificação e conversão — curso do Drive (não depende de ffmpeg)', () => {
