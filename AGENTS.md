@@ -225,7 +225,8 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 - `pages/`:
   - Library: grade de cursos, bibliotecas, adicionar pasta e importação em lote.
   - Course: lista de aulas, retomar e menu ⋯.
-  - Lesson: player 100vh sem distração, salvar progresso, concluir e atalhos de teclado.
+  - Lesson: página de assistir estilo YouTube (vídeo à esquerda, abas Aulas/Flashcards à direita),
+    salvar progresso, concluir e atalhos de teclado.
   - Settings.
 - `components/DirPicker.tsx` conduz o seletor de pastas via `/api/fs/browse`.
 

@@ -131,7 +131,7 @@ Uma paleta monocromática quente-fria de cinzas-quase-pretos, com um único azul
 
 **A Regra do Azul Raro.** O Azul Foco aparece só em **ação e progresso**. Se mais de um punhado de elementos azuis dividem a mesma tela, recue — a raridade é o que faz o azul significar "aqui é onde se age".
 
-**A Regra do Scrim (gradientes sancionados).** Gradiente nunca é decoração; existe em exatamente três papéis funcionais, sempre de/para preto: (1) o chrome do player (`from-black/80` para transparente); (2) o rodapé dos cards-pôster da Biblioteca (`from-black/90 via-black/55` para transparente — garante legibilidade de título/progresso sobre a capa); (3) o **backdrop ambiente** da página do curso (capa `blur-2xl` `opacity-35` com scrim `via-studio-black/40 to-studio-black` — o conteúdo ilumina o palco e funde de volta no fundo). Qualquer outro gradiente é enfeite e está proibido.
+**A Regra do Scrim (gradientes sancionados).** Gradiente nunca é decoração; existe em exatamente três papéis funcionais, sempre de/para preto: (1) os controles nativos do vídeo; (2) o rodapé dos cards-pôster da Biblioteca (`from-black/90 via-black/55` para transparente — garante legibilidade de título/progresso sobre a capa); (3) o **backdrop ambiente** da página do curso (capa `blur-2xl` `opacity-35` com scrim `via-studio-black/40 to-studio-black` — o conteúdo ilumina o palco e funde de volta no fundo). Qualquer outro gradiente é enfeite e está proibido.
 
 **A Regra da Barra Honesta.** Barra de progresso **só aparece quando há progresso** (`pct > 0`). A 0%, uma trilha visível sobre capa clara parece barra cheia — ambiguidade sobre progresso é bug de design (princípio nº 1 do produto). A trilha sobre imagem é `white/15`; sobre superfície, Carvão.
 
@@ -187,7 +187,7 @@ A única "elevação" interativa é um **anel de foco azul** (`ring-2` em Azul F
 - **Campo de texto:** o componente compartilhado `TextField` (Carvão `bg-neutral-800`, borda Ardósia `border-neutral-700`, `rounded-lg`, `focus:ring-2` Azul Foco). Todo input de texto passa por ele (Login, Settings, renomear).
 
 ### Navigation
-- **Player chrome:** barra superior com gradiente `from-black/80 to-transparent`, **auto-ocultável** (opacidade, `transition-opacity duration-300`) após ~2,5s de inatividade do mouse. Botões de ícone do set SVG próprio (`icons.tsx`: 24×24, stroke 2, estilo Lucide) em Carvão; 44px de alvo (`h-11 w-11`). No celular a barra reflui em 2 linhas (controles na 1ª, título na 2ª) e revela-se por toque (revelar + auto-esconder, nunca alternar).
+- **Página de assistir (estilo YouTube):** o vídeo à esquerda, em 16:9 e com letterbox preto, com o curso e o voltar acima e, abaixo, o módulo, o título da aula e a fileira de ações (Concluir, anterior/próxima, auto-avançar, tela cheia, capa). À direita, uma coluna fixa (`w-96`) com abas **Aulas** (lista por módulo com o contador feitas/total, miniatura com a duração e a aula atual destacada em azul, rolando até ela) e **Flashcards**. Abaixo de `lg` a coluna desce para baixo do vídeo. Tela cheia (F) mostra só o vídeo. Botões de ícone do set SVG próprio (`icons.tsx`: 24×24, stroke 2, estilo Lucide) em Carvão; 44px de alvo (`h-11 w-11`).
 - **Barra lateral de playlist:** `w-72`, fundo `#0a0a0a` a 95% com borda esquerda Carvão, `z-20`. Aula atual destacada em Azul Foco a 30%; hover em Carvão.
 - **Links de retorno:** texto Névoa-400 com seta "←".
 
