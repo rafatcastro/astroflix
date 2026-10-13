@@ -270,20 +270,19 @@ do app, em [Tauri](https://tauri.app)). Precisa de Node 22.5+, pnpm e, para o ap
 
 ```bash
 git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && pnpm install
-pnpm dev             # Vite em :5173 com hot reload, API em :7777 — abre no navegador
+pnpm dev             # a janela do app, com hot reload da interface (Vite) e do servidor
 pnpm test            # testes do servidor e da interface
 pnpm build           # tipos + interface + dist/learnflix.cjs (o servidor num arquivo só)
-pnpm desktop:dev     # o app desktop de verdade, com a janela do Tauri
 pnpm desktop:build   # gera o instalador desta máquina em desktop/src-tauri/target/release/bundle
 ```
 
-O servidor existe porque o navegador não consegue ler pastas do disco sozinho: ele lê as pastas
-(sempre só-leitura), transmite o vídeo por HTTP Range para o seek funcionar, gera as miniaturas e é
-dono do banco. A interface conversa com ele por uma API JSON.
+O servidor existe porque a interface (uma página web, dentro da janela) não consegue ler pastas do
+disco sozinha: ele lê as pastas (sempre só-leitura), transmite o vídeo por HTTP Range para o seek
+funcionar, gera as miniaturas e é dono do banco. A interface conversa com ele por uma API JSON.
 
-O app desktop é uma janela que sobe esse mesmo servidor — empacotado num executável único, com o
-Node dentro — e carrega a interface dele. Por isso o dia a dia de desenvolvimento continua no
-`pnpm dev`, no navegador: o que funciona ali funciona na janela.
+O app desktop é uma janela que sobe esse servidor — empacotado num executável único, com o Node
+dentro — e carrega a interface dele. No `pnpm dev`, a mesma janela abre o Vite, e o servidor roda
+direto do código-fonte.
 
 As versões saem por tag (`git tag v2.1.0 && git push --tags`): a CI gera os instaladores dos três
 sistemas e o arquivo que o atualizador consulta.

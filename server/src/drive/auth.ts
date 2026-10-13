@@ -23,6 +23,8 @@ export interface AuthDrive {
   >;
   token(opts?: { renovar?: boolean }): Promise<string | null>;
   status(): { conectado: boolean; email: string | null };
+  /** Como terminou o login deste state; null enquanto o callback não veio (ou se o state não é nosso). */
+  resultado(state: string): { ok: true } | { ok: false; motivo: MotivoFalha } | null;
   desconectar(opts?: { revogar?: boolean }): Promise<void>;
 }
 
@@ -60,6 +62,10 @@ export function criarAuthDrive(deps: {
   const { db, credenciais } = deps;
   const agora = deps.agora ?? Date.now;
   const pendentes = new Map<string, Pendente>();
+  // O login abre no navegador do sistema, fora do app: a página de callback não tem
+  // como avisar a janela, então o app pergunta por aqui, pelo state que ele pediu.
+  // Perguntar pelo status da conta não serve: numa reautorização ela já estava conectada.
+  const concluidos = new Map<string, { r: { ok: true } | { ok: false; motivo: MotivoFalha }; expira: number }>();
   let cache: { token: string; expiraEm: number } | null = null;
   // Evita duas renovações simultâneas com o mesmo refresh token.
   let renovando: Promise<string> | null = null;
@@ -125,6 +131,36 @@ export function criarAuthDrive(deps: {
     return t;
   }
 
+  async function trocar(
+    c: CredenciaisGoogle,
+    pend: Pendente,
+    code: string | undefined,
+    error: string | undefined,
+  ): Promise<{ ok: true; email: string | null } | { ok: false; motivo: MotivoFalha }> {
+    if (error) return { ok: false, motivo: 'negado' };
+    if (!code) return { ok: false, motivo: 'troca-falhou' };
+    try {
+      const { res, json } = await postarToken(
+        {
+          grant_type: 'authorization_code',
+          code,
+          code_verifier: pend.verifier,
+          redirect_uri: pend.redirectUri,
+        },
+        c,
+      );
+      if (!res.ok || !json.refresh_token) return { ok: false, motivo: 'troca-falhou' };
+      const email = emailDoIdToken(json.id_token);
+      gravar(K_REFRESH, json.refresh_token);
+      if (email) gravar(K_EMAIL, email);
+      else apagar(K_EMAIL);
+      guardarAcesso(json);
+      return { ok: true, email };
+    } catch {
+      return { ok: false, motivo: 'troca-falhou' };
+    }
+  }
+
   return {
     iniciar(redirectUri) {
       const c = credenciais();
@@ -154,29 +190,17 @@ export function criarAuthDrive(deps: {
       // Uso único: o state sai do mapa antes de qualquer outra checagem, até na negativa e na falha.
       const pend = state ? pendentes.get(state) : undefined;
       if (state) pendentes.delete(state);
-      if (!pend || pend.expira < agora()) return { ok: false, motivo: 'state-invalido' };
-      if (error) return { ok: false, motivo: 'negado' };
-      if (!code) return { ok: false, motivo: 'troca-falhou' };
-      try {
-        const { res, json } = await postarToken(
-          {
-            grant_type: 'authorization_code',
-            code,
-            code_verifier: pend.verifier,
-            redirect_uri: pend.redirectUri,
-          },
-          c,
-        );
-        if (!res.ok || !json.refresh_token) return { ok: false, motivo: 'troca-falhou' };
-        const email = emailDoIdToken(json.id_token);
-        gravar(K_REFRESH, json.refresh_token);
-        if (email) gravar(K_EMAIL, email);
-        else apagar(K_EMAIL);
-        guardarAcesso(json);
-        return { ok: true, email };
-      } catch {
-        return { ok: false, motivo: 'troca-falhou' };
-      }
+      if (!state || !pend || pend.expira < agora()) return { ok: false, motivo: 'state-invalido' };
+      const r = await trocar(c, pend, code, error);
+      // Só states que este app emitiu chegam aqui: um state inventado não ocupa memória.
+      for (const [s, f] of concluidos) if (f.expira < agora()) concluidos.delete(s);
+      concluidos.set(state, { r: r.ok ? { ok: true } : r, expira: agora() + VALIDADE_STATE_MS });
+      return r;
+    },
+
+    resultado(state) {
+      const f = concluidos.get(state);
+      return f && f.expira >= agora() ? f.r : null;
     },
 
     async token(opts) {

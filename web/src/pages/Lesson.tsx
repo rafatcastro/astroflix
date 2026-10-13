@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type ReactNode, type PointerEvent as ReactPointerEvent } from 'react';
-import { cliqueFora } from '../lib/desktop';
+import { abrirFora, cliqueFora } from '../lib/desktop';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type PlaybackVerdict } from '../api/client';
@@ -91,7 +91,7 @@ export default function Lesson() {
   const [driveErro, setDriveErro] = useState<{ erro: string; texto: string } | null>(null);
   const [videoKey, setVideoKey] = useState(0);
   const [reautorizando, setReautorizando] = useState(false);
-  const [urlBloqueada, setUrlBloqueada] = useState<string | null>(null);
+  const [urlAuth, setUrlAuth] = useState<string | null>(null);
   const abortAuthRef = useRef<AbortController | null>(null);
 
   const { data: lesson } = useQuery({ queryKey: ['lesson', id], queryFn: () => api.getLesson(id) });
@@ -430,13 +430,13 @@ export default function Lesson() {
     setReautorizando(true);
     try {
       const { url } = await api.driveIniciarAuth();
-      // O popup abre depois de um await (fora do gesto do clique) e pode ser bloqueado: o link
-      // mostrado em onBloqueado é um clique de verdade. O signal solta o listener ao sair da aula.
+      // O signal para a espera ao sair da aula.
       const ctrl = new AbortController();
       abortAuthRef.current = ctrl;
-      const ok = await autorizarNoGoogle(url, { signal: ctrl.signal, onBloqueado: () => setUrlBloqueada(url) });
+      setUrlAuth(url);
+      const ok = await autorizarNoGoogle(url, { signal: ctrl.signal });
       if (ctrl.signal.aborted || !mountedRef.current) return;
-      setUrlBloqueada(null);
+      setUrlAuth(null);
       if (ok) {
         setDriveErro(null);
         setVideoKey((k) => k + 1);
@@ -554,11 +554,12 @@ export default function Lesson() {
           {notice && (
             <p className="mb-4 text-sm text-amber-200" role="status">{notice.text}</p>
           )}
-          {urlBloqueada && (
-            <p className="mb-2 text-sm text-neutral-300">
-              <a href={urlBloqueada} target="_blank" rel="opener" className="underline decoration-neutral-600 underline-offset-2 hover:text-white">
-                Abrir a autorização do Google
-              </a>
+          {urlAuth && (
+            <p className="mb-2 text-sm text-neutral-300" role="status">
+              Conclua a autorização no navegador que abriu.{' '}
+              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+                Abrir de novo
+              </button>
             </p>
           )}
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">

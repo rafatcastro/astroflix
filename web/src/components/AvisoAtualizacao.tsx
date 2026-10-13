@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react';
-import { emDesktop } from '../lib/desktop';
 
 type Estado = { tipo: 'nada' } | { tipo: 'disponivel'; versao: string } | { tipo: 'instalando' } | { tipo: 'falhou' };
 
-// Só existe no app desktop: sem o `npx`, o atualizador é o único caminho para uma
-// correção chegar a quem já instalou. Confere uma vez ao abrir, em silêncio —
-// sem rede ou sem versão nova, nada aparece.
+// O atualizador é o único caminho para uma correção chegar a quem já instalou.
+// Confere uma vez ao abrir, em silêncio — sem rede ou sem versão nova, nada aparece.
 export default function AvisoAtualizacao() {
   const [estado, setEstado] = useState<Estado>({ tipo: 'nada' });
-  const [update, setUpdate] = useState<{ downloadAndInstall: () => Promise<void> } | null>(null);
+  const [update, setUpdate] = useState<{ download: () => Promise<void>; install: () => Promise<void> } | null>(null);
 
   useEffect(() => {
-    if (!emDesktop()) return;
     let vivo = true;
     void (async () => {
       try {
@@ -35,7 +32,12 @@ export default function AvisoAtualizacao() {
   const atualizar = async () => {
     setEstado({ tipo: 'instalando' });
     try {
-      await update.downloadAndInstall();
+      await update.download();
+      // No Windows o instalador encerra o app sem passar pelo evento de saída: o
+      // servidor tem de parar antes, ou seguraria o próprio executável aberto.
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('parar_servidor_para_atualizar');
+      await update.install();
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
     } catch {

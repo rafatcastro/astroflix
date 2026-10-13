@@ -127,6 +127,25 @@ describe('criarAuthDrive', () => {
     expect(auth.status().conectado).toBe(false);
   });
 
+  it('resultado(state): pendente até o callback, depois ok ou o motivo; state alheio nunca é guardado', async () => {
+    const { auth } = montar([
+      () => json({ access_token: 'a', expires_in: 3600, refresh_token: 'r1', id_token: idToken('eu@x.com') }),
+      () => json({ error: 'invalid_grant' }, 400),
+    ]);
+    const s1 = stateDe(auth.iniciar(REDIRECT));
+    expect(auth.resultado(s1)).toBeNull();
+    await auth.concluir({ code: 'c', state: s1 });
+    expect(auth.resultado(s1)).toEqual({ ok: true });
+    const s2 = stateDe(auth.iniciar(REDIRECT));
+    await auth.concluir({ code: 'c', state: s2 });
+    expect(auth.resultado(s2)).toEqual({ ok: false, motivo: 'troca-falhou' });
+    const s3 = stateDe(auth.iniciar(REDIRECT));
+    await auth.concluir({ state: s3, error: 'access_denied' });
+    expect(auth.resultado(s3)).toEqual({ ok: false, motivo: 'negado' });
+    await auth.concluir({ code: 'c', state: 'inventado' });
+    expect(auth.resultado('inventado')).toBeNull();
+  });
+
   it('concluir sem clientId → sem-credenciais', async () => {
     const { auth } = montar([], { clientId: null, clientSecret: null, apiKey: null });
     expect(await auth.concluir({ code: 'c', state: 'x' })).toEqual({ ok: false, motivo: 'sem-credenciais' });

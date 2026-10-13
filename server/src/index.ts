@@ -1,9 +1,8 @@
 // Primeiro import de todos, de propósito — ver quiet.ts.
 import './quiet';
-import { abrirNavegador } from './abrir-navegador';
 import fs from 'node:fs';
 import { loadConfig } from './config';
-import { APP_VERSION, WEB_ASSETS } from './bundled';
+import { APP_VERSION } from './bundled';
 import { openDb } from './db/index';
 import { herdarDadosDoV1 } from './db/legacy';
 import { buildApp } from './app';
@@ -16,9 +15,7 @@ const config = loadConfig();
 
 // Antes da primeira detecção do ffmpeg (o resultado fica em cache): aberto pelo
 // Dock, o app desktop não herda o PATH do terminal — ver desktop.ts.
-if (config.desktop) {
-  process.env.PATH = pathComExtras(process.env.PATH ?? '', process.platform, fs.existsSync, process.env);
-}
+process.env.PATH = pathComExtras(process.env.PATH ?? '', process.platform, fs.existsSync, process.env);
 
 // Antes de abrir o banco: se o app subiu de dentro da pasta do v1 e ainda não há
 // banco novo, o histórico de lá é adotado. Depois do openDb seria tarde — ele
@@ -31,8 +28,6 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir]) {
 
 const db = openDb(config.dbPath);
 const app = buildApp(config, db);
-// Sem interface embutida (desenvolvimento), quem abre o navegador é o Vite.
-const temInterface = Boolean(WEB_ASSETS['/index.html']);
 
 const shutdown = () => {
   app.close().finally(() => process.exit(0));
@@ -46,7 +41,6 @@ async function subir(): Promise<void> {
   try {
     const { port, trocou } = await escutarComFallback(app, config.port, config.bind);
     const url = `http://localhost:${port}`;
-    const abrindo = config.openBrowser && temInterface;
 
     console.log(
       mensagemDeBoot({
@@ -57,13 +51,11 @@ async function subir(): Promise<void> {
         trocouDePorta: trocou,
         portaPedida: config.port,
         herdouDoV1: heranca === 'adotado',
-        abrindoNavegador: abrindo,
         plataforma: process.platform,
       }).join('\n'),
     );
 
-    if (config.desktop) console.log(linhaDaUrl(url));
-    if (abrindo) abrirNavegador(url);
+    console.log(linhaDaUrl(url));
   } catch (err) {
     console.error(`\n${err instanceof Error ? err.message : err}\n`);
     process.exit(1);

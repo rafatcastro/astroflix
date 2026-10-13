@@ -108,4 +108,14 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
+        # Os quatro jobs da matriz atualizam o mesmo latest.json, cada um com a sua
+        # plataforma; dois terminando juntos podem sobrescrever um ao outro. Se
+        # faltar uma, quem usa aquele sistema nunca mais receberia atualização —
+        # melhor não publicar e reexecutar o job que ficou de fora.
+        run: |
+          gh release download "${GITHUB_REF_NAME}" -p latest.json
+          for p in darwin-aarch64 darwin-x86_64 windows-x86_64 linux-x86_64; do
+            jq -e --arg p "$p" '.platforms[$p].url' latest.json >/dev/null \
+              || { echo "::error::latest.json sem a plataforma $p"; exit 1; }
+          done
+          gh release edit "${GITHUB_REF_NAME}" --draft=false --latest
