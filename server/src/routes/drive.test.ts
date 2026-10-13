@@ -111,7 +111,9 @@ describe('rotas do Drive', () => {
     expect(new URL(r.json().url).searchParams.get('redirect_uri')).toBe('http://localhost:7777/api/drive/auth/callback');
   });
 
-  it('callback com state inválido devolve página que avisa ok:false', async () => {
+  // A página abre no navegador do sistema, fora do app: não há opener nem aba da
+  // mesma origem para avisar, então ela só informa — e não roda script nenhum.
+  it('callback com state inválido devolve página estática de falha, sem refletir a query', async () => {
     const { app } = montar();
     const r = await app.inject({
       method: 'GET',
@@ -120,23 +122,25 @@ describe('rotas do Drive', () => {
     });
     expect(r.statusCode).toBe(200);
     expect(r.headers['content-type']).toBe('text/html; charset=utf-8');
-    expect(r.body).toContain('"ok":false');
-    expect(r.body).toContain('"motivo":"state-invalido"');
-    expect(r.body).toContain('learnflix-drive');
+    expect(r.body).toContain('Não foi possível conectar a conta');
     expect(r.body).not.toContain('SEGREDO');
     expect(r.body).not.toContain('alert(1)');
-    const csp = String(r.headers['content-security-policy']);
-    const nonce = /nonce-([\w-]+)/.exec(csp)?.[1];
-    expect(csp).toContain("default-src 'none'");
-    expect(nonce).toBeTruthy();
-    expect(r.body).toContain(`nonce="${nonce}"`);
+    expect(r.body).not.toContain('<script');
+    expect(String(r.headers['content-security-policy'])).toContain("default-src 'none'");
   });
 
-  it('callback também avisa pelo BroadcastChannel (link de fallback sem opener)', async () => {
-    const { app } = montar();
-    const r = await app.inject({ method: 'GET', url: '/api/drive/auth/callback?state=x', headers: { host: 'localhost:7777' } });
-    expect(r.body).toContain("new BroadcastChannel('learnflix-drive')");
-    expect(r.body).toMatch(/c\.postMessage\(\{"tipo":"learnflix-drive"/);
+  it('resultado do login: pendente → 200 { pronto: false }; sem state → 400', async () => {
+    const { app, db } = montar();
+    salvarCredenciais(db, { clientId: 'cid' });
+    const { url } = (await post(app, '/api/drive/auth/iniciar', {})).json();
+    const state = new URL(url).searchParams.get('state');
+    const pend = await app.inject({ method: 'GET', url: `/api/drive/auth/resultado?state=${state}`, headers: { host: 'localhost:7777' } });
+    expect(pend.json()).toEqual({ pronto: false });
+    await app.inject({ method: 'GET', url: `/api/drive/auth/callback?state=${state}&error=access_denied`, headers: { host: 'localhost:7777' } });
+    const fim = await app.inject({ method: 'GET', url: `/api/drive/auth/resultado?state=${state}`, headers: { host: 'localhost:7777' } });
+    expect(fim.json()).toEqual({ pronto: true, ok: false, motivo: 'negado' });
+    const sem = await app.inject({ method: 'GET', url: '/api/drive/auth/resultado', headers: { host: 'localhost:7777' } });
+    expect(sem.statusCode).toBe(400);
   });
 
   it('PUT credenciais: trocar client apaga refresh token e e-mail; trocar só a apiKey não', async () => {

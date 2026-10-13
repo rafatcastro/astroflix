@@ -59,20 +59,4 @@ describe('loadConfig', () => {
     expect(c.autocompleteThreshold).toBe(0.8);
   });
 
-  it('openBrowser: abre por padrão e respeita o override', () => {
-    expect(loadConfig({}).openBrowser).toBe(true);
-    expect(loadConfig({ OPEN_BROWSER: '0' }).openBrowser).toBe(false);
-  });
-
-  it('desktop: LEARNFLIX_DESKTOP=1 liga o modo e não abre o navegador', () => {
-    expect(loadConfig({}).desktop).toBe(false);
-    expect(loadConfig({ LEARNFLIX_DESKTOP: '1' }).desktop).toBe(true);
-    expect(loadConfig({ LEARNFLIX_DESKTOP: '1' }).openBrowser).toBe(false);
-    expect(loadConfig({ LEARNFLIX_DESKTOP: '1', OPEN_BROWSER: '1' }).openBrowser).toBe(true);
-  });
-
-  it('openBrowser: não abre em `npm run dev`, a menos que peçam', () => {
-    expect(loadConfig({ npm_lifecycle_event: 'dev' }).openBrowser).toBe(false);
-    expect(loadConfig({ npm_lifecycle_event: 'dev', OPEN_BROWSER: '1' }).openBrowser).toBe(true);
-  });
 });

@@ -11,10 +11,10 @@ no SQLite. Cursos podem ser agrupados em **bibliotecas** (coleções).
 
 O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
-carrega a interface dele. Assistir
-cursos locais funciona sem conta, sem rede e sem serviço externo. Recursos que usam rede (por
-exemplo, baixar uma pasta do Google Drive) são **opcionais**: quem não usa nunca precisa configurar
-nada para eles, e nenhuma mudança pode transformá-los em pré-requisito do resto do app.
+carrega a interface dele. Assistir cursos locais funciona sem conta, sem rede e sem serviço externo.
+Recursos que usam rede (por exemplo, baixar uma pasta do Google Drive) são **opcionais**: quem não
+usa nunca precisa configurar nada para eles, e nenhuma mudança pode transformá-los em pré-requisito
+do resto do app.
 
 O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
 motivou a decisão), não o quê. Siga esse estilo.
@@ -30,12 +30,11 @@ workspaces (`pnpm-workspace.yaml`): `server`, `web` e `desktop`. Para o app desk
 
 ```bash
 pnpm install               # primeira vez
-pnpm dev                   # Vite (:5173, faz proxy de /api → :7777) + Fastify (:7777), hot reload
+pnpm dev                   # janela do Tauri sobre o Vite (:5173, /api → :7777) + Fastify, hot reload
 pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/learnflix.cjs
 pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
-pnpm test                  # testes dos dois workspaces
+pnpm test                  # testes do server e da web
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
-pnpm desktop:dev           # build + sidecar + janela do Tauri (sem hot reload; para UI use pnpm dev)
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm repo                  # audita onde o nome do repositório GitHub aparece
 pnpm repo dono/repo        # troca o repositório em package.json, README.md e tauri.conf.json
@@ -76,31 +75,35 @@ Lidas em `server/src/config.ts`:
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
-- `OPEN_BROWSER`.
-- `LEARNFLIX_DESKTOP=1`: posto pelo app desktop. Não abre o navegador, acrescenta ao PATH os lugares
-  comuns do ffmpeg (app aberto pelo Dock não herda o PATH do terminal) e escreve
-  `LEARNFLIX_URL=<url>` na saída padrão, que é a linha que o `lib.rs` espera para navegar a janela
-  (`server/src/desktop.ts`).
+
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
   Drive. Precedência, campo a campo: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
   `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
   `.google-oauth.local.json`. Esse arquivo é ignorado pelo git e **nunca** é commitado (o repositório
   é público e o push protection do GitHub barra segredos do Google). No CI vêm dos secrets.
 
+O servidor nunca abre o navegador: **a interface só roda na janela do app desktop** (não há mais
+modo navegador). Ao subir, ele acrescenta ao PATH os lugares comuns do ffmpeg (app aberto pelo Dock
+não herda o PATH do terminal) e escreve `LEARNFLIX_URL=<url>` na saída padrão, a linha que o
+`lib.rs` espera para navegar a janela (`server/src/desktop.ts`).
+
 ## Arquitetura
 
-**A divisão cliente/servidor existe porque o navegador não lê caminhos arbitrários do disco.** O
+**A divisão cliente/servidor existe porque uma página web (a interface, dentro da webview) não lê
+caminhos arbitrários do disco.** O
 servidor Fastify lê as pastas (sempre só-leitura), transmite o vídeo, gera as miniaturas e é dono do
 SQLite. A SPA React conversa com ele por uma API JSON.
 
 ### Servidor (`server/src`)
 
 - `index.ts`: bootstrap, nesta ordem: `quiet` (tem de ser o **primeiro import**), config, herança
-  do v1, diretórios, `openDb`, `buildApp`, `escutarComFallback`, banner, navegador.
+  do v1, PATH do ffmpeg, diretórios, `openDb`, `buildApp`, `escutarComFallback`, banner e a linha
+  `LEARNFLIX_URL=`.
 - `app.ts`: `buildApp(config, db)` monta o Fastify. Primeiro registra a guarda, depois os plugins
   de rota. **Rota nova entra aqui, no marcador `// [ROUTES]`.**
-- `guarda.ts`: a fronteira contra páginas da internet abertas no navegador da pessoa. Recusa `Host`
-  que não seja localhost ou um IP literal (contra DNS rebinding) e `Origin` de fora desta máquina em
+- `guarda.ts`: a fronteira contra páginas da internet abertas no navegador da pessoa (o servidor
+  escuta em localhost, e qualquer página aberta no navegador consegue tentar falar com ele). Recusa
+  `Host` que não seja localhost ou um IP literal (contra DNS rebinding) e `Origin` de fora desta máquina em
   requisições que mudam estado (contra CSRF). Toda rota nova herda essa proteção. Não contorne.
 - `spa.ts`: serve a interface a partir de `bundled.ts` (base64 embutido no build), com fallback para
   a casca em URLs que não começam com `/api`. **Nada é lido do disco.** No v1 a SPA era procurada
@@ -120,14 +123,15 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   (mesmo curso por caminho ou por impressão digital das aulas), `merge` (vence quem foi mais longe)
   e `import` (`planImport` puro + `applyImport`). Exposto por `routes/backup.ts`.
 - `drive/`: cursos do Google Drive (rede opcional, sempre `fetch` injetável nos testes). `link`
-  extrai o ID da pasta, `api` é o cliente da Drive API com retry, `auth` faz OAuth com PKCE (popup
-  no navegador, navegador do sistema no desktop), `walk` lista a pasta, `stream` repassa o `Range`
-  do vídeo, `status`/`tipos` mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
+  extrai o ID da pasta, `api` é o cliente da Drive API com retry, `auth` faz OAuth com PKCE (o login
+  abre no navegador do sistema; a janela pergunta o resultado por `/api/drive/auth/resultado`,
+  pelo `state`), `walk` lista a pasta, `stream` repassa o `Range` do vídeo, `status`/`tipos`
+  mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
-- `listen.ts`, `banner.ts`, `abrir-navegador.ts`: porta ocupada, mensagem de boot e abrir o
-  navegador sem depender de pacote externo (o `open` não sobrevive ao empacotamento).
+- `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
+  `LEARNFLIX_URL=`.
 - `routes/`: um plugin por arquivo. SQL cru com prepared statements do `node:sqlite`, mapeando as
   linhas snake_case para DTOs camelCase à mão. `stream.ts` implementa o parsing de HTTP Range (é o
   que faz o seek funcionar). O `isWithinRoots` do `fs.ts` é a fronteira de segurança da navegação de
@@ -145,12 +149,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
 - `src-tauri/src/lib.rs`: instância única, sobe o sidecar `learnflix-server`, lê o stdout até
   `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
   erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
-  sair.
+  sair. Cada subida tem uma geração: eventos de um processo antigo não mexem mais na janela.
 - `capabilities/interface.json` libera opener, updater e process para a origem `http://localhost:*`
   (a interface vem do servidor, não do bundle).
-- Na interface, `web/src/lib/desktop.ts` (`emDesktop`, `abrirFora`, `cliqueFora`) é o único ponto
-  que sabe do Tauri: login do Google e downloads abrem no navegador do sistema (o Google bloqueia
-  OAuth em webview), e `AvisoAtualizacao.tsx` oferece a versão nova. Fora do Tauri nada muda.
+- Na interface, `web/src/lib/desktop.ts` (`abrirFora`, `cliqueFora`) leva para fora da webview:
+  login do Google e downloads abrem no navegador do sistema (o Google bloqueia OAuth em webview), e `AvisoAtualizacao.tsx` oferece a versão nova (parando o servidor antes de
+  instalar: no Windows o instalador fecha o app sem `RunEvent::Exit`).
+- Em `pnpm dev` (`tauri dev` com `tauri.dev.conf.json`) não há sidecar: a janela abre o Vite e o
+  servidor roda pelo `tsx watch` (`pnpm dev:servicos`). `tauri::is_dev()` pula a subida do sidecar.
 
 ### Modelo de dados (SQLite)
 

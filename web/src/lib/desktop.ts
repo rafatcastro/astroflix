@@ -1,32 +1,18 @@
 import type { MouseEvent } from 'react';
 
-// O app desktop (desktop/, Tauri) carrega esta mesma interface numa webview. Lá,
-// popup, aba nova e download não se comportam como no navegador — e o Google
-// recusa login dentro de webview embutida. Este é o único lugar que sabe disso:
-// fora do Tauri, tudo segue o caminho do navegador, sem mudança.
+// A interface só roda dentro do app desktop (desktop/, Tauri), numa webview. Lá,
+// aba nova e download não se comportam como num navegador — e o Google recusa
+// login dentro de webview embutida. Por isso o que é para abrir "fora" vai para
+// o navegador do sistema, por aqui.
 
-export function emDesktop(): boolean {
-  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
-/** Abre no navegador do sistema (desktop) ou numa aba nova (navegador). */
+/** Abre a URL (relativa ou absoluta) no navegador do sistema. */
 export async function abrirFora(url: string): Promise<void> {
-  const absoluta = new URL(url, window.location.href).toString();
-  if (!emDesktop()) {
-    window.open(absoluta, '_blank', 'noopener');
-    return;
-  }
-  // Import sob demanda: no navegador o plugin nem é carregado.
   const { openUrl } = await import('@tauri-apps/plugin-opener');
-  await openUrl(absoluta);
+  await openUrl(new URL(url, window.location.href).toString());
 }
 
-/**
- * onClick para links de download/aba nova: no desktop, troca a navegação da
- * webview pelo navegador do sistema; no navegador, deixa o link agir sozinho.
- */
+/** onClick para links de download/aba nova: troca a navegação da webview pelo navegador do sistema. */
 export function cliqueFora(e: MouseEvent, url: string): void {
-  if (!emDesktop()) return;
   e.preventDefault();
   void abrirFora(url);
 }
