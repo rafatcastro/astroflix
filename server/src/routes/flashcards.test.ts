@@ -82,6 +82,16 @@ describe('flashcards e Anki', () => {
     expect((await listar('?lessonId=l1')).cards).toHaveLength(2);
   });
 
+  // O único card de uma lista apagado no Anki: os outros cards provam que é o mesmo perfil.
+  it('card sozinho na lista e apagado no Anki sai do app', async () => {
+    const { anki, criar, listar } = montar();
+    await criar({ frente: 'Geral', verso: '1' });
+    await criar({ frente: 'Da aula', verso: '2', lessonId: 'l1' });
+    anki.notas.delete([...anki.notas.keys()][0]);
+    expect((await listar('?geral=1')).cards).toHaveLength(0);
+    expect((await listar('?lessonId=l1')).cards).toHaveLength(1);
+  });
+
   it('editar e apagar no app chegam ao Anki', async () => {
     const { app, anki, criar, listar } = montar();
     const { card } = (await criar({ frente: 'A', verso: '1', lessonId: 'l1' })).json();
