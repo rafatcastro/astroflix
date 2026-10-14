@@ -34,6 +34,7 @@ import { configSupabase, criarClienteSupabase, type ClienteSupabase } from './nu
 import { criarServicosConta } from './nuvem/conta';
 import { criarSincronizador, type Sincronizador } from './nuvem/sincronizar';
 import { contaRoutes } from './routes/conta';
+import { documentosRoutes } from './routes/documentos';
 import { credenciaisGoogle } from './drive/credenciais';
 
 // `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
@@ -141,6 +142,7 @@ export function buildApp(
   app.register(telegramRoutes, { db, config, telegram });
   app.register(flashcardsRoutes, { db, anki });
   app.register(contaRoutes, { conta, sinc });
+  app.register(documentosRoutes, { db, config });
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.

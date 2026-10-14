@@ -10,6 +10,8 @@ const CHAVES: Record<string, string[]> = {
   progresso: ['curso_id', 'rel_path'],
   flashcards: ['id'],
   pastas_por_maquina: ['curso_id', 'maquina_id'],
+  documentos: ['id'],
+  documentos_por_maquina: ['documento_id', 'maquina_id'],
 };
 
 export function supabaseFalso() {
@@ -42,7 +44,9 @@ export function supabaseFalso() {
     async upsert(token, tabela, linhas) {
       const user = dono(token);
       estado.chamadas++;
-      const t = tabelas.get(tabela)!;
+      // Tabela que o schema.sql do projeto ainda não criou: o PostgREST responde 404.
+      const t = tabelas.get(tabela);
+      if (!t) throw new FalhaNuvem('recusado', 404);
       for (const l of linhas as Record<string, any>[]) {
         const k = CHAVES[tabela].map((c) => l[c]).join('|');
         const velha = t.get(k);
@@ -60,12 +64,17 @@ export function supabaseFalso() {
             nova.alterado_em = velha.alterado_em;
           }
         }
+        if (tabela === 'documentos' && velha && velha.leitura_em && (!nova.leitura_em || nova.leitura_em < velha.leitura_em)) {
+          for (const c of ['pagina', 'lido', 'lido_em', 'leitura_em']) nova[c] = velha[c];
+        }
         t.set(k, nova);
       }
     },
     async mudancas(token, tabela, desde, limite) {
       const user = dono(token);
-      return [...tabelas.get(tabela)!.values()]
+      const t = tabelas.get(tabela);
+      if (!t) throw new FalhaNuvem('recusado', 404);
+      return [...t.values()]
         .filter((l) => l.user_id === user && (!desde || l.atualizado_em > desde))
         .sort((a, b) => (a.atualizado_em < b.atualizado_em ? -1 : 1))
         .slice(0, limite)

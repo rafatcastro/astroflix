@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 5;
+const ULTIMA_VERSAO = 6;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -237,6 +237,45 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
     transaction(db, () => {
       db.exec(sql.join('\n'));
       pragma(db, 'user_version = 5');
+    });
+  }
+  if (version < 6 && ate >= 6) {
+    // PDFs (livros, questões, apostilas): routes/documentos.ts. Um arquivo do disco
+    // por linha, nunca copiado nem alterado. A categoria é texto livre: as que
+    // existem são as que algum PDF usa, sem tabela à parte para ficar órfã.
+    // `leitura_em` é quando a pessoa mexeu na leitura (página ou lido): decide
+    // quem vence entre duas máquinas, como o alterado_em do progresso.
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE documentos (
+          id TEXT PRIMARY KEY,
+          titulo TEXT NOT NULL,
+          categoria TEXT,
+          caminho TEXT NOT NULL,
+          tamanho INTEGER NOT NULL DEFAULT 0,
+          paginas INTEGER,
+          pagina INTEGER NOT NULL DEFAULT 1,
+          lido INTEGER NOT NULL DEFAULT 0,
+          lido_em TEXT,
+          leitura_em TEXT,
+          criado_em TEXT NOT NULL,
+          atualizado_em TEXT NOT NULL
+        );
+        CREATE INDEX idx_documentos_caminho ON documentos(caminho);
+        CREATE TRIGGER nuvem_documentos_ins AFTER INSERT ON documentos
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'documento' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('documento', NEW.id); END;
+        CREATE TRIGGER nuvem_documentos_upd AFTER UPDATE OF titulo, categoria, caminho, paginas, pagina, lido ON documentos
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'documento' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('documento', NEW.id); END;
+        CREATE TRIGGER nuvem_documentos_del AFTER DELETE ON documentos
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'documento' AND chave = OLD.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('documento', OLD.id); END;
+      `);
+      pragma(db, 'user_version = 6');
     });
   }
 }
