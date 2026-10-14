@@ -38,7 +38,7 @@ pnpm test                  # testes do server e da web
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm repo                  # audita onde o nome do repositório GitHub aparece
-pnpm repo dono/repo        # troca o repositório em package.json, README.md, tauri.conf.json e AvisoAtualizacao.tsx
+pnpm repo dono/repo        # troca o repositório em package.json, README.md e tauri.conf.json
 ```
 
 Um teste só:
@@ -210,7 +210,8 @@ SQLite. A SPA React conversa com ele por uma API JSON.
 - `capabilities/interface.json` libera opener, updater e process para a origem `http://localhost:*`
   (a interface vem do servidor, não do bundle).
 - Na interface, `web/src/lib/desktop.ts` (`abrirFora`, `cliqueFora`) leva para fora da webview:
-  login do Google e downloads abrem no navegador do sistema (o Google bloqueia OAuth em webview), e `AvisoAtualizacao.tsx` oferece a versão nova (parando o servidor antes de
+  login do Google e downloads abrem no navegador do sistema (o Google bloqueia OAuth em webview), e `AtualizacaoInicial.tsx`, na abertura, procura a versão nova e a instala sozinho com uma barra
+  (falhou: segue para o app e tenta na próxima abertura; parando o servidor antes de
   instalar: no Windows o instalador fecha o app sem `RunEvent::Exit`).
 - Em `pnpm dev` (`tauri dev` com `tauri.dev.conf.json`) não há sidecar: a janela abre o Vite e o
   servidor roda pelo `tsx watch` (`pnpm dev:servicos`). `tauri::is_dev()` pula a subida do sidecar.
