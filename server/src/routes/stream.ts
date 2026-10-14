@@ -108,8 +108,9 @@ export async function streamRoutes(
   });
 }
 
-// Arquivo do disco com suporte a Range (é o que faz o seek funcionar).
-function servirArquivo(req: FastifyRequest, reply: FastifyReply, filePath: string, type: string): FastifyReply {
+// Arquivo do disco com suporte a Range (é o que faz o seek funcionar; no PDF, o
+// pdf.js pede só os pedaços que vai desenhar, e um livro grande abre sem ler tudo).
+export function servirArquivo(req: FastifyRequest, reply: FastifyReply, filePath: string, type: string): FastifyReply {
   let stat: fs.Stats;
   try { stat = fs.statSync(filePath); } catch { return reply.code(404).send({ error: 'file_missing' }); }
 

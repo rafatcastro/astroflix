@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { cliqueFora, escolherPasta } from '../lib/desktop';
+import AbasPrincipais from '../components/AbasPrincipais';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
@@ -730,7 +731,8 @@ export default function Library() {
     <div className={`mx-auto max-w-6xl px-6 py-8${selectMode ? ' pb-28' : ''}`}>
       <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Meus cursos</h1>
+          <h1 className="sr-only">Meus cursos</h1>
+          <AbasPrincipais />
           {courses && courses.length > 0 && (
             <p className="mt-1 text-sm text-neutral-500">
               {courses.length} curso{courses.length === 1 ? '' : 's'}

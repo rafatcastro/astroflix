@@ -168,4 +168,47 @@ describe('conta e nuvem', () => {
     expect((await m.sincronizar()).json()).toMatchObject({ erro: null, pendentes: 0 });
     expect(nuvem.linhas('colecoes')).toMatchObject([{ nome: 'Inglês' }]);
   });
+
+  it('PDFs: a leitura vai para a outra máquina; o arquivo é de cada uma', async () => {
+    const nuvem = supabaseFalso();
+    const a = maquina(nuvem);
+    const pdf = path.join(tmp, 'livro.pdf');
+    fs.writeFileSync(pdf, '%PDF-1.4');
+    await a.entrar('gil');
+    const { ids } = (await a.post('/api/documentos', { caminhos: [pdf], categoria: 'Livros' })).json();
+    await a.app.inject({ method: 'PATCH', url: `/api/documentos/${ids[0]}`, payload: { paginas: 200, pagina: 42 }, headers: H });
+    await a.sincronizar();
+    const b = maquina(nuvem);
+    await b.entrar('gil');
+    expect((await b.get('/api/documentos')).json()).toMatchObject([
+      { id: ids[0], titulo: 'livro', categoria: 'Livros', pagina: 42, paginas: 200, disponivel: false },
+    ]);
+    // Re-apontar na B não muda o caminho da A; ler na B leva a página para a A.
+    await b.post(`/api/documentos/${ids[0]}/caminho`, { caminho: pdf });
+    await b.app.inject({ method: 'PATCH', url: `/api/documentos/${ids[0]}`, payload: { pagina: 90 }, headers: H });
+    await b.sincronizar();
+    await a.sincronizar();
+    expect((await a.get(`/api/documentos/${ids[0]}`)).json()).toMatchObject({ pagina: 90, caminho: pdf, disponivel: true });
+    // Remover propaga.
+    await a.app.inject({ method: 'DELETE', url: `/api/documentos/${ids[0]}`, headers: H });
+    await a.sincronizar();
+    await b.sincronizar();
+    expect((await b.get('/api/documentos')).json()).toEqual([]);
+  });
+
+  it('projeto sem as tabelas de PDFs (schema.sql antigo): os cursos continuam sincronizando', async () => {
+    const nuvem = supabaseFalso();
+    nuvem.tabelas.delete('documentos');
+    nuvem.tabelas.delete('documentos_por_maquina');
+    const m = maquina(nuvem);
+    const pdf = path.join(tmp, 'outro.pdf');
+    fs.writeFileSync(pdf, '%PDF-1.4');
+    m.db
+      .prepare("INSERT INTO documentos (id, titulo, caminho, criado_em, atualizado_em) VALUES ('d1', 'Outro', ?, 'x', 'x')")
+      .run(pdf);
+    createCourseFromPath(m.db, cursoNoDisco('curso-pdf'));
+    await m.entrar('hugo');
+    expect((await m.sincronizar()).json()).toMatchObject({ erro: null, pendentes: 1 });
+    expect(nuvem.linhas('cursos')).toHaveLength(1);
+  });
 });

@@ -38,7 +38,7 @@ export interface Sincronizador {
 const LOTE = 500;
 const PAGINA = 1000;
 // Ordem importa: aula e progresso apontam para o curso (chave estrangeira lá).
-const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'flashcard'] as const;
+const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'flashcard', 'documento'] as const;
 type Item = (typeof ORDEM)[number];
 
 const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
@@ -47,8 +47,14 @@ const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
   aula: { tabela: 'aulas', conflito: 'curso_id,rel_path' },
   progresso: { tabela: 'progresso', conflito: 'curso_id,rel_path' },
   flashcard: { tabela: 'flashcards', conflito: 'id' },
+  documento: { tabela: 'documentos', conflito: 'id' },
 };
-const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina'] as const;
+const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina'] as const;
+// Os PDFs chegaram depois da conta: um projeto em que o schema.sql novo ainda não
+// foi aplicado não tem essas tabelas (404). Nesse caso elas esperam na fila, sem
+// derrubar a sincronização dos cursos.
+const TABELAS_NOVAS = new Set(['documentos', 'documentos_por_maquina']);
+const tabelaAusente = (tabela: string, e: unknown) => TABELAS_NOVAS.has(tabela) && e instanceof FalhaNuvem && e.status === 404;
 
 const tipoDaFalha = (e: unknown): EstadoNuvem['erro'] => (e instanceof FalhaNuvem ? e.tipo : 'sem-conexao');
 const bool = (v: unknown) => v === true || v === 1;
@@ -186,6 +192,25 @@ export function criarSincronizador(deps: {
               },
             };
       }
+      case 'documento': {
+        const d = db.prepare('SELECT * FROM documentos WHERE id=?').get(chave) as any;
+        if (!d) {
+          return {
+            linha: {
+              id: chave, titulo: '', categoria: null, tamanho: 0, paginas: null, pagina: 1, lido: false, lido_em: null,
+              leitura_em: null, criado_em: new Date().toISOString(), excluido: true,
+            },
+          };
+        }
+        return {
+          linha: {
+            id: d.id, titulo: d.titulo, categoria: d.categoria, tamanho: d.tamanho, paginas: d.paginas, pagina: d.pagina,
+            lido: !!d.lido, lido_em: d.lido_em, leitura_em: d.leitura_em, criado_em: d.criado_em, excluido: false,
+          },
+          // O arquivo é desta máquina, como a pasta de um curso local.
+          pasta: d.caminho ? { documento_id: d.id, maquina_id: maquinaId(), caminho: d.caminho } : undefined,
+        };
+      }
     }
   }
 
@@ -205,8 +230,16 @@ export function criarSincronizador(deps: {
           if (r.pasta) pastas.push(r.pasta);
         }
         const { tabela, conflito } = TABELA_NUVEM[item];
-        await supabase.upsert(token, tabela, linhas, conflito);
-        if (pastas.length) await supabase.upsert(token, 'pastas_por_maquina', pastas, 'curso_id,maquina_id');
+        try {
+          await supabase.upsert(token, tabela, linhas, conflito);
+          if (pastas.length) {
+            if (item === 'documento') await supabase.upsert(token, 'documentos_por_maquina', pastas, 'documento_id,maquina_id');
+            else await supabase.upsert(token, 'pastas_por_maquina', pastas, 'curso_id,maquina_id');
+          }
+        } catch (e) {
+          if (tabelaAusente(tabela, e)) break;
+          throw e;
+        }
         // Só os seqs lidos: uma mudança anotada durante o envio ganhou seq novo e fica.
         const apagar = db.prepare('DELETE FROM nuvem_fila WHERE seq=?');
         transaction(db, () => {
@@ -354,6 +387,41 @@ export function criarSincronizador(deps: {
         if (r.maquina_id !== maquinaId()) return;
         db.prepare("UPDATE courses SET root_path=? WHERE id=? AND source='local'").run(r.caminho, r.curso_id);
         return;
+      case 'documentos': {
+        if (bool(r.excluido)) {
+          db.prepare('DELETE FROM documentos WHERE id=?').run(r.id);
+          return;
+        }
+        const local = db.prepare('SELECT leitura_em FROM documentos WHERE id=?').get(r.id) as { leitura_em: string | null } | undefined;
+        const agora = new Date().toISOString();
+        if (!local) {
+          // Sem caminho: o PDF é de outra máquina até a pessoa re-apontar (ou até a
+          // linha de documentos_por_maquina desta máquina descer, logo depois).
+          db.prepare(
+            `INSERT INTO documentos (id, titulo, categoria, caminho, tamanho, paginas, pagina, lido, lido_em, leitura_em, criado_em, atualizado_em)
+             VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ).run(
+            r.id, r.titulo, r.categoria ?? null, r.tamanho ?? 0, r.paginas ?? null, r.pagina ?? 1, bool(r.lido) ? 1 : 0,
+            r.lido_em ?? null, r.leitura_em ?? null, r.criado_em, agora,
+          );
+          return;
+        }
+        // A leitura vale a mais recente (a mesma regra de mesclar_leitura na nuvem).
+        const recente = !local.leitura_em || (r.leitura_em != null && String(r.leitura_em) >= local.leitura_em);
+        db.prepare(
+          `UPDATE documentos SET titulo=?, categoria=?, paginas=COALESCE(?, paginas), atualizado_em=? WHERE id=?`,
+        ).run(r.titulo, r.categoria ?? null, r.paginas ?? null, agora, r.id);
+        if (recente) {
+          db.prepare('UPDATE documentos SET pagina=?, lido=?, lido_em=?, leitura_em=? WHERE id=?').run(
+            r.pagina ?? 1, bool(r.lido) ? 1 : 0, r.lido_em ?? null, r.leitura_em ?? null, r.id,
+          );
+        }
+        return;
+      }
+      case 'documentos_por_maquina':
+        if (r.maquina_id !== maquinaId()) return;
+        db.prepare('UPDATE documentos SET caminho=? WHERE id=?').run(r.caminho, r.documento_id);
+        return;
     }
   }
 
@@ -363,7 +431,13 @@ export function criarSincronizador(deps: {
     for (const tabela of DESCIDA) {
       for (;;) {
         const marca = lerEstado(`marca.${tabela}`);
-        const linhas = await supabase.mudancas(token, tabela, marca, PAGINA);
+        let linhas: Array<Record<string, unknown>>;
+        try {
+          linhas = await supabase.mudancas(token, tabela, marca, PAGINA);
+        } catch (e) {
+          if (tabelaAusente(tabela, e)) break;
+          throw e;
+        }
         if (!linhas.length) break;
         aplicando(() => {
           for (const r of linhas) aplicar(tabela, r, cursosTocados);
@@ -420,6 +494,7 @@ export function criarSincronizador(deps: {
         // para ela. Downloads e conversões ficam (são arquivos desta máquina).
         aplicando(() => {
           db.prepare('DELETE FROM flashcards').run();
+          db.prepare('DELETE FROM documentos').run();
           db.prepare('DELETE FROM courses').run();
           db.prepare('DELETE FROM collections').run();
           db.prepare('DELETE FROM nuvem_fila').run();
@@ -435,6 +510,7 @@ export function criarSincronizador(deps: {
               SELECT 'aula', json_object('curso', course_id, 'rel', rel_path) FROM lessons;
             INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'progresso', lesson_id FROM progress;
             INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'flashcard', id FROM flashcards;
+            INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'documento', id FROM documentos;
           `);
         });
       }
