@@ -108,7 +108,7 @@ describe('pragma', () => {
   it('lê um valor', () => {
     const db = bancoDeTeste();
 
-    expect(pragma(db, 'user_version')).toBe(5);
+    expect(pragma(db, 'user_version')).toBe(6);
 
     db.close();
   });

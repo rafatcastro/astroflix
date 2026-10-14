@@ -27,3 +27,11 @@ export async function escolherPasta(titulo: string): Promise<string | null> {
   const r = await open({ directory: true, multiple: false, title: titulo });
   return typeof r === 'string' ? r : null;
 }
+
+/** Seletor nativo de um ou vários PDFs. Devolve [] se a pessoa cancelar. */
+export async function escolherPdfs(titulo: string, varios = true): Promise<string[]> {
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const r = await open({ multiple: varios, directory: false, title: titulo, filters: [{ name: 'PDF', extensions: ['pdf', 'PDF'] }] });
+  if (!r) return [];
+  return Array.isArray(r) ? r : [r];
+}

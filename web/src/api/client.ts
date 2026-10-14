@@ -55,6 +55,15 @@ const qsFlashcards = (f: FiltroFlashcards): string =>
   : 'courseId' in f ? `?courseId=${encodeURIComponent(f.courseId)}`
   : 'geral' in f ? '?geral=1' : '';
 
+// PDFs (ver server/src/routes/documentos.ts). `disponivel` = o arquivo está nesta
+// máquina; um PDF que veio da conta, de outro computador, chega sem ele.
+export interface Documento {
+  id: string; titulo: string; categoria: string | null; caminho: string; tamanho: number;
+  paginas: number | null; pagina: number; lido: boolean; lidoEm: string | null;
+  leituraEm: string | null; criadoEm: string; disponivel: boolean; temCapa: boolean;
+}
+export interface ResultadoAdicionarPdfs { criados: number; jaExistiam: number; recusados: number; ids: string[]; }
+
 // Conta (login obrigatório) e o estado da sincronização com a nuvem.
 export interface Conta {
   configurada: boolean;
@@ -208,6 +217,21 @@ async function telegramPost(url: string, link: string): Promise<RespostaTelegram
 }
 
 export const api = {
+  listarDocumentos: () => jsonFetch<Documento[]>('/api/documentos'),
+  documento: (id: string) => jsonFetch<Documento>(`/api/documentos/${id}`),
+  adicionarPdfs: (body: { caminhos?: string[]; pasta?: string; categoria?: string | null }) =>
+    jsonFetch<ResultadoAdicionarPdfs>('/api/documentos', { method: 'POST', body: JSON.stringify(body) }),
+  editarDocumento: (id: string, body: { titulo?: string; categoria?: string | null; pagina?: number; paginas?: number; lido?: boolean }) =>
+    jsonFetch<Documento>(`/api/documentos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  reapontarDocumento: (id: string, caminho: string) =>
+    jsonFetch<Documento>(`/api/documentos/${id}/caminho`, { method: 'POST', body: JSON.stringify({ caminho }) }),
+  removerDocumento: (id: string) => jsonFetch<void>(`/api/documentos/${id}`, { method: 'DELETE' }),
+  documentoArquivoUrl: (id: string) => `/api/documentos/${id}/arquivo`,
+  documentoCapaUrl: (id: string, v?: string) => `/api/documentos/${id}/capa${v ? `?v=${encodeURIComponent(v)}` : ''}`,
+  async salvarCapaDocumento(id: string, png: Blob): Promise<void> {
+    const res = await fetch(`/api/documentos/${id}/capa`, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: png });
+    if (!res.ok) throw new Error(`${res.status}`);
+  },
   listCourses: (archived?: boolean) => jsonFetch<CourseSummary[]>(`/api/courses${archived ? '?archived=1' : ''}`),
   getCourse: (id: string) => jsonFetch<CourseDetail>(`/api/courses/${id}`),
   createCourse: (path: string) => jsonFetch<{ id: string; existing?: boolean }>('/api/courses', { method: 'POST', body: JSON.stringify({ path }) }),

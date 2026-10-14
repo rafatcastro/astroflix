@@ -176,7 +176,16 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   a primeira entrada sobe tudo. `buildApp(..., { exigirConta })` (só no `index.ts`) liga a trava
   (401 `precisa-entrar` em toda rota fora de `/api/conta`) e a sincronização a cada minuto; os
   testes usam `supabase-falso.ts` (`buildApp(..., { supabase })`). O schema do Postgres fica em
-  `supabase/schema.sql` (aplicar no SQL Editor).
+  `supabase/schema.sql` (aplicar no SQL Editor; idempotente, rodar de novo a cada tabela nova).
+- `routes/documentos.ts`: a estante de **PDFs** (livros, questões, apostilas; tabela `documentos`,
+  v6). Cada PDF é um arquivo do disco que o app só lê: adicionar arquivos ou uma pasta (com
+  subpastas, com teto de profundidade), categoria em texto livre, página onde parou, lido
+  (automático na última página), re-apontar e remover (o arquivo fica). O arquivo sai por
+  `servirArquivo` com Range, dentro das raízes permitidas. A capa (primeira página) e o número de
+  páginas são desenhados pela interface com o pdf.js e enviados de volta (`PUT .../capa`): no
+  servidor seria outra dependência só para isso. Sobe para a conta como os cursos
+  (`documentos` + `documentos_por_maquina` no `schema.sql`); um projeto sem essas tabelas (404)
+  deixa os PDFs na fila sem travar a sincronização dos cursos.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.
@@ -232,8 +241,11 @@ re-apontar preserva o histórico.
 React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 
 - `main.tsx`: providers (QueryClient, BrowserRouter).
-- `App.tsx`: cinco rotas: `/` (Library), `/course/:id` (Course), `/lesson/:id` (Lesson),
-  `/settings` (Settings) e `/flashcards` (Flashcards, `?curso=<id>`).
+- `App.tsx`: as rotas `/` (Library), `/course/:id` (Course), `/lesson/:id` (Lesson),
+  `/settings` (Settings), `/flashcards` (Flashcards, `?curso=<id>`), `/pdfs` (Pdfs) e `/pdf/:id`
+  (LeitorPdf). `AbasPrincipais` (Cursos | PDFs) é o menu principal das duas estantes.
+- `lib/pdf.ts`: carrega o pdf.js (`pdfjs-dist`, build legacy, por import dinâmico) só quando
+  alguém abre um PDF ou falta uma capa, e gera as capas uma de cada vez.
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o
   servidor.
 - `api/hooks.ts`: wrappers do TanStack Query. As mutations invalidam `['courses']` e
@@ -244,6 +256,9 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   - Lesson: página de assistir estilo YouTube (vídeo à esquerda, abas Aulas/Flashcards à direita),
     salvar progresso, concluir e atalhos de teclado.
   - Settings.
+  - Pdfs: estante de PDFs com filtro por categoria e Adicionar (arquivos ou pasta).
+  - LeitorPdf: rolagem contínua, cada página desenhada só perto da tela; salva a página onde
+    parou; ←/→, +/−, 0 e Esc.
 - `components/DirPicker.tsx` conduz o seletor de pastas via `/api/fs/browse`.
 
 ## Convenções

@@ -21,6 +21,8 @@ const destino = path.join(raiz, 'server', 'src', 'bundled.ts');
 const TIPOS = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  // O worker do pdf.js sai do Vite como .mjs.
+  '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',

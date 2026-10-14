@@ -105,6 +105,34 @@ create table if not exists public.pastas_por_maquina (
   primary key (curso_id, maquina_id)
 );
 
+-- PDFs (livros, questões, apostilas). O arquivo nunca sobe: só os metadados e a
+-- leitura. `leitura_em` é quando a pessoa mexeu na leitura (relógio do app).
+create table if not exists public.documentos (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  titulo text not null,
+  categoria text,
+  tamanho bigint not null default 0,
+  paginas integer,
+  pagina integer not null default 1,
+  lido boolean not null default false,
+  lido_em timestamptz,
+  leitura_em timestamptz,
+  criado_em timestamptz not null default now(),
+  excluido boolean not null default false,
+  atualizado_em timestamptz not null default now()
+);
+
+-- Onde fica o arquivo de cada PDF em cada computador da pessoa.
+create table if not exists public.documentos_por_maquina (
+  documento_id text not null references public.documentos on delete cascade,
+  maquina_id text not null,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  caminho text not null,
+  atualizado_em timestamptz not null default now(),
+  primary key (documento_id, maquina_id)
+);
+
 -- Progresso nunca anda para trás: assistir offline em duas máquinas e sincronizar
 -- depois não pode apagar o que uma delas assistiu (a regra do backup). Concluir ou
 -- desmarcar é uma escolha da pessoa: vale a mais recente.
@@ -129,7 +157,7 @@ do $$
 declare
   t text;
 begin
-  foreach t in array array['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina'] loop
+  foreach t in array array['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "so o dono" on public.%I', t);
     execute format(
@@ -150,3 +178,21 @@ end $$;
 drop trigger if exists mesclar on public.progresso;
 create trigger mesclar before update on public.progresso
   for each row execute function public.mesclar_progresso();
+
+-- Leitura de PDF: duas máquinas abertas no mesmo livro, vale quem leu por último.
+create or replace function public.mesclar_leitura() returns trigger
+language plpgsql as $$
+begin
+  if old.leitura_em is not null and (new.leitura_em is null or new.leitura_em < old.leitura_em) then
+    new.pagina := old.pagina;
+    new.lido := old.lido;
+    new.lido_em := old.lido_em;
+    new.leitura_em := old.leitura_em;
+  end if;
+  new.paginas := coalesce(new.paginas, old.paginas);
+  return new;
+end $$;
+
+drop trigger if exists mesclar on public.documentos;
+create trigger mesclar before update on public.documentos
+  for each row execute function public.mesclar_leitura();
