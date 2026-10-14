@@ -7,12 +7,12 @@ import Flashcards from './pages/Flashcards';
 import Pdfs from './pages/Pdfs';
 import LeitorPdf from './pages/LeitorPdf';
 import HelpDrawer from './components/HelpDrawer';
-import AvisoAtualizacao from './components/AvisoAtualizacao';
+import AtualizacaoInicial from './components/AtualizacaoInicial';
 import PortaoConta from './components/PortaoConta';
 
 export default function App() {
   return (
-    <>
+    <AtualizacaoInicial>
       <PortaoConta>
       <Routes>
         <Route path="/" element={<Library />} />
@@ -27,7 +27,6 @@ export default function App() {
       {/* Fora das rotas: a ajuda abre por cima de qualquer tela sem desmontar a
           página de trás — quem pede ajuda não perde o lugar onde estava. */}
       <HelpDrawer />
-      <AvisoAtualizacao />
-    </>
+    </AtualizacaoInicial>
   );
 }
