@@ -8,6 +8,9 @@ import { credenciaisGoogle, salvarCredenciais } from '../drive/credenciais';
 import { createCourseFromDrive } from '../scan/scan-drive';
 
 const CAMPOS = ['clientId', 'clientSecret', 'apiKey'] as const;
+const PASTA = 'application/vnd.google-apps.folder';
+const PDF = 'application/pdf';
+const ATALHO = 'application/vnd.google-apps.shortcut';
 
 // O redirect usa o host da requisição (porta incluída): o app anda para a
 // próxima porta quando a 7777 está ocupada, então um valor fixo quebraria o login.
@@ -52,6 +55,39 @@ export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: S
           throw e2;
         }
       }
+      return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo });
+    }
+  });
+
+  // O seletor de PDFs do Drive: pastas e PDFs de "Meu Drive", de "Compartilhados
+  // comigo" ou de uma pasta. Precisa da conta Google conectada (sem ela não há
+  // "Meu Drive"); sem conta, devolve a url do login, como o link de um curso.
+  app.get('/api/drive/navegar', async (req, reply) => {
+    const pasta = (req.query as { pasta?: string }).pasta || 'root';
+    if (pasta !== 'root' && pasta !== 'compartilhados' && !/^[\w-]{5,}$/.test(pasta)) return reply.code(400).send({ error: 'pasta-invalida' });
+    if (!drive.auth.status().conectado) {
+      try {
+        return reply.code(401).send({ precisaAutorizar: true, url: drive.auth.iniciar(redirectDe(req)) });
+      } catch (e) {
+        if (e instanceof FalhaDrive) return reply.code(503).send({ error: 'sem-credenciais' });
+        throw e;
+      }
+    }
+    const tipos = `(mimeType='${PASTA}' or mimeType='${PDF}' or mimeType='${ATALHO}')`;
+    const q =
+      pasta === 'compartilhados' ? `sharedWithMe and trashed=false and ${tipos}` : `'${pasta}' in parents and trashed=false and ${tipos}`;
+    try {
+      const itens = (await drive.cliente().listar(q))
+        .map((a) => {
+          const alvo = a.mimeType === ATALHO && a.shortcutDetails ? { id: a.shortcutDetails.targetId, mime: a.shortcutDetails.targetMimeType } : { id: a.id, mime: a.mimeType };
+          const tipo = alvo.mime === PASTA ? ('pasta' as const) : alvo.mime === PDF ? ('pdf' as const) : null;
+          return tipo && { id: alvo.id, nome: a.name, tipo, resourceKey: alvo.id === a.id ? (a.resourceKey ?? null) : null, tamanho: Number(a.size ?? 0) };
+        })
+        .filter((x): x is NonNullable<typeof x> => !!x)
+        .sort((a, b) => (a.tipo === b.tipo ? a.nome.localeCompare(b.nome, 'pt-BR', { numeric: true }) : a.tipo === 'pasta' ? -1 : 1));
+      return { itens };
+    } catch (e) {
+      if (!(e instanceof FalhaDrive)) throw e;
       return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo });
     }
   });
