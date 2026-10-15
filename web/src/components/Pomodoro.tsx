@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, type PeriodoEstudo } from '../api/client';
+import { api, type NumerosEstudo, type PeriodoEstudo } from '../api/client';
 import { useCollections } from '../api/hooks';
 import { formatarDuracao, formatarRelogio, usePomodoro, type Fase } from '../lib/pomodoro';
 
@@ -153,27 +153,175 @@ function EscolherCategoria({ onFechar }: { onFechar: () => void }) {
   );
 }
 
-function Numero({ rotulo, p }: { rotulo: string; p: PeriodoEstudo | undefined }) {
+type Periodo = 'hoje' | 'semana' | 'mes' | 'total';
+const PERIODOS: { chave: Periodo; rotulo: string }[] = [
+  { chave: 'hoje', rotulo: 'Hoje' },
+  { chave: 'semana', rotulo: 'Semana' },
+  { chave: 'mes', rotulo: 'Mês' },
+  { chave: 'total', rotulo: 'Total' },
+];
+type Medida = 'aula' | 'pomodoros';
+
+// Paleta categórica (passo escuro), validada no fundo #171717. A cor segue a
+// categoria pela ordem do menu, não pelo tamanho da fatia: mudar de período não
+// repinta ninguém. Da 6ª em diante vira "Outras"; "Sem categoria" é cinza.
+const CORES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'];
+const COR_SEM = '#8a8a86';
+const COR_OUTRAS = '#5c5c59';
+const SUPERFICIE = '#171717';
+
+interface Fatia {
+  id: string;
+  nome: string;
+  cor: string;
+  valor: number;
+}
+
+function valorDe(n: NumerosEstudo | undefined, m: Medida): number {
+  return !n ? 0 : m === 'aula' ? n.segundosAula : n.pomodoros;
+}
+const rotuloValor = (v: number, m: Medida) => (m === 'aula' ? formatarDuracao(v) : `${v} 🍅`);
+
+function useFatias(periodo: PeriodoEstudo | undefined, medida: Medida): Fatia[] {
+  const { data: cats } = useCollections();
+  if (!periodo) return [];
+  const fatias: Fatia[] = [];
+  let outras = 0;
+  // A ordem do menu muda com a última aberta; a cor precisa ser estável, então a
+  // vaga de cor sai da ordem alfabética, que só muda quando a pessoa renomeia.
+  const ordem = [...(cats ?? [])].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  ordem.forEach((c, i) => {
+    const v = valorDe(periodo.porCategoria[c.id], medida);
+    if (!v) return;
+    if (i < CORES.length) fatias.push({ id: c.id, nome: `${c.emoji ? `${c.emoji} ` : ''}${c.name}`, cor: CORES[i], valor: v });
+    else outras += v;
+  });
+  const sem = valorDe(periodo.porCategoria.sem, medida);
+  if (sem) fatias.push({ id: 'sem', nome: 'Sem categoria', cor: COR_SEM, valor: sem });
+  // Categoria apagada depois de estudada: o número dela continua no total.
+  const conhecidas = new Set([...(cats ?? []).map((c) => c.id), 'sem']);
+  for (const [id, n] of Object.entries(periodo.porCategoria)) if (!conhecidas.has(id)) outras += valorDe(n, medida);
+  if (outras) fatias.push({ id: 'outras', nome: 'Outras', cor: COR_OUTRAS, valor: outras });
+  return fatias;
+}
+
+function arco(cx: number, cy: number, r: number, de: number, ate: number): string {
+  const ponto = (a: number) => [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  const [x0, y0] = ponto(de);
+  const [x1, y1] = ponto(ate);
+  return `M ${x0} ${y0} A ${r} ${r} 0 ${ate - de > Math.PI ? 1 : 0} 1 ${x1} ${y1}`;
+}
+
+/** Rosca: a fatia é a parte de cada categoria no período. A legenda ao lado leva nome e valor. */
+function Pizza({ fatias, medida }: { fatias: Fatia[]; medida: Medida }) {
+  const [foco, setFoco] = useState<string | null>(null);
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  const T = 132;
+  const c = T / 2;
+  const r = 52;
+  const espessura = 20;
+  let ang = 0;
+  const atual = fatias.find((f) => f.id === foco);
   return (
-    <div className="rounded-xl bg-neutral-900 px-4 py-3">
-      <div className="text-xs uppercase tracking-wide text-neutral-500">{rotulo}</div>
-      <div className="mt-1 text-xl font-semibold tabular-nums text-neutral-50">
-        🍅 {p?.pomodoros ?? '–'}
-      </div>
-      <div className="text-sm tabular-nums text-neutral-400">{p ? `${formatarDuracao(p.segundosAula)} de aula` : ' '}</div>
+    <div className="flex flex-wrap items-center gap-6">
+      <svg width={T} height={T} viewBox={`0 0 ${T} ${T}`} role="img" aria-label="Divisão por categoria" className="shrink-0">
+        {fatias.length === 1 ? (
+          <circle cx={c} cy={c} r={r} fill="none" stroke={fatias[0].cor} strokeWidth={espessura} />
+        ) : (
+          fatias.map((f) => {
+            const de = ang;
+            ang += (f.valor / total) * Math.PI * 2;
+            return (
+              <path
+                key={f.id}
+                d={arco(c, c, r, de, ang)}
+                fill="none"
+                stroke={f.cor}
+                strokeWidth={foco === f.id ? espessura + 4 : espessura}
+                onMouseEnter={() => setFoco(f.id)}
+                onMouseLeave={() => setFoco(null)}
+                style={{ transition: 'stroke-width 120ms' }}
+              />
+            );
+          })
+        )}
+        {/* O vão de 2px entre as fatias: linhas da cor do fundo nas divisas. */}
+        {fatias.length > 1 &&
+          (() => {
+            let a = 0;
+            return fatias.map((f) => {
+              const x = c + (r + espessura) * Math.sin(a);
+              const y = c - (r + espessura) * Math.cos(a);
+              const x0 = c + (r - espessura) * Math.sin(a);
+              const y0 = c - (r - espessura) * Math.cos(a);
+              a += (f.valor / total) * Math.PI * 2;
+              return <line key={f.id} x1={x0} y1={y0} x2={x} y2={y} stroke={SUPERFICIE} strokeWidth={2} pointerEvents="none" />;
+            });
+          })()}
+        <text x={c} y={c - 2} textAnchor="middle" className="fill-neutral-50 text-[13px] font-semibold">
+          {atual ? `${Math.round((atual.valor / total) * 100)}%` : medida === 'aula' ? formatarDuracao(total) : total}
+        </text>
+        <text x={c} y={c + 14} textAnchor="middle" className="fill-neutral-500 text-[10px]">
+          {atual ? '' : medida === 'aula' ? 'de aula' : 'pomodoros'}
+        </text>
+      </svg>
+      <ul className="min-w-0 max-w-sm flex-1 space-y-1.5 text-sm">
+        {fatias.map((f) => (
+          <li
+            key={f.id}
+            className={`flex items-center gap-2 rounded px-1 ${foco === f.id ? 'bg-neutral-800' : ''}`}
+            onMouseEnter={() => setFoco(f.id)}
+            onMouseLeave={() => setFoco(null)}
+          >
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: f.cor }} aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-neutral-200">{f.nome}</span>
+            <span className="shrink-0 tabular-nums text-neutral-400">{rotuloValor(f.valor, medida)}</span>
+            <span className="w-10 shrink-0 text-right tabular-nums text-neutral-500">{Math.round((f.valor / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-/** O painel da tela principal: pomodoros e tempo de aula, e o timer quando há um. */
+function Segmentos<T extends string>({ opcoes, valor, onMudar, rotulo }: { opcoes: { chave: T; rotulo: string }[]; valor: T; onMudar: (v: T) => void; rotulo: string }) {
+  return (
+    <div role="radiogroup" aria-label={rotulo} className="inline-flex rounded-lg bg-neutral-900 p-0.5 text-sm">
+      {opcoes.map((o) => (
+        <button
+          key={o.chave}
+          type="button"
+          role="radio"
+          aria-checked={valor === o.chave}
+          onClick={() => onMudar(o.chave)}
+          className={`min-h-[34px] rounded-md px-3 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+            valor === o.chave ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-neutral-200'
+          }`}
+        >
+          {o.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** O painel da tela principal: um período por vez, os dois números e a divisão por categoria. */
 export function PainelEstudo() {
   const p = usePomodoro();
   const { data } = useQuery({ queryKey: ['estudo'], queryFn: api.estudoResumo, refetchInterval: 60_000 });
   const [escolhendo, setEscolhendo] = useState(false);
+  const [periodo, setPeriodo] = useState<Periodo>('semana');
+  const [medida, setMedida] = useState<Medida>('aula');
+  const atual = data?.[periodo];
+  const fatias = useFatias(atual, medida);
+  const vazio = !!atual && !atual.pomodoros && atual.segundosAula < 60;
   return (
     <section aria-label="Estudo" className="mb-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-neutral-300">Estudo</h2>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-sm font-semibold text-neutral-300">Estudo</h2>
+          <Segmentos rotulo="Período" opcoes={PERIODOS} valor={periodo} onMudar={setPeriodo} />
+        </div>
         {!p.estado && (
           <button
             type="button"
@@ -190,11 +338,38 @@ export function PainelEstudo() {
           <Controles fechar={false} />
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Numero rotulo="Hoje" p={data?.hoje} />
-        <Numero rotulo="Semana" p={data?.semana} />
-        <Numero rotulo="Mês" p={data?.mes} />
-        <Numero rotulo="Total" p={data?.total} />
+      <div className="grid gap-6 rounded-xl bg-neutral-900 p-5 md:grid-cols-[minmax(0,14rem)_1fr]">
+        <div className="flex gap-8 md:flex-col md:gap-4">
+          <div>
+            <div className="text-3xl font-semibold tabular-nums text-neutral-50">{atual ? formatarDuracao(atual.segundosAula) : '–'}</div>
+            <div className="text-sm text-neutral-400">de aula assistida</div>
+          </div>
+          <div>
+            <div className="text-3xl font-semibold tabular-nums text-neutral-50">{atual?.pomodoros ?? '–'}</div>
+            <div className="text-sm text-neutral-400">pomodoro{atual?.pomodoros === 1 ? '' : 's'} concluído{atual?.pomodoros === 1 ? '' : 's'}</div>
+          </div>
+        </div>
+        <div className="min-w-0 border-neutral-800 md:border-l md:pl-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <span className="text-xs uppercase tracking-wide text-neutral-500">Por categoria</span>
+            <Segmentos
+              rotulo="Medida"
+              opcoes={[
+                { chave: 'aula', rotulo: 'Aulas' },
+                { chave: 'pomodoros', rotulo: 'Pomodoros' },
+              ]}
+              valor={medida}
+              onMudar={setMedida}
+            />
+          </div>
+          {vazio || (atual && !fatias.length) ? (
+            <p className="py-8 text-sm text-neutral-500">
+              {vazio ? 'Nada neste período ainda. Assista uma aula ou inicie um pomodoro.' : medida === 'aula' ? 'Nenhuma aula assistida neste período.' : 'Nenhum pomodoro neste período.'}
+            </p>
+          ) : (
+            <Pizza fatias={fatias} medida={medida} />
+          )}
+        </div>
       </div>
       {escolhendo && <EscolherCategoria onFechar={() => setEscolhendo(false)} />}
     </section>
