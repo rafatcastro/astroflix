@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { api } from '../api/client';
+import { api, type ResultadoAdicionarPdfs } from '../api/client';
 import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
 import { abrirFora } from '../lib/desktop';
 import TextField from './TextField';
 
-// `categoriaId`: aberto dentro de uma categoria, o curso entra nela.
-export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () => void; categoriaId?: string }) {
+// `categoriaId`: aberto dentro de uma categoria, o curso entra nela. Com `pdfs`, o
+// mesmo diálogo (e o mesmo login do Google) adiciona PDFs em vez de um curso.
+export default function DriveLinkModal({
+  onClose,
+  categoriaId,
+  pdfs,
+}: {
+  onClose: () => void;
+  categoriaId?: string;
+  pdfs?: { aoAdicionar: (r: ResultadoAdicionarPdfs) => void };
+}) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [link, setLink] = useState('');
@@ -51,8 +60,9 @@ export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () =
     setBusy(true);
     setErro(null);
     setUrlAuth(null);
+    const chamar = () => (pdfs ? api.adicionarPdfsDoDrive(link.trim(), categoriaId) : api.driveCriarCurso(link.trim()));
     try {
-      let res = await api.driveCriarCurso(link.trim());
+      let res = await chamar();
       if (res.tipo === 'autorizar') {
         const ctrl = new AbortController();
         abortRef.current = ctrl;
@@ -65,17 +75,25 @@ export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () =
           setBusy(false);
           return;
         }
-        res = await api.driveCriarCurso(link.trim());
+        res = await chamar();
         // Segunda recusa de autorização logo após autorizar: não faz laço, mostra o aviso.
         if (res.tipo === 'autorizar') res = { tipo: 'erro', erro: 'nao-autorizado' };
       }
-      if (res.tipo === 'criado') {
+      if (res.tipo === 'pdfs') {
+        if (pdfs && res.resultado.criados + res.resultado.jaExistiam > 0) {
+          pdfs.aoAdicionar(res.resultado);
+          onClose();
+          return;
+        }
+        setErro('Nenhum PDF nessa pasta.');
+      } else if (res.tipo === 'criado') {
         if (categoriaId) await api.patchCourse(res.id, { collectionId: categoriaId }).catch(() => undefined);
         qc.invalidateQueries({ queryKey: ['courses'] });
         navigate(`/course/${res.id}`);
         return;
       }
-      if (res.tipo === 'erro') setErro(mensagemErroDrive(res.erro));
+      if (res.tipo === 'erro')
+        setErro(pdfs && res.erro === 'link-invalido' ? 'Cole o link de um PDF ou de uma pasta do Google Drive.' : mensagemErroDrive(res.erro));
     } catch {
       setErro('Sem conexão com o Google Drive.');
     }
@@ -100,7 +118,7 @@ export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () =
           }}
         >
           <label htmlFor="drive-link" className="mb-1 block text-sm text-neutral-300">
-            Link da pasta no Google Drive
+            {pdfs ? 'Link de um PDF ou de uma pasta (todos os PDFs dela)' : 'Link da pasta no Google Drive'}
           </label>
           <TextField
             id="drive-link"
@@ -110,7 +128,7 @@ export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () =
             disabled={busy}
             aria-invalid={erro ? true : undefined}
             aria-describedby={erro ? 'drive-erro' : undefined}
-            placeholder="https://drive.google.com/drive/folders/…"
+            placeholder={pdfs ? 'https://drive.google.com/file/d/…' : 'https://drive.google.com/drive/folders/…'}
           />
           {erro && (
             <p id="drive-erro" role="alert" className="mt-2 text-sm text-amber-200">
@@ -134,7 +152,7 @@ export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () =
               disabled={busy || !link.trim()}
               className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
             >
-              {busy ? 'Abrindo a pasta…' : 'Adicionar'}
+              {busy ? (pdfs ? 'Lendo o Drive…' : 'Abrindo a pasta…') : 'Adicionar'}
             </button>
           </div>
         </form>

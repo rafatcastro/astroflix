@@ -142,7 +142,7 @@ export function buildApp(
   app.register(telegramRoutes, { db, config, telegram });
   app.register(flashcardsRoutes, { db, anki });
   app.register(contaRoutes, { conta, sinc });
-  app.register(documentosRoutes, { db, config });
+  app.register(documentosRoutes, { db, config, drive });
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.

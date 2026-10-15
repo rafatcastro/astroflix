@@ -53,6 +53,8 @@ export default function LeitorPdf() {
 
   // Abre o arquivo (uma vez por PDF).
   const disponivel = d?.disponivel;
+  const origemRef = useRef(d?.origem);
+  origemRef.current = d?.origem;
   useEffect(() => {
     if (!disponivel) return;
     let vivo = true;
@@ -68,7 +70,13 @@ export default function LeitorPdf() {
       })
       .catch((e: unknown) => {
         const nome = (e as { name?: string })?.name;
-        setErro(nome === 'PasswordException' ? 'Este PDF tem senha. Abra-o num leitor que peça a senha.' : 'Não deu para abrir este PDF. O arquivo pode estar corrompido.');
+        setErro(
+          nome === 'PasswordException'
+            ? 'Este PDF tem senha. Abra-o num leitor que peça a senha.'
+            : origemRef.current === 'drive'
+              ? 'Não deu para abrir este PDF do Google Drive. Confira a conexão e o acesso ao arquivo (Configurações → Google Drive).'
+              : 'Não deu para abrir este PDF. O arquivo pode estar corrompido.',
+        );
       });
     return () => {
       vivo = false;
