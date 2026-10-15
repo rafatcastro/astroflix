@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, type ItemDrive, type ResultadoAdicionarPdfs } from '../api/client';
 import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
 import { abrirFora } from '../lib/desktop';
 import { Check, ChevronRight, FileText } from './icons';
 
+// `modo="curso"`: a mesma navegação escolhe a pasta de um curso (só pastas aparecem).
 // Escolher PDFs (ou uma pasta inteira) navegando no próprio Google Drive, em vez
 // de copiar e colar um link. O Google Picker oficial não serve aqui: ele roda
 // dentro de páginas do Google, e o login do Google é recusado na webview do app.
@@ -22,17 +25,21 @@ const linkDe = (i: { id: string; tipo: 'pasta' | 'pdf'; resourceKey: string | nu
 };
 
 export default function SeletorDrive({
+  modo = 'pdfs',
   categoriaId,
   onClose,
   onColarLink,
   aoAdicionar,
 }: {
+  modo?: 'pdfs' | 'curso';
   categoriaId?: string;
   onClose: () => void;
   /** Para o que não aparece na lista (link de outra pessoa que não foi aberto): o diálogo do link. */
   onColarLink: () => void;
-  aoAdicionar: (r: ResultadoAdicionarPdfs) => void;
+  aoAdicionar?: (r: ResultadoAdicionarPdfs) => void;
 }) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
   const [raiz, setRaiz] = useState<Raiz>('root');
   const [trilha, setTrilha] = useState<Nivel[]>([]);
   const [itens, setItens] = useState<ItemDrive[] | null>(null);
@@ -54,7 +61,7 @@ export default function SeletorDrive({
     setErro(null);
     void api.driveNavegar(pasta).then(async (r) => {
       if (!vivo) return;
-      if (r.tipo === 'itens') return setItens(r.itens);
+      if (r.tipo === 'itens') return setItens(modo === 'curso' ? r.itens.filter((i) => i.tipo === 'pasta') : r.itens);
       if (r.tipo === 'erro') return setErro(mensagemErroDrive(r.erro));
       // Sem conta Google conectada: conecta e lista de novo.
       const ctrl = new AbortController();
@@ -69,7 +76,7 @@ export default function SeletorDrive({
     return () => {
       vivo = false;
     };
-  }, [pasta, tentativa]);
+  }, [pasta, tentativa, modo]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -107,8 +114,24 @@ export default function SeletorDrive({
         return;
       }
     }
-    aoAdicionar(total);
+    aoAdicionar?.(total);
     onClose();
+  }
+
+  // Curso: a pasta escolhida vira o curso, como colar o link dela.
+  async function usarPasta(n: Nivel) {
+    setAdicionando(true);
+    setErro(null);
+    const r = await api.driveCriarCurso(linkDe({ id: n.id, tipo: 'pasta', resourceKey: n.resourceKey }));
+    if (r.tipo === 'criado') {
+      if (categoriaId) await api.patchCourse(r.id, { collectionId: categoriaId }).catch(() => undefined);
+      void qc.invalidateQueries({ queryKey: ['courses'] });
+      onClose();
+      navigate(`/course/${r.id}`);
+      return;
+    }
+    setErro(r.tipo === 'erro' ? mensagemErroDrive(r.erro) : 'A autorização do Google expirou.');
+    setAdicionando(false);
   }
 
   const aba = (ativo: boolean) =>
@@ -126,7 +149,8 @@ export default function SeletorDrive({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="border-b border-neutral-800 p-4">
-          <div className="font-medium text-neutral-100">Do Google Drive</div>
+          <div className="font-medium text-neutral-100">{modo === 'curso' ? 'Curso do Google Drive' : 'Do Google Drive'}</div>
+          {modo === 'curso' && <p className="mt-1 text-xs text-neutral-500">Entre na pasta do curso e use “Usar esta pasta”.</p>}
           <div className="mt-3 flex gap-1">
             {(['root', 'compartilhados'] as const).map((r) => (
               <button
@@ -178,7 +202,7 @@ export default function SeletorDrive({
           ) : !itens ? (
             <p className="p-4 text-sm text-neutral-500">Carregando…</p>
           ) : itens.length === 0 ? (
-            <p className="p-4 text-sm text-neutral-500">Nenhum PDF nem pasta aqui.</p>
+            <p className="p-4 text-sm text-neutral-500">{modo === 'curso' ? 'Nenhuma pasta aqui.' : 'Nenhum PDF nem pasta aqui.'}</p>
           ) : (
             <ul>
               {itens.map((i) => (
@@ -226,25 +250,38 @@ export default function SeletorDrive({
             Colar um link
           </button>
           <div className="ml-auto flex flex-wrap gap-2">
-            {atual && (
+            {modo === 'curso' ? (
               <button
                 type="button"
-                disabled={adicionando}
-                className="min-h-[44px] rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700 disabled:opacity-40"
-                onClick={() => void adicionar([{ id: atual.id, tipo: 'pasta', resourceKey: atual.resourceKey }])}
-                title="Todos os PDFs desta pasta, subpastas inclusive"
+                disabled={adicionando || !atual}
+                className="min-h-[44px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+                onClick={() => atual && void usarPasta(atual)}
               >
-                Adicionar esta pasta
+                {adicionando ? 'Abrindo a pasta…' : 'Usar esta pasta'}
               </button>
+            ) : (
+              <>
+                {atual && (
+                  <button
+                    type="button"
+                    disabled={adicionando}
+                    className="min-h-[44px] rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700 disabled:opacity-40"
+                    onClick={() => void adicionar([{ id: atual.id, tipo: 'pasta', resourceKey: atual.resourceKey }])}
+                    title="Todos os PDFs desta pasta, subpastas inclusive"
+                  >
+                    Adicionar esta pasta
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={adicionando || marcados.size === 0}
+                  className="min-h-[44px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+                  onClick={() => void adicionar([...marcados.values()])}
+                >
+                  {adicionando ? 'Adicionando…' : marcados.size ? `Adicionar ${marcados.size} PDF${marcados.size === 1 ? '' : 's'}` : 'Adicionar'}
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              disabled={adicionando || marcados.size === 0}
-              className="min-h-[44px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
-              onClick={() => void adicionar([...marcados.values()])}
-            >
-              {adicionando ? 'Adicionando…' : marcados.size ? `Adicionar ${marcados.size} PDF${marcados.size === 1 ? '' : 's'}` : 'Adicionar'}
-            </button>
           </div>
         </div>
       </div>

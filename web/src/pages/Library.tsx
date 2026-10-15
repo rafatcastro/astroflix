@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { cliqueFora, escolherPasta } from '../lib/desktop';
+import { escolherPasta } from '../lib/desktop';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,14 +7,15 @@ import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
 import CourseCardMenu from '../components/CourseCardMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
+import SeletorDrive from '../components/SeletorDrive';
+import MenuAdicionar from '../components/MenuAdicionar';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TextField from '../components/TextField';
 import { api, type BatchImportResult, type Collection, type CourseRoot, type CourseSummary } from '../api/client';
 import FfmpegBanner from '../components/FfmpegBanner';
 import Banner from '../components/Banner';
-import HelpLink from '../components/HelpLink';
-import { Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as SettingsIcon } from '../components/icons';
+import { Check, Play, Settings as SettingsIcon } from '../components/icons';
 
 // Parede de capas responsiva sem cliffs de breakpoint: as colunas se ajustam ao
 // espaço, mantendo o tamanho do card constante (auto-fill).
@@ -466,28 +467,23 @@ function CourseRootsSection({
 // A aba Cursos de uma categoria (`categoria` = id ou 'sem').
 export default function Library({ categoria }: { categoria: string }) {
   const [tab, setTab] = useState<'active' | 'archived'>('active');
-  // Grade (pôsteres) ou lista (linhas compactas). Preferência lembrada localmente.
-  const [view, setView] = useState<'grid' | 'list'>(() => {
+  // Grade (pôsteres) ou lista (linhas compactas): escolhida em Configurações → Aparência.
+  const [view] = useState<'grid' | 'list'>(() => {
     try { return localStorage.getItem('libView') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
   });
-  const changeView = (v: 'grid' | 'list') => {
-    setView(v);
-    try { localStorage.setItem('libView', v); } catch { /* modo privado */ }
-  };
   const { data: todos, isLoading, isError } = useCourses(tab === 'archived');
   const courses = useMemo(
     () => todos?.filter((c) => (categoria === SEM ? !c.collectionId : c.collectionId === categoria)),
     [todos, categoria],
   );
   const { data: collections } = useCollections();
-  const [picking, setPicking] = useState<null | 'drive' | 'telegram'>(null);
+  const [picking, setPicking] = useState<null | 'drive' | 'drive-link' | 'telegram'>(null);
   // Pasta com vídeo só nas subpastas: um curso com módulos ou uma estante de cursos?
   const [ambigua, setAmbigua] = useState<{ path: string; subpastas: number } | null>(null);
   // Sem o app do Telegram no build nem um próprio nas Configurações, a opção só
   // levaria a um "não configurado": melhor não oferecer.
   const { data: tg } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
   const temTelegram = Boolean(tg?.credenciais.apiId && tg?.credenciais.apiHash);
-  const [addMenu, setAddMenu] = useState(false);
   const [creatingCol, setCreatingCol] = useState(false);
   const [newColName, setNewColName] = useState('');
   const [filter, setFilter] = useState<'all' | 'none' | string>('all');
@@ -646,38 +642,17 @@ export default function Library({ categoria }: { categoria: string }) {
     }
   };
 
-  // Menu "Adicionar ▾": do disco ou do Google Drive.
+  // Mesmo botão e mesmo menu da aba PDFs (MenuAdicionar), com as origens de curso.
   const addMenuButton = (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setAddMenu((v) => !v)}
-        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors motion-reduce:transition-none hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-      >
-        <Plus size={18} /> Adicionar
-      </button>
-      {addMenu && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setAddMenu(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 text-left">
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); void adicionarDosArquivos(); }}>
-              Dos arquivos
-              <div className="text-xs text-neutral-500">Uma pasta com um curso ou com vários</div>
-            </button>
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('drive'); }}>
-              Do Google Drive
-              <div className="text-xs text-neutral-500">Cole o link de uma pasta compartilhada</div>
-            </button>
-            {temTelegram && (
-              <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => { setAddMenu(false); setPicking('telegram'); }}>
-                Do Telegram
-                <div className="text-xs text-neutral-500">Cole o link de um grupo ou canal</div>
-              </button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
+    <MenuAdicionar
+      opcoes={[
+        { rotulo: 'Dos arquivos…', descricao: 'Uma pasta com um curso ou com vários', onClick: () => void adicionarDosArquivos() },
+        { rotulo: 'Do Google Drive', descricao: 'Escolha a pasta do curso no seu Drive', onClick: () => setPicking('drive') },
+        ...(temTelegram
+          ? [{ rotulo: 'Do Telegram', descricao: 'Cole o link de um grupo ou canal', onClick: () => setPicking('telegram') }]
+          : []),
+      ]}
+    />
   );
 
   const chip = (active: boolean) =>
@@ -759,56 +734,6 @@ export default function Library({ categoria }: { categoria: string }) {
               Arquivados
             </button>
           </div>
-          <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800">
-            <button
-              type="button"
-              onClick={() => changeView('grid')}
-              aria-label="Ver em grade"
-              aria-pressed={view === 'grid'}
-              className={`grid h-11 w-11 place-items-center ${view === 'grid' ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}
-            >
-              <LayoutGrid size={18} />
-            </button>
-            <button
-              type="button"
-              onClick={() => changeView('list')}
-              aria-label="Ver em lista"
-              aria-pressed={view === 'list'}
-              className={`grid h-11 w-11 place-items-center ${view === 'list' ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-400 hover:bg-neutral-800'}`}
-            >
-              <List size={18} />
-            </button>
-          </div>
-          <HelpLink className="no-underline">
-            <span
-              aria-label="Ajuda"
-              title="Ajuda (?)"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-            >
-              <HelpCircle size={18} />
-            </span>
-          </HelpLink>
-          {/* Backup à mão: o servidor já manda o arquivo com nome datado, então um
-              link basta — sem diálogo, sem espera. Fica visível na estante porque
-              exportar é hábito, e hábito escondido em Configurações não pega. */}
-          {courses && courses.length > 0 && (
-            <a
-              href={api.exportLibraryUrl}
-            onClick={(e) => cliqueFora(e, api.exportLibraryUrl)}
-              aria-label="Exportar biblioteca"
-              title="Exportar biblioteca (backup)"
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-            >
-              <Download size={18} />
-            </a>
-          )}
-          <Link
-            to="/settings"
-            aria-label="Configurações"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-          >
-            <SettingsIcon size={18} />
-          </Link>
           {courses && courses.length > 0 && (
             <button
               type="button"
@@ -818,7 +743,14 @@ export default function Library({ categoria }: { categoria: string }) {
               {selectMode ? 'Cancelar' : 'Selecionar'}
             </button>
           )}
-          {tab === 'active' && courses && courses.length > 0 && addMenuButton}
+          <Link
+            to="/settings"
+            aria-label="Configurações"
+            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+          >
+            <SettingsIcon size={18} />
+          </Link>
+          {tab === 'active' && addMenuButton}
           </>
         }
       />
@@ -880,38 +812,8 @@ export default function Library({ categoria }: { categoria: string }) {
             <p className="mb-5 text-sm text-neutral-500">
               {tab === 'archived'
                 ? 'Cursos arquivados aparecem aqui.'
-                : 'Aponte para uma pasta com vídeos — ou importe uma pasta inteira de cursos de uma vez.'}
+                : 'Use Adicionar, no topo, para trazer uma pasta do disco, do Google Drive ou do Telegram.'}
             </p>
-            {tab === 'active' && (
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={() => void adicionarDosArquivos()}
-                  className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500"
-                >
-                  <Plus size={18} /> Dos arquivos
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPicking('drive')}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
-                >
-                  Do Google Drive
-                </button>
-                {temTelegram && (
-                  <button
-                    type="button"
-                    onClick={() => setPicking('telegram')}
-                    className="inline-flex min-h-[44px] items-center justify-center rounded-lg bg-neutral-800 px-4 text-sm text-neutral-200 hover:bg-neutral-700"
-                  >
-                    Do Telegram
-                  </button>
-                )}
-                <HelpLink topico="primeiros-passos" className="mt-1 text-sm text-neutral-500 hover:text-neutral-300">
-                  Como isso funciona?
-                </HelpLink>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -1030,7 +932,15 @@ export default function Library({ categoria }: { categoria: string }) {
         </div>
       )}
 
-      {picking === 'drive' && <DriveLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
+      {picking === 'drive' && (
+        <SeletorDrive
+          modo="curso"
+          categoriaId={categoria === SEM ? undefined : categoria}
+          onClose={() => setPicking(null)}
+          onColarLink={() => setPicking('drive-link')}
+        />
+      )}
+      {picking === 'drive-link' && <DriveLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {picking === 'telegram' && <TelegramLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {ambigua && (
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={() => setAmbigua(null)}>

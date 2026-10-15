@@ -20,9 +20,12 @@ const ehEmoji = (t: string) => !!t && [...t].length <= 10 && !/[\p{L}\p{N}]/u.te
 
 export default function DialogoCategoria({
   inicial,
+  aviso,
   onSalvar,
   onCancelar,
 }: {
+  /** Uma linha sob o título (ex.: o que vai para a categoria nova). */
+  aviso?: string;
   /** Ausente: criar. */
   inicial?: { name: string; emoji: string | null };
   onSalvar: (c: { name: string; emoji: string | null }) => Promise<void>;
@@ -67,6 +70,7 @@ export default function DialogoCategoria({
         }}
       >
         <h2 className="font-medium text-neutral-100">{editando ? 'Editar categoria' : 'Nova categoria'}</h2>
+        {aviso && <p className="mt-1 text-sm text-neutral-400">{aviso}</p>}
 
         <div className="mt-4 flex items-center gap-3">
           <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-neutral-800 text-2xl" aria-hidden>
