@@ -69,7 +69,7 @@ jobs:
           id=$(gh api "repos/${GH_REPO}/releases" --paginate --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n1)
           if [ -z "${id}" ]; then
             id=$(gh api -X POST "repos/${GH_REPO}/releases" \
-              -f tag_name="${TAG}" -f target_commitish="${GITHUB_SHA}" -f name="Learnflix ${TAG}" \
+              -f tag_name="${TAG}" -f target_commitish="${GITHUB_SHA}" -f name="Astroflix ${TAG}" \
               -F draft=true -F generate_release_notes=true --jq .id)
           fi
           test -n "${id}"

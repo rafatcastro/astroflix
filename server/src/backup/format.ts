@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Structure } from '../types';
 
-// Marca do formato: é o que separa um arquivo do Learnflix de um JSON qualquer
+// Marca do formato: é o que separa um arquivo do Astroflix de um JSON qualquer
 // que a pessoa escolheu por engano. A versão sobe quando o formato mudar de um
 // jeito que versões antigas não conseguem ler.
 export const FORMAT = 'learnflix-library';
@@ -132,19 +132,19 @@ export type ParseResult = { ok: true; data: LibraryExport } | { ok: false; error
  *
  * A validação é deliberadamente rasa: confere a marca do formato, a versão e a
  * forma das listas — o suficiente para separar "arquivo errado" de "arquivo do
- * Learnflix". Campo solto fora do lugar não derruba a importação inteira; o que
+ * Astroflix". Campo solto fora do lugar não derruba a importação inteira; o que
  * derruba é o arquivo não ser o que diz ser.
  */
 export function parseExport(raw: unknown): ParseResult {
   if (!raw || typeof raw !== 'object' || (raw as any).format !== FORMAT) {
-    return { ok: false, error: 'Este arquivo não parece ser um arquivo do Learnflix.' };
+    return { ok: false, error: 'Este arquivo não parece ser um arquivo do Astroflix.' };
   }
   const o = raw as Record<string, unknown>;
 
   if (typeof o.version !== 'number' || o.version > VERSION) {
     return {
       ok: false,
-      error: 'Este arquivo foi criado por uma versão mais nova do Learnflix. Atualize o app e tente de novo.',
+      error: 'Este arquivo foi criado por uma versão mais nova do Astroflix. Atualize o app e tente de novo.',
     };
   }
   if (!Array.isArray(o.courses)) {

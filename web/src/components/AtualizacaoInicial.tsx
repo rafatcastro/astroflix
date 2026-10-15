@@ -83,7 +83,7 @@ export default function AtualizacaoInicial({ children }: { children: ReactNode }
   return (
     <div className="grid h-dvh place-items-center bg-neutral-950 px-6">
       <div className="w-full max-w-xs text-center" role="status" aria-live="polite">
-        <div className="text-2xl font-semibold tracking-tight text-neutral-50">Learnflix</div>
+        <div className="text-2xl font-semibold tracking-tight text-neutral-50">Astroflix</div>
         {estado.tipo === 'procurando' ? (
           <>
             <div className="mx-auto mt-6 h-5 w-5 animate-spin rounded-full border-2 border-neutral-700 border-t-neutral-300 motion-reduce:animate-none" />
@@ -105,7 +105,7 @@ export default function AtualizacaoInicial({ children }: { children: ReactNode }
               />
             </div>
             <p className="mt-2 text-xs tabular-nums text-neutral-500">
-              {estado.pct === null ? 'Baixando…' : `${estado.pct}%`} · o Learnflix reabre sozinho
+              {estado.pct === null ? 'Baixando…' : `${estado.pct}%`} · o Astroflix reabre sozinho
             </p>
           </>
         )}

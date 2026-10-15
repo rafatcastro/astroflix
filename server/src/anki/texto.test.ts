@@ -14,12 +14,12 @@ describe('texto dos cards', () => {
     expect(deHtml('caf&#233; &#x2192; ok')).toBe('café → ok');
   });
 
-  it('baralho: Learnflix::<categoria>[::Cursos|PDFs::<título>], e :: num nome não cria subbaralho', () => {
-    expect(baralhoDe({ categoria: 'Pós', curso: '  Pós::IA   Aplicada ' })).toBe('Learnflix::Pós::Cursos::Pós:IA Aplicada');
-    expect(baralhoDe({ categoria: 'Pós', pdf: 'Cálculo I' })).toBe('Learnflix::Pós::PDFs::Cálculo I');
-    expect(baralhoDe({ categoria: 'Pós' })).toBe('Learnflix::Pós');
-    expect(baralhoDe({ categoria: null, curso: 'Redes' })).toBe('Learnflix::Sem categoria::Cursos::Redes');
-    expect(baralhoDe({ categoria: null, geral: true })).toBe('Learnflix');
+  it('baralho: Astroflix::<categoria>[::Cursos|PDFs::<título>], e :: num nome não cria subbaralho', () => {
+    expect(baralhoDe({ categoria: 'Pós', curso: '  Pós::IA   Aplicada ' })).toBe('Astroflix::Pós::Cursos::Pós:IA Aplicada');
+    expect(baralhoDe({ categoria: 'Pós', pdf: 'Cálculo I' })).toBe('Astroflix::Pós::PDFs::Cálculo I');
+    expect(baralhoDe({ categoria: 'Pós' })).toBe('Astroflix::Pós');
+    expect(baralhoDe({ categoria: null, curso: 'Redes' })).toBe('Astroflix::Sem categoria::Cursos::Redes');
+    expect(baralhoDe({ categoria: null, geral: true })).toBe('Astroflix');
   });
 
   it('minuto em m:ss ou h:mm:ss', () => {

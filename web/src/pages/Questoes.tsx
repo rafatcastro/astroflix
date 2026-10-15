@@ -6,7 +6,7 @@ import { AvisoAnki, CartaoFlashcard, FormFlashcard } from '../components/Flashca
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 
 // A aba Questões de uma categoria: os flashcards dela, como estão no Anki. As
-// gerais ficam em Learnflix::<categoria>; as de cada curso e PDF, embaixo
+// gerais ficam em Astroflix::<categoria>; as de cada curso e PDF, embaixo
 // (::Cursos::<título>, ::PDFs::<título>). Revisar a categoria no Anki pega tudo.
 
 interface Grupo {

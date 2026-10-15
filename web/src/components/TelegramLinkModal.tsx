@@ -120,8 +120,8 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
         {fase.tipo === 'login' && (
           <>
             <p className="mb-4 text-sm text-neutral-400">
-              O Learnflix abre os grupos com a sua conta do Telegram. A sessão fica só nesta máquina e aparece como
-              “Learnflix” nos seus dispositivos.
+              O Astroflix abre os grupos com a sua conta do Telegram. A sessão fica só nesta máquina e aparece como
+              “Astroflix” nos seus dispositivos.
             </p>
             <TelegramLogin onConectado={conectou} />
             <div className="mt-4 flex justify-end">

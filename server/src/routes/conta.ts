@@ -3,7 +3,7 @@ import type { ServicosConta } from '../nuvem/conta';
 import type { Sincronizador } from '../nuvem/sincronizar';
 import { FalhaNuvem } from '../nuvem/cliente';
 
-// Conta do Learnflix: login (Google → Supabase), estado da sincronização e sair.
+// Conta do Astroflix: login (Google → Supabase), estado da sincronização e sair.
 // O login segue o desenho do Drive: abre no navegador do sistema, o Google volta
 // para /api/conta/callback (loopback), e a janela pergunta o resultado pelo state.
 
@@ -11,9 +11,9 @@ const redirectDe = (req: FastifyRequest) => `http://${req.headers.host}/api/cont
 
 function paginaCallback(ok: boolean): string {
   return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>Learnflix</title></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Astroflix</title></head>
 <body style="font-family:sans-serif;background:#0a0a0a;color:#eee;padding:2rem">
-<p>${ok ? 'Pronto, você entrou. Pode fechar esta aba e voltar ao Learnflix.' : 'Não foi possível entrar. Volte ao Learnflix e tente de novo.'}</p>
+<p>${ok ? 'Pronto, você entrou. Pode fechar esta aba e voltar ao Astroflix.' : 'Não foi possível entrar. Volte ao Astroflix e tente de novo.'}</p>
 </body></html>`;
 }
 

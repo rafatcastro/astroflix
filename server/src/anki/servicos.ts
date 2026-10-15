@@ -1,9 +1,9 @@
 import type { Db } from '../db';
 import { FalhaAnki, type ClienteAnki } from './cliente';
-import { BARALHO_ANTIGO, BARALHO_RAIZ, baralhoDe, deHtml, formatarMinuto, paraHtml } from './texto';
+import { BARALHO_ANTIGO, BARALHO_RAIZ, RAIZ_ANTIGA, baralhoDe, deHtml, formatarMinuto, paraHtml } from './texto';
 
 // O espelho local dos cards e a fila de envio para o Anki. O Anki é a fonte da
-// verdade (a pessoa revisa e edita lá), mas o Learnflix guarda uma cópia: sem
+// verdade (a pessoa revisa e edita lá), mas o Astroflix guarda uma cópia: sem
 // ela, com o Anki fechado o painel da aula ficaria vazio e não daria para criar
 // nada. Card criado com o Anki fechado fica `pendente` e vai na próxima vez.
 
@@ -191,10 +191,12 @@ export function criarServicosAnki(db: Db, cliente: ClienteAnki): ServicosAnki {
       (db.prepare('SELECT DISTINCT baralho FROM flashcards WHERE baralho IS NOT NULL').all() as Array<{ baralho: string }>).map((r) => r.baralho),
     );
     const existentes = new Set(await cliente.baralhos());
-    // Os pais também (Learnflix::Pós::Cursos ficou vazio quando o último curso saiu).
+    // Os pais também (Astroflix::Pós::Cursos ficou vazio quando o último curso saiu).
     for (const a of [...antigos]) {
       const partes = a.split('::');
       for (let i = 2; i < partes.length; i++) antigos.add(partes.slice(0, i).join('::'));
+      // A raiz do nome antigo do app também sai, se ficou vazia.
+      if (partes[0] === RAIZ_ANTIGA) antigos.add(RAIZ_ANTIGA);
     }
     const apagar = [...antigos].filter(
       (a) => a !== BARALHO_RAIZ && existentes.has(a) && ![...emUso].some((u) => u === a || u.startsWith(`${a}::`)),

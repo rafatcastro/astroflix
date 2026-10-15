@@ -1,7 +1,7 @@
 [package]
 name = "learnflix"
 version = "2.1.0"
-description = "Learnflix — cursos das suas pastas, com progresso confiável"
+description = "Astroflix — cursos das suas pastas, com progresso confiável"
 edition = "2021"
 
 [lib]

@@ -9,7 +9,7 @@ import { ArrowLeft } from '../components/icons';
 // de uma aula (geral, ou do curso todo); os de aula nascem no painel do player.
 // Os nomes dos baralhos aparecem por extenso porque é por eles que a pessoa vai
 // procurar os cards no Anki.
-const BARALHO_RAIZ = 'Learnflix';
+const BARALHO_RAIZ = 'Astroflix';
 
 export default function Flashcards() {
   const [params, setParams] = useSearchParams();

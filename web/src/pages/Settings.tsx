@@ -197,7 +197,7 @@ function SecaoAnki() {
             No Anki, vá em <strong className="text-neutral-300">Ferramentas → Complementos → Obter complementos</strong> e cole o código{' '}
             <code className="text-neutral-200">2055492159</code> (AnkiConnect). Reinicie o Anki.
           </li>
-          <li>Deixe o Anki aberto enquanto estuda. Os cards entram no baralho Learnflix::Cursos e sincronizam com o AnkiWeb.</li>
+          <li>Deixe o Anki aberto enquanto estuda. Os cards entram no baralho Astroflix::Cursos e sincronizam com o AnkiWeb.</li>
         </ol>
       </details>
     </section>
@@ -324,7 +324,7 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
     try {
       await api.telegramDesconectar();
       atualizar();
-      onNotice('Telegram desconectado. A sessão do Learnflix foi encerrada também no Telegram.');
+      onNotice('Telegram desconectado. A sessão do Astroflix foi encerrada também no Telegram.');
     } catch {
       onNotice('Falha ao desconectar. Tente novamente.');
     }
@@ -716,7 +716,7 @@ export default function Settings() {
 
       {/* Versão do build — para saber quando houve uma atualização de verdade. */}
       <footer className="mt-10 border-t border-neutral-900 pt-4 text-xs text-neutral-600">
-        Learnflix · versão {info?.version ?? '—'}
+        Astroflix · versão {info?.version ?? '—'}
       </footer>
 
       {picking && (
