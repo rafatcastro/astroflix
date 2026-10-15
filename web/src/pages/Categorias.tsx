@@ -6,6 +6,7 @@ import { useCollections, useCourses } from '../api/hooks';
 import { caminhoDaCategoria, SEM } from '../components/CabecalhoCategoria';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DialogoCategoria from '../components/DialogoCategoria';
+import { EstudoDeHoje, PainelEstudo } from '../components/Pomodoro';
 import { Plus, Settings as SettingsIcon } from '../components/icons';
 
 // O menu principal: as categorias (Pós, Concurso, Inglês…), a última aberta
@@ -78,6 +79,8 @@ export default function Categorias() {
         </div>
       </header>
 
+      <PainelEstudo />
+
       {isLoading && <p className="text-sm text-neutral-500">Carregando…</p>}
 
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
@@ -102,6 +105,7 @@ export default function Categorias() {
               {i === 0 && c.acessadoEm && <div className="mb-1 text-xs uppercase tracking-wide text-blue-400">Última aberta</div>}
               <div className="truncate pr-10 text-lg font-medium text-neutral-50">{c.name}</div>
               <div className="mt-1 text-sm text-neutral-400">{contagem(c.courseCount, c.pdfCount)}</div>
+              <EstudoDeHoje categoriaId={c.id} />
             </Link>
             <button
               type="button"
@@ -123,6 +127,7 @@ export default function Categorias() {
           >
             <div className="text-lg font-medium text-neutral-300">Sem categoria</div>
             <div className="mt-1 text-sm text-neutral-500">{contagem(semCursos, semPdfs)}</div>
+            <EstudoDeHoje categoriaId={SEM} />
           </Link>
         )}
       </div>

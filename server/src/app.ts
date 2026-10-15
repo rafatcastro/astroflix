@@ -32,6 +32,7 @@ import { criarServicosAnki } from './anki/servicos';
 import { flashcardsRoutes } from './routes/flashcards';
 import { configSupabase, criarClienteSupabase, type ClienteSupabase } from './nuvem/cliente';
 import { criarServicosConta } from './nuvem/conta';
+import { estudoRoutes } from './routes/estudo';
 import { criarSincronizador, type Sincronizador } from './nuvem/sincronizar';
 import { contaRoutes } from './routes/conta';
 import { documentosRoutes } from './routes/documentos';
@@ -144,6 +145,7 @@ export function buildApp(
   app.register(flashcardsRoutes, { db, anki });
   app.register(contaRoutes, { conta, sinc });
   app.register(documentosRoutes, { db, config, drive });
+  app.register(estudoRoutes, { db });
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.

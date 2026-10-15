@@ -8,6 +8,7 @@ import { ArrowLeft, Cards, Check, ChevronLeft, ChevronRight, Minus, Plus } from 
 import { caminhoDaCategoria, ultimaCategoria } from '../components/CabecalhoCategoria';
 import { AvisoAnki, CartaoFlashcard, FormFlashcard } from '../components/Flashcards';
 import { useFlashcards, useMudarFlashcards } from '../api/hooks';
+import { WidgetPomodoro } from '../components/Pomodoro';
 
 // Leitor de PDF: as páginas em rolagem contínua, cada uma desenhada só quando
 // chega perto da tela (um livro de mil páginas não pode virar mil canvas), e a
@@ -200,6 +201,7 @@ export default function LeitorPdf() {
 
   return (
     <div className="flex h-dvh flex-col bg-neutral-950">
+      <WidgetPomodoro variante="flutuante" />
       <header className="flex shrink-0 items-center gap-2 border-b border-neutral-800 px-3 py-2">
         <Link to={voltar} aria-label="Voltar para os PDFs" title="Voltar (Esc)" className={botao}>
           <ArrowLeft size={18} />

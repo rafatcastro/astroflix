@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cliqueFora } from '../lib/desktop';
 import { api, type Collection, type CredencialDrive } from '../api/client';
 import { useCollections, useConexaoDrive } from '../api/hooks';
+import { CONFIG_PADRAO, lerConfig, salvarConfig, type ConfigPomodoro } from '../lib/pomodoro';
 import { getPref, setPref } from '../lib/prefs';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
@@ -31,6 +32,44 @@ const ERRO_NUVEM: Record<string, string> = {
 };
 
 // Conta e nuvem: quem está usando, quando sincronizou e o que ainda falta subir.
+
+// Os tempos valem a partir da próxima fase: a que está correndo termina como começou.
+const CAMPOS_POMODORO: { chave: keyof ConfigPomodoro; rotulo: string; min: number; max: number }[] = [
+  { chave: 'foco', rotulo: 'Foco (minutos)', min: 1, max: 240 },
+  { chave: 'pausa', rotulo: 'Pausa (minutos)', min: 1, max: 60 },
+  { chave: 'pausaLonga', rotulo: 'Pausa longa (minutos)', min: 1, max: 120 },
+  { chave: 'aCada', rotulo: 'Pausa longa a cada (focos)', min: 1, max: 12 },
+];
+
+function SecaoPomodoro() {
+  const [cfg, setCfg] = useState<ConfigPomodoro>(lerConfig);
+  const mudar = (chave: keyof ConfigPomodoro, v: number, min: number, max: number) => {
+    const n = { ...cfg, [chave]: Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : CONFIG_PADRAO[chave] };
+    setCfg(n);
+    salvarConfig(n);
+  };
+  return (
+    <section className="mb-8">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">Pomodoro</h2>
+      <p className="mb-3 text-sm text-neutral-500">Inicie pela tela principal. Na pausa, o vídeo fica parado até ela acabar ou ser pulada.</p>
+      <div className="space-y-2">
+        {CAMPOS_POMODORO.map((c) => (
+          <label key={c.chave} className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+            {c.rotulo}
+            <TextField
+              type="number"
+              min={c.min}
+              max={c.max}
+              value={cfg[c.chave]}
+              onChange={(e) => mudar(c.chave, Number(e.target.value), c.min, c.max)}
+              className="w-20 text-right"
+            />
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function SecaoConta() {
   const qc = useQueryClient();
@@ -432,6 +471,7 @@ export default function Settings() {
       )}
 
       <SecaoConta />
+      <SecaoPomodoro />
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold text-neutral-300">Aparência</h2>

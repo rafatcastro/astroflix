@@ -12,6 +12,7 @@ import { caminhoDaCategoria, ultimaCategoria } from './components/CabecalhoCateg
 import HelpDrawer from './components/HelpDrawer';
 import AtualizacaoInicial from './components/AtualizacaoInicial';
 import PortaoConta from './components/PortaoConta';
+import { PomodoroProvider } from './lib/pomodoro';
 
 function NaCategoria({ pagina }: { pagina: (cat: string) => JSX.Element }) {
   const { cat = 'sem' } = useParams();
@@ -22,6 +23,8 @@ export default function App() {
   return (
     <AtualizacaoInicial>
       <PortaoConta>
+      {/* O pomodoro vive acima das rotas: trocar de tela não para o timer. */}
+      <PomodoroProvider>
       <Routes>
         <Route path="/" element={<Categorias />} />
         {/* Dentro de uma categoria: a key remonta a página ao trocar de categoria. */}
@@ -35,6 +38,7 @@ export default function App() {
         <Route path="/pdfs" element={<Navigate to={caminhoDaCategoria(ultimaCategoria(), 'pdfs')} replace />} />
         <Route path="/pdf/:id" element={<LeitorPdf />} />
       </Routes>
+      </PomodoroProvider>
       </PortaoConta>
       {/* Fora das rotas: a ajuda abre por cima de qualquer tela sem desmontar a
           página de trás — quem pede ajuda não perde o lugar onde estava. */}
