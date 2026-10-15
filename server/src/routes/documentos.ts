@@ -8,6 +8,12 @@ import { allowedRootsFor } from './settings';
 import { isWithinRoots } from './fs';
 import { servirArquivo } from './stream';
 import { cleanTitle, naturalCompare } from '../scan/derive';
+import type { ServicosDrive } from '../drive/servicos';
+import { FalhaDrive } from '../drive/tipos';
+import { parseLinkArquivoOuPastaDrive } from '../drive/link';
+import { pdfsDoDrive } from '../drive/pdfs';
+import { repassarDoDrive } from '../drive/stream';
+import { statusDaFalha } from '../drive/status';
 
 // PDFs (livros, questões, apostilas). Cada um é um arquivo do disco que o app só
 // lê: nunca copia, nunca altera, e "remover" tira só daqui. A leitura (página
@@ -45,6 +51,9 @@ interface LinhaDocumento {
   tipo: string | null;
   collection_id: string | null;
   caminho: string;
+  origem: 'local' | 'drive';
+  drive_id: string | null;
+  drive_resource_keys: string | null;
   tamanho: number;
   paginas: number | null;
   pagina: number;
@@ -56,8 +65,11 @@ interface LinhaDocumento {
 
 const tipoLimpo = (c: unknown): string | null => (typeof c === 'string' && c.trim() ? c.trim().slice(0, 60) : null);
 
-export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function documentosRoutes(
+  app: FastifyInstance,
+  opts: { db: Db; config: AppConfig; drive?: ServicosDrive },
+): Promise<void> {
+  const { db, config, drive } = opts;
   const raizes = () => allowedRootsFor(config, db);
   const capaDe = (id: string) => path.join(config.thumbsDir, `documento-${id}.png`);
   // A capa é a primeira página desenhada pela própria interface (o pdf.js já está
@@ -83,7 +95,9 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
     lidoEm: d.lido_em,
     leituraEm: d.leitura_em,
     criadoEm: d.criado_em,
-    disponivel: disponivel(d.caminho),
+    origem: d.origem === 'drive' ? 'drive' : 'local',
+    // Do Drive: está onde sempre esteve (lá); a falta de acesso aparece ao abrir.
+    disponivel: d.origem === 'drive' ? !!d.drive_id : disponivel(d.caminho),
     temCapa: fs.existsSync(capaDe(d.id)),
   });
   const buscar = (id: string) => db.prepare('SELECT * FROM documentos WHERE id=?').get(id) as LinhaDocumento | undefined;
@@ -165,6 +179,54 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
     return reply.code(201).send({ criados: ids.length, jaExistiam, recusados, ids });
   });
 
+  // Um link do Drive: o PDF, ou todos os PDFs da pasta. Lidos de lá sob demanda.
+  // Sem conta Google conectada e pasta privada, devolve a url do login, como o
+  // curso do Drive (routes/drive.ts).
+  app.post('/api/documentos/drive', async (req, reply) => {
+    const body = (req.body ?? {}) as { link?: unknown; tipo?: unknown; categoriaId?: unknown };
+    const link = typeof body.link === 'string' ? parseLinkArquivoOuPastaDrive(body.link) : null;
+    if (!link) return reply.code(400).send({ error: 'link-invalido' });
+    if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+    let achados;
+    try {
+      achados = await pdfsDoDrive(drive.cliente(link.resourceKey ? `${link.id}/${link.resourceKey}` : null), link.id, link.resourceKey);
+    } catch (e) {
+      if (!(e instanceof FalhaDrive)) throw e;
+      if ((e.tipo === 'sem-acesso' || e.tipo === 'nao-autorizado') && !drive.auth.status().conectado) {
+        try {
+          return reply.code(401).send({ precisaAutorizar: true, url: drive.auth.iniciar(`http://${req.headers.host}/api/drive/auth/callback`) });
+        } catch (e2) {
+          if (e2 instanceof FalhaDrive) return reply.code(503).send({ error: 'sem-credenciais' });
+          throw e2;
+        }
+      }
+      return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo === 'nao-e-pasta' ? 'nao-e-pdf' : e.tipo });
+    }
+    const tipo = tipoLimpo(body.tipo);
+    const categoriaId =
+      typeof body.categoriaId === 'string' && db.prepare('SELECT 1 FROM collections WHERE id=?').get(body.categoriaId) ? body.categoriaId : null;
+    const agora = new Date().toISOString();
+    const ids: string[] = [];
+    let jaExistiam = 0;
+    const existe = db.prepare("SELECT id FROM documentos WHERE origem='drive' AND drive_id=?");
+    const inserir = db.prepare(
+      `INSERT INTO documentos (id, titulo, tipo, collection_id, caminho, tamanho, origem, drive_id, drive_resource_keys, criado_em, atualizado_em)
+       VALUES (?, ?, ?, ?, '', ?, 'drive', ?, ?, ?, ?)`,
+    );
+    transaction(db, () => {
+      for (const p of achados.pdfs) {
+        if (existe.get(p.id)) {
+          jaExistiam++;
+          continue;
+        }
+        const id = randomUUID();
+        inserir.run(id, cleanTitle(p.nome), tipo, categoriaId, p.tamanho, p.id, p.resourceKeys, agora, agora);
+        ids.push(id);
+      }
+    });
+    return reply.code(201).send({ criados: ids.length, jaExistiam, recusados: 0, ids });
+  });
+
   app.patch('/api/documentos/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const d = buscar(id);
@@ -213,7 +275,10 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
   // sabe onde ele está. A leitura continua a mesma.
   app.post('/api/documentos/:id/caminho', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    if (!buscar(id)) return reply.code(404).send({ error: 'not_found' });
+    const atual = buscar(id);
+    if (!atual) return reply.code(404).send({ error: 'not_found' });
+    // O do Drive não tem arquivo nesta máquina para re-apontar.
+    if (atual.origem === 'drive') return reply.code(400).send({ error: 'do-drive' });
     const bruto = (req.body as { caminho?: unknown })?.caminho;
     if (typeof bruto !== 'string' || !bruto) return reply.code(400).send({ error: 'caminho_required' });
     const c = path.resolve(bruto);
@@ -242,6 +307,10 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
   app.get('/api/documentos/:id/arquivo', async (req, reply) => {
     const d = buscar((req.params as { id: string }).id);
     if (!d) return reply.code(404).send({ error: 'not_found' });
+    if (d.origem === 'drive') {
+      if (!drive || !d.drive_id) return reply.code(503).send({ error: 'sem-conexao' });
+      return repassarDoDrive(req, reply, drive.cliente(d.drive_resource_keys), d.drive_id, { contentType: 'application/pdf' }, drive);
+    }
     // O caminho vem do banco, e o banco também é escrito pela descida da conta: a
     // mesma fronteira das aulas antes de abrir qualquer arquivo.
     if (!d.caminho || !ehPdf(d.caminho) || !isWithinRoots(d.caminho, raizes())) return reply.code(403).send({ error: 'forbidden' });

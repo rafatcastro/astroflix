@@ -141,6 +141,10 @@ alter table public.documentos add column if not exists colecao_id text;
 alter table public.flashcards add column if not exists documento_id text;
 alter table public.flashcards add column if not exists pagina integer;
 alter table public.flashcards add column if not exists colecao_id text;
+-- PDFs do Google Drive (v2.1.27): lidos de lá, sem caminho em máquina nenhuma.
+alter table public.documentos add column if not exists origem text not null default 'local';
+alter table public.documentos add column if not exists drive_id text;
+alter table public.documentos add column if not exists drive_resource_keys text;
 
 -- Progresso nunca anda para trás: assistir offline em duas máquinas e sincronizar
 -- depois não pode apagar o que uma delas assistiu (a regra do backup). Concluir ou

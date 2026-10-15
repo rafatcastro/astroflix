@@ -199,14 +199,15 @@ export function criarSincronizador(deps: {
         if (!d) {
           return {
             linha: {
-              id: chave, titulo: '', tipo: null, colecao_id: null, tamanho: 0, paginas: null, pagina: 1, lido: false, lido_em: null,
+              id: chave, titulo: '', tipo: null, colecao_id: null, origem: 'local', drive_id: null, drive_resource_keys: null, tamanho: 0, paginas: null, pagina: 1, lido: false, lido_em: null,
               leitura_em: null, criado_em: new Date().toISOString(), excluido: true,
             },
           };
         }
         return {
           linha: {
-            id: d.id, titulo: d.titulo, tipo: d.tipo, colecao_id: d.collection_id, tamanho: d.tamanho, paginas: d.paginas, pagina: d.pagina,
+            id: d.id, titulo: d.titulo, tipo: d.tipo, colecao_id: d.collection_id, tamanho: d.tamanho,
+            origem: d.origem ?? 'local', drive_id: d.drive_id ?? null, drive_resource_keys: d.drive_resource_keys ?? null, paginas: d.paginas, pagina: d.pagina,
             lido: !!d.lido, lido_em: d.lido_em, leitura_em: d.leitura_em, criado_em: d.criado_em, excluido: false,
           },
           // O arquivo é desta máquina, como a pasta de um curso local.
@@ -406,11 +407,13 @@ export function criarSincronizador(deps: {
           // Sem caminho: o PDF é de outra máquina até a pessoa re-apontar (ou até a
           // linha de documentos_por_maquina desta máquina descer, logo depois).
           db.prepare(
-            `INSERT INTO documentos (id, titulo, tipo, collection_id, caminho, tamanho, paginas, pagina, lido, lido_em, leitura_em, criado_em, atualizado_em)
-             VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO documentos (id, titulo, tipo, collection_id, caminho, tamanho, paginas, pagina, lido, lido_em, leitura_em, criado_em, atualizado_em,
+               origem, drive_id, drive_resource_keys)
+             VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
             r.id, r.titulo, r.tipo ?? null, colecaoDoc, r.tamanho ?? 0, r.paginas ?? null, r.pagina ?? 1, bool(r.lido) ? 1 : 0,
             r.lido_em ?? null, r.leitura_em ?? null, r.criado_em, agora,
+            r.origem === 'drive' ? 'drive' : 'local', r.drive_id ?? null, r.drive_resource_keys ?? null,
           );
           return;
         }
