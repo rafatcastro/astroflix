@@ -31,7 +31,7 @@ describe('coleções', () => {
     expect(assign.statusCode).toBe(200);
 
     const list = await app.inject({ method: 'GET', url: '/api/collections' });
-    expect(list.json()).toEqual([{ id: col.id, name: 'Programação', courseCount: 1, pdfCount: 0, acessadoEm: null }]);
+    expect(list.json()).toEqual([{ id: col.id, name: 'Programação', emoji: null, courseCount: 1, pdfCount: 0, acessadoEm: null }]);
 
     // curso lista com collectionId
     const courses = await app.inject({ method: 'GET', url: '/api/courses' });
@@ -192,5 +192,19 @@ describe('pastas de cursos persistidas (course_roots)', () => {
     await app.inject({ method: 'POST', url: '/api/courses/batch', payload: {} }); // 400
     expect((db.prepare('SELECT COUNT(*) AS n FROM course_roots').get() as any).n).toBe(0);
     db.close();
+  });
+
+  it('emoji: na criação, na edição (sozinho ou com o nome), apagar e recusar texto', async () => {
+    const db = openDb(':memory:');
+    const app = makeApp(db, os.tmpdir());
+    const col = (await app.inject({ method: 'POST', url: '/api/collections', payload: { name: 'Pós', emoji: '🎓' } })).json();
+    expect(col.emoji).toBe('🎓');
+    const lista = async () => (await app.inject({ method: 'GET', url: '/api/collections' })).json()[0];
+    expect((await app.inject({ method: 'PATCH', url: `/api/collections/${col.id}`, payload: { emoji: '👩🏽‍💻' } })).statusCode).toBe(200);
+    expect(await lista()).toMatchObject({ name: 'Pós', emoji: '👩🏽‍💻' });
+    await app.inject({ method: 'PATCH', url: `/api/collections/${col.id}`, payload: { name: 'Pós-graduação', emoji: null } });
+    expect(await lista()).toMatchObject({ name: 'Pós-graduação', emoji: null });
+    expect((await app.inject({ method: 'PATCH', url: `/api/collections/${col.id}`, payload: { emoji: 'abc' } })).statusCode).toBe(400);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM nuvem_fila WHERE tabela='colecao'").get()).toEqual({ n: 1 });
   });
 });

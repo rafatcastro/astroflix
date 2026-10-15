@@ -101,7 +101,9 @@ export interface RepointSummary { matched: number; relinked: number; missing: nu
 export interface RootUnavailable { status: 'root_unavailable'; }
 export interface Settings { allowedRootsExtra: string[]; }
 // Categoria (a API ainda diz collection: eram as bibliotecas de cursos).
-export interface Collection { id: string; name: string; courseCount: number; pdfCount: number; acessadoEm: string | null; }
+export interface Collection {
+  id: string; name: string; emoji: string | null; courseCount: number; pdfCount: number; acessadoEm: string | null;
+}
 export interface BatchImportResult {
   created: number; skipped: number; noVideos: number;
   courses: { id: string; title: string }[];
@@ -178,6 +180,23 @@ export type RespostaDrive =
 
 // Falhas do Drive (sem acesso, cota, sem credenciais…) são resultados esperados que a interface
 // explica à pessoa; por isso voltam como valor em vez de exceção do jsonFetch.
+export interface ItemDrive { id: string; nome: string; tipo: 'pasta' | 'pdf'; resourceKey: string | null; tamanho: number; }
+export type RespostaNavegarDrive = { tipo: 'itens'; itens: ItemDrive[] } | { tipo: 'autorizar'; url: string } | { tipo: 'erro'; erro: string };
+
+/** Uma pasta do Drive para o seletor: 'root' (Meu Drive), 'compartilhados' ou o id. */
+async function driveNavegar(pasta: string): Promise<RespostaNavegarDrive> {
+  let res: Response;
+  try {
+    res = await fetch(`/api/drive/navegar?pasta=${encodeURIComponent(pasta)}`);
+  } catch {
+    return { tipo: 'erro', erro: 'sem-conexao' };
+  }
+  const corpo = (await res.json().catch(() => ({}))) as { itens?: ItemDrive[]; precisaAutorizar?: boolean; url?: string; error?: string };
+  if (res.ok && corpo.itens) return { tipo: 'itens', itens: corpo.itens };
+  if (res.status === 401 && corpo.precisaAutorizar && corpo.url) return { tipo: 'autorizar', url: corpo.url };
+  return { tipo: 'erro', erro: corpo.error ?? 'google' };
+}
+
 export type RespostaDrivePdfs =
   | { tipo: 'pdfs'; resultado: ResultadoAdicionarPdfs }
   | { tipo: 'autorizar'; url: string }
@@ -318,7 +337,10 @@ export const api = {
   resetAllProgress: () => jsonFetch<{ deleted: number }>('/api/progress/reset', { method: 'POST' }),
   resetLibrary: () => jsonFetch<{ courses: number }>('/api/library/reset', { method: 'POST' }),
   listCollections: () => jsonFetch<Collection[]>('/api/collections'),
-  createCollection: (name: string) => jsonFetch<{ id: string; name: string }>('/api/collections', { method: 'POST', body: JSON.stringify({ name }) }),
+  createCollection: (name: string, emoji?: string | null) =>
+    jsonFetch<{ id: string; name: string }>('/api/collections', { method: 'POST', body: JSON.stringify({ name, emoji: emoji ?? null }) }),
+  editarCategoria: (id: string, body: { name?: string; emoji?: string | null }) =>
+    jsonFetch<{ ok: true }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   renameCollection: (id: string, name: string) => jsonFetch<{ ok: true }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => jsonFetch<void>(`/api/collections/${id}`, { method: 'DELETE' }),
   acessarCategoria: (id: string) => jsonFetch<void>(`/api/collections/${id}/acesso`, { method: 'POST' }),
@@ -346,6 +368,7 @@ export const api = {
   ankiStatus: () => jsonFetch<{ estado: EstadoAnki; pendentes: number }>('/api/anki/status'),
   driveCriarCurso,
   adicionarPdfsDoDrive,
+  driveNavegar,
   driveStatus: () => jsonFetch<DriveStatus>('/api/drive/status'),
   driveDesconectar: () => jsonFetch<void>('/api/drive/auth', { method: 'DELETE' }),
   driveSalvarCredenciais: (c: Partial<Record<CredencialDrive, string>>) =>

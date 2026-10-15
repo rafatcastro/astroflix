@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Documento, type ResultadoAdicionarPdfs } from '../api/client';
 import DriveLinkModal from '../components/DriveLinkModal';
+import SeletorDrive from '../components/SeletorDrive';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { useCollections } from '../api/hooks';
 import { FileText, Plus, Settings as SettingsIcon, Check } from '../components/icons';
@@ -37,6 +38,11 @@ export default function Pdfs({ categoria }: { categoria: string }) {
   const [aviso, setAviso] = useState<string | null>(null);
   const [pedindoCategoria, setPedindoCategoria] = useState<{ caminhos?: string[]; pasta?: string } | null>(null);
   const [doDrive, setDoDrive] = useState(false);
+  const [seletorDrive, setSeletorDrive] = useState(false);
+  const aoAdicionarDoDrive = (r: ResultadoAdicionarPdfs) => {
+    avisar(r);
+    if (r.ids.length) setTipoPara(r.ids);
+  };
   // Os que acabaram de chegar do Drive: o tipo é perguntado depois (o link vem antes).
   const [tipoPara, setTipoPara] = useState<string[] | null>(null);
   const [acoes, setAcoes] = useState<Documento | null>(null);
@@ -131,11 +137,11 @@ export default function Pdfs({ categoria }: { categoria: string }) {
               onClick={() => {
                 setMenuAdicionar(false);
                 setAviso(null);
-                setDoDrive(true);
+                setSeletorDrive(true);
               }}
             >
               Do Google Drive
-              <div className="text-xs text-neutral-500">Link de um PDF ou de uma pasta; lido de lá, sem baixar</div>
+              <div className="text-xs text-neutral-500">Escolha PDFs ou uma pasta do seu Drive; lidos de lá, sem baixar</div>
             </button>
           </div>
         </>
@@ -230,12 +236,19 @@ export default function Pdfs({ categoria }: { categoria: string }) {
         <DriveLinkModal
           categoriaId={categoria === SEM ? undefined : categoria}
           onClose={() => setDoDrive(false)}
-          pdfs={{
-            aoAdicionar: (r) => {
-              avisar(r);
-              if (r.ids.length) setTipoPara(r.ids);
-            },
+          pdfs={{ aoAdicionar: aoAdicionarDoDrive }}
+        />
+      )}
+
+      {seletorDrive && (
+        <SeletorDrive
+          categoriaId={categoria === SEM ? undefined : categoria}
+          onClose={() => setSeletorDrive(false)}
+          onColarLink={() => {
+            setSeletorDrive(false);
+            setDoDrive(true);
           }}
+          aoAdicionar={aoAdicionarDoDrive}
         />
       )}
 
