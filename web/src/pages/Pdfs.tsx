@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Documento, type ResultadoAdicionarPdfs } from '../api/client';
 import DriveLinkModal from '../components/DriveLinkModal';
 import SeletorDrive from '../components/SeletorDrive';
+import MenuAdicionar from '../components/MenuAdicionar';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { useCollections } from '../api/hooks';
-import { FileText, Plus, Settings as SettingsIcon, Check } from '../components/icons';
+import { FileText, Settings as SettingsIcon, Check } from '../components/icons';
 import { escolherPasta, escolherPdfs } from '../lib/desktop';
 import { gerarCapa } from '../lib/pdf';
 
@@ -34,7 +35,6 @@ export default function Pdfs({ categoria }: { categoria: string }) {
   const qc = useQueryClient();
   const { data: docs, isLoading } = useQuery({ queryKey: ['documentos', categoria], queryFn: () => api.listarDocumentos(categoria) });
   const [filtro, setFiltro] = useState<string | null>(null);
-  const [menuAdicionar, setMenuAdicionar] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [pedindoCategoria, setPedindoCategoria] = useState<{ caminhos?: string[]; pasta?: string } | null>(null);
   const [doDrive, setDoDrive] = useState(false);
@@ -98,7 +98,6 @@ export default function Pdfs({ categoria }: { categoria: string }) {
   });
 
   async function escolher(tipo: 'arquivos' | 'pasta') {
-    setMenuAdicionar(false);
     setAviso(null);
     if (tipo === 'arquivos') {
       const caminhos = await escolherPdfs('Escolha um ou mais PDFs');
@@ -110,43 +109,20 @@ export default function Pdfs({ categoria }: { categoria: string }) {
   }
 
   const botaoAdicionar = (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setMenuAdicionar((v) => !v)}
-        aria-expanded={menuAdicionar}
-        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white transition-colors motion-reduce:transition-none hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-      >
-        <Plus size={18} /> Adicionar
-      </button>
-      {menuAdicionar && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setMenuAdicionar(false)} />
-          <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 text-left">
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => void escolher('arquivos')}>
-              Arquivos PDF…
-              <div className="text-xs text-neutral-500">Um ou vários</div>
-            </button>
-            <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => void escolher('pasta')}>
-              Pasta…
-              <div className="text-xs text-neutral-500">Todos os PDFs dentro dela, subpastas inclusive</div>
-            </button>
-            <button
-              type="button"
-              className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800"
-              onClick={() => {
-                setMenuAdicionar(false);
-                setAviso(null);
-                setSeletorDrive(true);
-              }}
-            >
-              Do Google Drive
-              <div className="text-xs text-neutral-500">Escolha PDFs ou uma pasta do seu Drive; lidos de lá, sem baixar</div>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <MenuAdicionar
+      opcoes={[
+        { rotulo: 'Arquivos PDF…', descricao: 'Um ou vários', onClick: () => void escolher('arquivos') },
+        { rotulo: 'Pasta…', descricao: 'Todos os PDFs dentro dela, subpastas inclusive', onClick: () => void escolher('pasta') },
+        {
+          rotulo: 'Do Google Drive',
+          descricao: 'Escolha PDFs ou uma pasta do seu Drive; lidos de lá, sem baixar',
+          onClick: () => {
+            setAviso(null);
+            setSeletorDrive(true);
+          },
+        },
+      ]}
+    />
   );
 
   return (
@@ -202,9 +178,8 @@ export default function Pdfs({ categoria }: { categoria: string }) {
           <FileText size={40} className="text-neutral-600" />
           <h2 className="mt-4 text-lg font-medium text-neutral-200">Nenhum PDF ainda</h2>
           <p className="mt-1 max-w-sm text-sm text-neutral-400">
-            Livros, listas de questões, apostilas. O app lê o arquivo onde ele está e lembra a página onde você parou.
+            Livros, listas de questões, apostilas. Use Adicionar, no topo; o app lembra a página onde você parou.
           </p>
-          <div className="mt-5">{botaoAdicionar}</div>
         </div>
       )}
 

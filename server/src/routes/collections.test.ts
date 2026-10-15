@@ -207,4 +207,25 @@ describe('pastas de cursos persistidas (course_roots)', () => {
     expect((await app.inject({ method: 'PATCH', url: `/api/collections/${col.id}`, payload: { emoji: 'abc' } })).statusCode).toBe(400);
     expect(db.prepare("SELECT COUNT(*) AS n FROM nuvem_fila WHERE tabela='colecao'").get()).toEqual({ n: 1 });
   });
+
+  it('Sem categoria ganha nome: cursos, PDFs e questões gerais sem categoria vão para a nova', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'col-sem-'));
+    fs.writeFileSync(path.join(root, 'a.mp4'), 'x');
+    const db = openDb(':memory:');
+    const cid = createCourseFromPath(db, root);
+    const app = makeApp(db, os.tmpdir());
+    const outra = (await app.inject({ method: 'POST', url: '/api/collections', payload: { name: 'Outra' } })).json();
+    db.prepare("INSERT INTO documentos (id, titulo, caminho, criado_em, atualizado_em) VALUES ('d1', 'Livro', '/x.pdf', 'x', 'x')").run();
+    db.prepare("INSERT INTO documentos (id, titulo, caminho, collection_id, criado_em, atualizado_em) VALUES ('d2', 'Livro 2', '/y.pdf', ?, 'x', 'x')").run(outra.id);
+    db.prepare("INSERT INTO flashcards (id, frente, verso, criado_em, atualizado_em) VALUES ('f1', 'F', 'V', 'x', 'x')").run();
+    const nova = (
+      await app.inject({ method: 'POST', url: '/api/collections', payload: { name: 'Pós', emoji: '🎓', adotarSemCategoria: true } })
+    ).json();
+    expect(db.prepare('SELECT collection_id FROM courses WHERE id=?').get(cid)).toEqual({ collection_id: nova.id });
+    expect(db.prepare("SELECT id, collection_id FROM documentos ORDER BY id").all()).toEqual([
+      { id: 'd1', collection_id: nova.id },
+      { id: 'd2', collection_id: outra.id },
+    ]);
+    expect(db.prepare("SELECT collection_id FROM flashcards WHERE id='f1'").get()).toEqual({ collection_id: nova.id });
+  });
 });
