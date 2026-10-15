@@ -32,8 +32,12 @@ linha `LEARNFLIX_URL=`. Os baralhos `Learnflix::…` são movidos sozinhos para 
 O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
 motivou a decisão), não o quê. Siga esse estilo.
 
-**Commits e push:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:` são
-opcionais), e pode fazer commit e **push direto na `main`**, sem branch nem Pull Request.
+**Commits e Pull Requests:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:`
+são opcionais). **Não faça push direto na `main`**: cada push nela dispara uma release (~10 min, em
+fila), e vários pushes seguidos viravam uma fila de releases. Trabalhe numa branch, abra um Pull
+Request para a `main` (`gh pr create -R rafatcastro/astroflix`) e deixe o merge para a pessoa: o
+merge é o que gera a release, uma por vez. O PR roda `.github/workflows/verificar.yml` (`pnpm
+build`).
 
 ## Comandos
 

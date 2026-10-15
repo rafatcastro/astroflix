@@ -8,7 +8,7 @@ on:
   push:
     branches: [main]
     # Mudança só de documentação não muda o app: não vale uma release.
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', '.github/workflows/verificar.yml']
   # Manual: ensaia o build da matriz sem publicar nada, ou publica sem precisar
   # de um commit novo (por exemplo, para reexecutar uma release que falhou).
   workflow_dispatch:
