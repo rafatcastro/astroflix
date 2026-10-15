@@ -9,8 +9,10 @@ progresso confiável. Cada pasta escolhida vira um "curso"; o app escaneia, list
 módulos, materiais, duração e capas), transmite o vídeo por HTTP Range e guarda posição e conclusão
 no SQLite. Tudo se organiza em **categorias** (a tabela `collections`, que antes eram as bibliotecas de
 cursos): o menu principal lista as categorias (a última aberta primeiro) e cada uma tem as abas
-Cursos, PDFs e Questões (flashcards do Anki). A categoria tem nome e emoji (v9), editados pelo
-botão direito no cartão (`DialogoCategoria.tsx`).
+Cursos, PDFs e Questões (flashcards do Anki), sem outra divisão dentro (o antigo "tipo" do PDF
+não aparece mais). A categoria tem nome e emoji (v9), editados pelo lápis no cabeçalho dela ou pelo
+botão direito no cartão (`DialogoCategoria.tsx`); o lápis em "Sem categoria" a transforma numa
+categoria com tudo o que estava sem.
 
 O Astroflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
@@ -279,7 +281,7 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   - Lesson: página de assistir estilo YouTube (vídeo à esquerda, abas Aulas/Flashcards à direita),
     salvar progresso, concluir e atalhos de teclado.
   - Settings.
-  - Pdfs: estante de PDFs com filtro por categoria e Adicionar (arquivos ou pasta).
+  - Pdfs: estante de PDFs da categoria e Adicionar (arquivos, pasta ou Drive).
   - LeitorPdf: rolagem contínua, cada página desenhada só perto da tela; salva a página onde
     parou; ←/→, +/−, 0 e Esc.
 - `components/DirPicker.tsx` conduz o seletor de pastas via `/api/fs/browse`.
