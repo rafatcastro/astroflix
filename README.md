@@ -1,37 +1,37 @@
-# Learnflix
+# Astroflix
 
 Assista aos cursos em vídeo que já estão nas suas pastas, com o progresso guardado direito.
 
-Você aponta uma pasta, ela vira um curso: o Learnflix encontra as aulas, respeita a ordem e os
+Você aponta uma pasta, ela vira um curso: o Astroflix encontra as aulas, respeita a ordem e os
 módulos, gera as capas e lembra exatamente onde você parou em cada aula. Tudo roda na sua máquina —
 usando pastas locais, nada é enviado para lugar nenhum, sem conta e sem login.
 
-> Este repositório é um fork do **[Learnflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2)**,
+> Este repositório é um fork do **[Astroflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2)**,
 > criado por [OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA). Todo o crédito pelo app
 > original é desse projeto; aqui ficam as mudanças feitas por cima dele.
 
 **É um programa normal**: baixe o instalador do seu sistema, instale e abra. Não precisa de
 terminal, de Node nem de compilar nada — e ele se atualiza sozinho.
 
-![Biblioteca do Learnflix com dezenas de cursos em grade, cada um com capa, número de aulas e percentual concluído](docs/biblioteca.png)
+![Biblioteca do Astroflix com dezenas de cursos em grade, cada um com capa, número de aulas e percentual concluído](docs/biblioteca.png)
 
 ---
 
 ## Como instalar
 
-Baixe o instalador na **[página da última versão](https://github.com/rafatcastro/learnflix-v2/releases/latest)**:
+Baixe o instalador na **[página da última versão](https://github.com/rafatcastro/astroflix/releases/latest)**:
 
 | Sistema | Arquivo |
 |---|---|
-| macOS (Apple Silicon: M1, M2…) | `Learnflix_<versão>_aarch64.dmg` |
-| macOS (Intel) | `Learnflix_<versão>_x64.dmg` |
-| Windows | `Learnflix_<versão>_x64-setup.exe` (ou o `.msi`) |
-| Linux | `Learnflix_<versão>_amd64.AppImage` (ou o `.deb` / `.rpm`) |
+| macOS (Apple Silicon: M1, M2…) | `Astroflix_<versão>_aarch64.dmg` |
+| macOS (Intel) | `Astroflix_<versão>_x64.dmg` |
+| Windows | `Astroflix_<versão>_x64-setup.exe` (ou o `.msi`) |
+| Linux | `Astroflix_<versão>_amd64.AppImage` (ou o `.deb` / `.rpm`) |
 
-Abra o Learnflix como qualquer outro programa — pelo Dock, pelo menu Iniciar ou pelo menu de
+Abra o Astroflix como qualquer outro programa — pelo Dock, pelo menu Iniciar ou pelo menu de
 aplicativos. Ele abre na própria janela.
 
-![Tela inicial vazia do Learnflix, com os botões para adicionar cursos](docs/tela-inicial.png)
+![Tela inicial vazia do Astroflix, com os botões para adicionar cursos](docs/tela-inicial.png)
 
 *É isso que aparece na primeira vez: sem cadastro, sem configuração — só apontar onde estão seus cursos.*
 
@@ -46,13 +46,13 @@ tocados: eles moram fora da pasta do programa.
 
 <br>
 
-O Learnflix ainda não tem o certificado pago da Apple, então o Gatekeeper desconfia dele na primeira
+O Astroflix ainda não tem o certificado pago da Apple, então o Gatekeeper desconfia dele na primeira
 vez. Arraste o app para **Aplicativos** e tente abrir; quando o aviso aparecer, vá em **Ajustes do
 Sistema → Privacidade e Segurança** e clique em **Abrir mesmo assim**. Se aparecer "está danificado
 e não pode ser aberto", rode uma vez no Terminal:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Learnflix.app
+xattr -dr com.apple.quarantine /Applications/Astroflix.app
 ```
 
 Depois disso ele abre normalmente, inclusive pelo Dock.
@@ -74,13 +74,13 @@ Depois disso ele abre normalmente, inclusive pelo Dock.
 
 <br>
 
-Dê permissão de execução (`chmod +x Learnflix_*.AppImage`) e abra. Em Debian/Ubuntu, o `.deb`
-instala com `sudo apt install ./Learnflix_*.deb` e põe o app no menu.
+Dê permissão de execução (`chmod +x Astroflix_*.AppImage`) e abra. Em Debian/Ubuntu, o `.deb`
+instala com `sudo apt install ./Astroflix_*.deb` e põe o app no menu.
 
 </details>
 
 <details>
-<summary>Já usava o Learnflix em outro computador</summary>
+<summary>Já usava o Astroflix em outro computador</summary>
 
 <br>
 
@@ -94,7 +94,7 @@ aula. Veja [Backup e migração](#backup-e-migração).
 
 ## Sua conta
 
-Na primeira vez, o Learnflix pede para **entrar com o Google**. A conta guarda na nuvem a sua
+Na primeira vez, o Astroflix pede para **entrar com o Google**. A conta guarda na nuvem a sua
 biblioteca, o progresso de cada aula, as bibliotecas e os flashcards: entre em outro computador e
 está tudo lá. Os vídeos nunca saem do seu computador; só os metadados sobem.
 
@@ -117,13 +117,13 @@ Explorer ou o seletor do Linux).
   **materiais**, para abrir ou baixar.
 - **Vários de uma vez**: se os vídeos estão só nas subpastas, o app pergunta se a pasta é um curso
   com módulos ou uma pasta com vários cursos. No segundo caso, cada subpasta com vídeos vira um
-  curso, e o Learnflix guarda essa pasta: depois basta clicar em **Verificar novos cursos** para
+  curso, e o Astroflix guarda essa pasta: depois basta clicar em **Verificar novos cursos** para
   trazer o que apareceu de novo. Rodar de novo nunca duplica nada.
 
 A ordem das aulas segue o nome dos arquivos, com ordenação numérica de verdade — `aula 2` vem antes
 de `aula 10`, e não depois.
 
-**Nada é copiado, movido ou renomeado.** O Learnflix só lê a sua pasta; os arquivos ficam
+**Nada é copiado, movido ou renomeado.** O Astroflix só lê a sua pasta; os arquivos ficam
 exatamente onde estão.
 
 ![Página de um curso: cartão "Continuar" no topo, a lista de aulas com miniatura e estado de cada uma, e abaixo a seção de materiais adicionais com os PDFs do curso, cada um com os botões Abrir e Baixar](docs/curso.png)
@@ -140,9 +140,9 @@ Drive** (na biblioteca vazia, o botão **Do Google Drive**) e cole o link da pas
 
 - **Pasta pública**: abre direto, sem login.
 - **Pasta privada**: o app abre a autorização do Google no seu navegador; depois de autorizar, é só
-  voltar para o Learnflix. A permissão é só de leitura
-  (`drive.readonly`); o Learnflix nunca cria, altera nem apaga nada no seu Drive.
-- **Baixa só o que você vai assistir**: quando você abre uma aula, o Learnflix baixa essa aula e as
+  voltar para o Astroflix. A permissão é só de leitura
+  (`drive.readonly`); o Astroflix nunca cria, altera nem apaga nada no seu Drive.
+- **Baixa só o que você vai assistir**: quando você abre uma aula, o Astroflix baixa essa aula e as
   duas seguintes para a pasta de dados do app e, se algum vídeo estiver num formato que o player não
   toca, já o converte. Nada é baixado ao colar o link nem ao abrir o app, então o curso inteiro
   nunca disputa a sua internet. Aula que já chegou toca sem internet; as outras tocam direto do
@@ -169,7 +169,7 @@ Telegram** e cole o link (`t.me/…`).
 
 - **Com a sua conta**: na primeira vez, o app mostra um QR code. No celular, abra o Telegram →
   **Configurações → Dispositivos → Conectar dispositivo** e aponte para a tela. A sessão aparece lá
-  como "Learnflix", e você pode encerrá-la por ali ou em **Configurações → Telegram**.
+  como "Astroflix", e você pode encerrá-la por ali ou em **Configurações → Telegram**.
 - **A ordem é a do grupo**: cada vídeo vira uma aula na ordem em que foi postado, com o título da
   legenda. PDFs e outros arquivos viram materiais; conversa, foto e figurinha ficam de fora.
 - **Grupo privado e convite**: vale qualquer grupo em que você já está. Num link de convite
@@ -203,15 +203,15 @@ em que foi criado: clicar no minuto volta o vídeo até ali.
 
 Os cards vão para o **Anki**, onde você revisa (no computador ou, pelo AnkiWeb, no celular):
 
-- **Baralhos**: os cards de um curso vão para `Learnflix::Cursos::<nome do curso>`, e os gerais
-  para `Learnflix::Cursos`. Revisar `Learnflix::Cursos` pega tudo.
+- **Baralhos**: os cards de um curso vão para `Astroflix::Cursos::<nome do curso>`, e os gerais
+  para `Astroflix::Cursos`. Revisar `Astroflix::Cursos` pega tudo.
 - **Gerais e do curso todo**: ficam na tela **Flashcards**, aberta pelo botão de cards da
   biblioteca ou pelo link **Flashcards** no topo do curso.
-- **Os dois lados conversam**: editar ou apagar um card no Anki também muda no Learnflix.
+- **Os dois lados conversam**: editar ou apagar um card no Anki também muda no Astroflix.
 
 **Para conectar**, instale o [Anki](https://apps.ankiweb.net) no computador e, nele, o complemento
 **AnkiConnect** (Ferramentas → Complementos → Obter complementos → código `2055492159`). Deixe o
-Anki aberto enquanto estuda. Com o Anki fechado, nada se perde: o card fica guardado no Learnflix e
+Anki aberto enquanto estuda. Com o Anki fechado, nada se perde: o card fica guardado no Astroflix e
 vai na próxima vez que o Anki abrir. Quem não usa Anki não precisa configurar nada.
 
 ---
@@ -228,7 +228,7 @@ dá para acrescentar a qualquer momento:
 | Windows | `winget install Gyan.FFmpeg` |
 | Linux | `sudo apt install ffmpeg` (ou o gerenciador da sua distro) |
 
-Instale, feche e abra o Learnflix de novo e as capas aparecem sozinhas nos cursos que você abrir. Você também
+Instale, feche e abra o Astroflix de novo e as capas aparecem sozinhas nos cursos que você abrir. Você também
 pode escolher outro quadro como capa do curso pelo menu ⋯.
 
 ---
@@ -260,7 +260,7 @@ minutos numa máquina e 40 na outra, ficam os 40. Aula concluída não desconclu
 antigo por engano não apaga nada do que você viu depois dele, e importar o mesmo arquivo duas vezes
 dá no mesmo que importar uma.
 
-**Mudar de computador funciona mesmo com os caminhos diferentes.** O Learnflix reconhece um curso
+**Mudar de computador funciona mesmo com os caminhos diferentes.** O Astroflix reconhece um curso
 pelas aulas que ele tem, não pela pasta onde mora — então um curso que estava em `D:\Cursos\Rust` no
 Windows e agora está em `/Volumes/HD/Rust` no Mac é reencontrado sozinho. E se o disco nem estiver
 plugado na hora, o curso entra assim mesmo, com todo o progresso: quando você conectar o HD, use
@@ -274,7 +274,7 @@ Todo o progresso mora num único arquivo, **fora da pasta do app**:
 
 ```
 ~/.learnflix/app.db                      macOS e Linux
-%LOCALAPPDATA%\Learnflix\app.db          Windows
+%LOCALAPPDATA%\Astroflix\app.db          Windows
 ```
 
 Ficar fora é o que faz **atualizar não custar nada**: a versão nova substitui o programa e nem toca
@@ -309,13 +309,13 @@ Enquanto assiste:
 ## Quando um vídeo não toca
 
 Alguns cursos baixados trazem arquivos com a extensão errada — um `.mp4` que por dentro é MPEG-TS,
-por exemplo. O navegador não toca, e o Learnflix explica o motivo em vez de mostrar uma tela preta.
+por exemplo. O navegador não toca, e o Astroflix explica o motivo em vez de mostrar uma tela preta.
 
 Quando dá para consertar sem perda de qualidade, aparece o botão **Converter agora (sem perda)**: a
 conversão leva segundos, é gravada à parte e **o arquivo original não é tocado**.
 
 Quando o codec em si não toca na janela (H.264 10-bit, ou HEVC no Windows sem a extensão HEVC),
-aparece **Converter para assistir**: o Learnflix recodifica a aula para H.264 com o ffmpeg, com uma
+aparece **Converter para assistir**: o Astroflix recodifica a aula para H.264 com o ffmpeg, com uma
 barra de andamento. Leva alguns minutos, e o original também não é tocado. No Mac, HEVC toca
 direto: o app pergunta ao player o que ele reproduz em vez de supor o pior.
 
@@ -338,7 +338,7 @@ do app, em [Tauri](https://tauri.app)). Precisa de Node 22.5+, pnpm e, para o ap
 [Rust](https://rustup.rs).
 
 ```bash
-git clone https://github.com/rafatcastro/learnflix-v2 && cd learnflix-v2 && pnpm install
+git clone https://github.com/rafatcastro/astroflix && cd astroflix && pnpm install
 pnpm dev             # a janela do app, com hot reload da interface (Vite) e do servidor
 pnpm test            # testes do servidor e da interface
 pnpm build           # tipos + interface + dist/learnflix.cjs (o servidor num arquivo só)
@@ -389,7 +389,7 @@ O código e os comentários estão em português.
 
 ## Dúvidas, problemas ou ideias
 
-Fale comigo — **[abra uma issue aqui](https://github.com/rafatcastro/learnflix-v2/issues/new)**.
+Fale comigo — **[abra uma issue aqui](https://github.com/rafatcastro/astroflix/issues/new)**.
 Não precisa saber programar nem formatar nada: diga o que aconteceu, em que sistema, e eu respondo.
 
 Se o app não abriu, ajuda muito colar **a mensagem que apareceu na janela** — é ali que ele diz o
@@ -399,7 +399,7 @@ motivo.
 
 ## O que mudou nesta versão
 
-O Learnflix agora é **um programa de verdade**, com janela própria, ícone no Dock e na barra de
+O Astroflix agora é **um programa de verdade**, com janela própria, ícone no Dock e na barra de
 tarefas e atualização automática. Antes era preciso abrir o terminal e rodar um comando; hoje é
 baixar, instalar e abrir.
 
@@ -411,14 +411,14 @@ baixar, instalar e abrir.
   conta pelo QR code; os vídeos viram aulas na ordem em que foram postados.
 - **Flashcards com o Anki.** Escreva cards durante a aula; eles vão para o seu Anki, presos ao
   minuto do vídeo.
-- **Os mesmos dados.** Quem já usava o Learnflix abre o app e encontra a biblioteca e o progresso
+- **Os mesmos dados.** Quem já usava o Astroflix abre o app e encontra a biblioteca e o progresso
   exatamente como deixou.
 
 ---
 
 ## Créditos e licença
 
-Fork do [Learnflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2), de
+Fork do [Astroflix v2](https://github.com/OnaitsirC-MiromA/learnflix-v2), de
 [OnaitsirC-MiromA](https://github.com/OnaitsirC-MiromA), distribuído sob a licença MIT. O aviso de
 copyright original está mantido em [LICENSE](LICENSE).
 

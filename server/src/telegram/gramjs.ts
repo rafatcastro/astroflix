@@ -39,8 +39,8 @@ async function novoCliente(sessao: string, c: CredenciaisTelegram): Promise<Tele
     connectionRetries: 3,
     baseLogger: new log.Logger(log.LogLevel.NONE),
     // É o que aparece em Telegram → Dispositivos: a pessoa precisa reconhecer
-    // a sessão como o Learnflix para saber o que está encerrando.
-    deviceModel: 'Learnflix',
+    // a sessão como o Astroflix para saber o que está encerrando.
+    deviceModel: 'Astroflix',
     appVersion: APP_VERSION,
     systemVersion: process.platform,
     langCode: 'pt',

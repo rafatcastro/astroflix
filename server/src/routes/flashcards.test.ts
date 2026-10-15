@@ -31,17 +31,17 @@ describe('flashcards e Anki', () => {
     expect(r.json()).toMatchObject({ anki: 'conectado', card: { courseId: 'c1', lessonId: 'l1', minutoSec: 760, noAnki: true } });
     expect(anki.modelos.has('Learnflix')).toBe(true);
     expect(nota(anki)).toEqual({
-      baralho: 'Learnflix::Sem categoria::Cursos::Algoritmos',
+      baralho: 'Astroflix::Sem categoria::Cursos::Algoritmos',
       campos: { Frente: 'O que é O(n)?', Verso: 'Linear', Origem: 'Algoritmos › Big O · 12:40' },
       tags: ['learnflix'],
     });
     expect(anki.sincronizou).toBe(1);
   });
 
-  it('card geral sem categoria vai para a raiz Learnflix', async () => {
+  it('card geral sem categoria vai para a raiz Astroflix', async () => {
     const { anki, criar, listar } = montar();
     await criar({ frente: 'F', verso: 'V' });
-    expect(nota(anki).baralho).toBe('Learnflix');
+    expect(nota(anki).baralho).toBe('Astroflix');
     expect(nota(anki).campos.Origem).toBe('Geral');
     expect((await listar('?geral=1')).cards).toHaveLength(1);
     expect((await listar('?lessonId=l1')).cards).toHaveLength(0);
@@ -163,7 +163,7 @@ describe('flashcards e Anki', () => {
     expect((await app.inject({ method: 'GET', url: '/api/anki/status' })).json()).toEqual({ estado: 'fechado', pendentes: 0 });
   });
 
-  it('categoria: gerais em Learnflix::<categoria>, cursos e PDFs embaixo, e a lista da categoria pega tudo', async () => {
+  it('categoria: gerais em Astroflix::<categoria>, cursos e PDFs embaixo, e a lista da categoria pega tudo', async () => {
     const { db, anki, criar, listar } = montar();
     db.prepare("INSERT INTO collections (id, name, created_at) VALUES ('k1', 'Pós', 'x')").run();
     db.prepare("UPDATE courses SET collection_id='k1' WHERE id='c1'").run();
@@ -173,11 +173,11 @@ describe('flashcards e Anki', () => {
     await criar({ frente: 'Geral', verso: 'V', categoriaId: 'k1' });
     await criar({ frente: 'Aula', verso: 'V', lessonId: 'l1' });
     const r = await criar({ frente: 'Página', verso: 'V', documentoId: 'd1', pagina: 12 });
-    expect(r.json().card).toMatchObject({ documentoId: 'd1', pagina: 12, baralho: 'Learnflix::Pós::PDFs::Cálculo I' });
+    expect(r.json().card).toMatchObject({ documentoId: 'd1', pagina: 12, baralho: 'Astroflix::Pós::PDFs::Cálculo I' });
     const porFrente = Object.fromEntries([...anki.notas.values()].map((n) => [n.campos.Frente, n]));
-    expect(porFrente.Geral.baralho).toBe('Learnflix::Pós');
-    expect(porFrente.Aula.baralho).toBe('Learnflix::Pós::Cursos::Algoritmos');
-    expect(porFrente['Página']).toMatchObject({ baralho: 'Learnflix::Pós::PDFs::Cálculo I', campos: { Origem: 'Cálculo I · p. 12' } });
+    expect(porFrente.Geral.baralho).toBe('Astroflix::Pós');
+    expect(porFrente.Aula.baralho).toBe('Astroflix::Pós::Cursos::Algoritmos');
+    expect(porFrente['Página']).toMatchObject({ baralho: 'Astroflix::Pós::PDFs::Cálculo I', campos: { Origem: 'Cálculo I · p. 12' } });
     expect((await listar('?categoria=k1')).cards).toHaveLength(3);
     expect((await listar('?categoria=k1&geral=1')).cards).toHaveLength(1);
     expect((await listar('?documentoId=d1')).cards).toHaveLength(1);
@@ -193,13 +193,20 @@ describe('flashcards e Anki', () => {
     anki.baralhos.add('Learnflix::Cursos').add('Learnflix::Cursos::Algoritmos');
     db.prepare('UPDATE flashcards SET baralho=NULL').run();
     await listar();
-    expect(anki.notas.get(id)!.baralho).toBe('Learnflix::Sem categoria::Cursos::Algoritmos');
+    expect(anki.notas.get(id)!.baralho).toBe('Astroflix::Sem categoria::Cursos::Algoritmos');
     expect([...anki.baralhos].filter((b) => b.startsWith('Learnflix::Cursos'))).toEqual([]);
 
     db.prepare("INSERT INTO collections (id, name, created_at) VALUES ('k2', 'Concurso', 'x')").run();
     db.prepare("UPDATE courses SET collection_id='k2' WHERE id='c1'").run();
     await listar();
-    expect(anki.notas.get(id)!.baralho).toBe('Learnflix::Concurso::Cursos::Algoritmos');
-    expect([...anki.baralhos].some((b) => b.startsWith('Learnflix::Sem categoria'))).toBe(false);
+    expect(anki.notas.get(id)!.baralho).toBe('Astroflix::Concurso::Cursos::Algoritmos');
+    // E do nome antigo do app (Learnflix::…): vem para Astroflix, e a raiz velha vazia sai.
+    anki.notas.get(id)!.baralho = 'Learnflix::Concurso::Cursos::Algoritmos';
+    anki.baralhos.add('Learnflix').add('Learnflix::Concurso::Cursos::Algoritmos');
+    db.prepare("UPDATE flashcards SET baralho='Learnflix::Concurso::Cursos::Algoritmos'").run();
+    await listar();
+    expect(anki.notas.get(id)!.baralho).toBe('Astroflix::Concurso::Cursos::Algoritmos');
+    expect([...anki.baralhos].some((b) => b === 'Learnflix' || b.startsWith('Learnflix::'))).toBe(false);
+    expect([...anki.baralhos].some((b) => b.startsWith('Astroflix::Sem categoria'))).toBe(false);
   });
 });

@@ -43,7 +43,7 @@ describe('escutarComFallback', () => {
     app.close();
   });
 
-  // Porta ocupada é comum: outro Learnflix aberto, ou qualquer serviço que
+  // Porta ocupada é comum: outro Astroflix aberto, ou qualquer serviço que
   // pegou a 7777. Morrer com stack trace nesse caso seria hostil.
   it('anda para a próxima porta livre quando a pedida está ocupada', async () => {
     await ocupar(7402);

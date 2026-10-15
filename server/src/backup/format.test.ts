@@ -14,7 +14,7 @@ const valido = {
 };
 
 describe('parseExport', () => {
-  it('aceita um arquivo do próprio Learnflix', () => {
+  it('aceita um arquivo do próprio Astroflix', () => {
     const r = parseExport(valido);
 
     expect(r.ok).toBe(true);
@@ -23,11 +23,11 @@ describe('parseExport', () => {
 
   // Escolher o arquivo errado no seletor é o engano mais provável de todos. A
   // mensagem tem de dizer o que houve, não "erro ao importar".
-  it('recusa um JSON que não é do Learnflix, dizendo o motivo', () => {
+  it('recusa um JSON que não é do Astroflix, dizendo o motivo', () => {
     const r = parseExport({ nome: 'outra coisa qualquer' });
 
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/não parece ser um arquivo do Learnflix/i);
+    if (!r.ok) expect(r.error).toMatch(/não parece ser um arquivo do Astroflix/i);
   });
 
   it('recusa um arquivo gerado por uma versão mais nova do app', () => {

@@ -3,7 +3,7 @@ import type { Db } from '../db';
 import type { CredenciaisGoogle, Fetch } from '../drive/tipos';
 import { FalhaNuvem, type ClienteSupabase, type SessaoSupabase } from './cliente';
 
-// A conta do Learnflix: login com Google (o mesmo cliente OAuth e o mesmo PKCE
+// A conta do Astroflix: login com Google (o mesmo cliente OAuth e o mesmo PKCE
 // pelo navegador do sistema que o Drive usa) trocado por uma sessão do Supabase.
 // O Google só entrega o id_token; quem vira dono dos dados é o usuário do Supabase.
 

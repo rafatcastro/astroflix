@@ -17,7 +17,7 @@ export async function backupRoutes(app: FastifyInstance, opts: { db: Db; config:
 
   app.get('/api/library/export', async (_req, reply) => {
     const data = buildExport(db, APP_VERSION);
-    const nome = `learnflix-${data.exportedAt.slice(0, 10)}.json`;
+    const nome = `astroflix-${data.exportedAt.slice(0, 10)}.json`;
     return reply.header('content-disposition', `attachment; filename="${nome}"`).send(data);
   });
 

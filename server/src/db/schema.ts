@@ -1,4 +1,4 @@
-// Schema inicial do Learnflix.
+// Schema inicial do Astroflix.
 //
 // Princípio central: o progresso NUNCA se prende a um caminho absoluto. O curso
 // tem um id interno estável e a aula é identificada pelo rel_path dentro dele —

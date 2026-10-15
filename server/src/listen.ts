@@ -13,7 +13,7 @@ export interface Escuta {
 /**
  * Sobe o servidor, andando para a próxima porta se a pedida estiver ocupada.
  *
- * Porta ocupada é banal — outro Learnflix já aberto, ou qualquer serviço que
+ * Porta ocupada é banal — outro Astroflix já aberto, ou qualquer serviço que
  * pegou a 7777 antes. Morrer com stack trace nesse caso seria hostil com quem
  * só quer assistir aula. Qualquer outro erro (permissão, endereço inválido)
  * sobe na hora: procurar portas não resolveria nada.

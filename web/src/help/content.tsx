@@ -64,7 +64,7 @@ export const TOPICOS: Topico[] = [
       {
         t: 'p',
         texto:
-          'O Learnflix não guarda vídeo nenhum: ele lê as pastas que já existem no seu disco. Apontar uma pasta é tudo o que ele precisa para montar um curso.',
+          'O Astroflix não guarda vídeo nenhum: ele lê as pastas que já existem no seu disco. Apontar uma pasta é tudo o que ele precisa para montar um curso.',
       },
       {
         t: 'p',
@@ -80,8 +80,8 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             <b>Uma pasta inteira de cursos.</b> Se você tem uma pasta-mãe com vários cursos dentro,
-            escolha essa pasta do mesmo jeito: o Learnflix pergunta se ela é um curso só (as
-            subpastas viram módulos) ou vários cursos (cada subpasta com vídeo vira um curso). O Learnflix guarda essa pasta-mãe, e depois basta clicar em{' '}
+            escolha essa pasta do mesmo jeito: o Astroflix pergunta se ela é um curso só (as
+            subpastas viram módulos) ou vários cursos (cada subpasta com vídeo vira um curso). O Astroflix guarda essa pasta-mãe, e depois basta clicar em{' '}
             <b>Verificar novos cursos</b> para trazer o que apareceu de novo. Rodar de novo nunca
             duplica nada.
           </>
@@ -121,7 +121,7 @@ export const TOPICOS: Topico[] = [
         t: 'nota',
         tom: 'info',
         texto:
-          'Nada é copiado, movido ou renomeado. O Learnflix só lê as suas pastas; os arquivos ficam exatamente onde estão.',
+          'Nada é copiado, movido ou renomeado. O Astroflix só lê as suas pastas; os arquivos ficam exatamente onde estão.',
       },
     ],
   },
@@ -146,7 +146,7 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             <b>Concluir.</b> Marque a caixinha ao lado da aula, ou use o botão de concluir no player.
-            Quando você assiste quase até o fim, o Learnflix marca sozinho — mas a decisão continua
+            Quando você assiste quase até o fim, o Astroflix marca sozinho — mas a decisão continua
             sua: dá para desmarcar a qualquer momento.
           </>
         ),
@@ -192,7 +192,7 @@ export const TOPICOS: Topico[] = [
             <b>Mover para categoria…</b>
           </>,
           <>
-            Em <b>Questões</b>, os flashcards da categoria. No Anki ficam em <b>Learnflix::&lt;categoria&gt;</b> (as gerais) e,
+            Em <b>Questões</b>, os flashcards da categoria. No Anki ficam em <b>Astroflix::&lt;categoria&gt;</b> (as gerais) e,
             embaixo, <b>Cursos::&lt;curso&gt;</b> e <b>PDFs::&lt;PDF&gt;</b>.
           </>,
         ],
@@ -251,8 +251,8 @@ export const TOPICOS: Topico[] = [
         tom: 'info',
         texto: (
           <>
-            Os cards do curso vão para o baralho <b>Learnflix::Cursos::&lt;curso&gt;</b>, e os gerais para{' '}
-            <b>Learnflix::Cursos</b>. Com o Anki fechado, o card fica guardado e vai quando ele abrir. Editar
+            Os cards do curso vão para o baralho <b>Astroflix::Cursos::&lt;curso&gt;</b>, e os gerais para{' '}
+            <b>Astroflix::Cursos</b>. Com o Anki fechado, o card fica guardado e vai quando ele abrir. Editar
             ou apagar no Anki também muda aqui.
           </>
         ),
@@ -299,7 +299,7 @@ export const TOPICOS: Topico[] = [
       {
         t: 'p',
         texto:
-          'Nem todo arquivo de vídeo toca num navegador, mesmo terminando em .mp4. Muitos cursos baixados trazem arquivos cuja extensão mente sobre o conteúdo. Em vez de mostrar uma tela preta, o Learnflix olha o formato por dentro do arquivo e explica o caso.',
+          'Nem todo arquivo de vídeo toca num navegador, mesmo terminando em .mp4. Muitos cursos baixados trazem arquivos cuja extensão mente sobre o conteúdo. Em vez de mostrar uma tela preta, o Astroflix olha o formato por dentro do arquivo e explica o caso.',
       },
       {
         t: 'p',
@@ -317,7 +317,7 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             <b>Se o codec em si não toca aqui</b> — H.264 10-bit, ou HEVC no Windows sem a
-            extensão HEVC — aparece <b>Converter para assistir</b>. O Learnflix recodifica a aula
+            extensão HEVC — aparece <b>Converter para assistir</b>. O Astroflix recodifica a aula
             para H.264 com o ffmpeg, mostrando o andamento; leva alguns minutos e o original
             continua intacto. No Mac, HEVC toca direto.
           </>
@@ -361,7 +361,7 @@ export const TOPICOS: Topico[] = [
             No menu ⋯, escolha <b>Re-apontar pasta…</b>
           </>,
           <>
-            Navegue até o novo lugar e confirme. Antes de aplicar, o Learnflix mostra quantas aulas
+            Navegue até o novo lugar e confirme. Antes de aplicar, o Astroflix mostra quantas aulas
             ele reencontrou, quantas continuam faltando e quantas são novas.
           </>,
         ],
@@ -386,7 +386,7 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             Miniaturas e durações são extraídas dos vídeos pelo <b>ffmpeg</b>, um programa separado.
-            Sem ele o Learnflix funciona inteiro — só a grade fica sem capas e a lista mostra{' '}
+            Sem ele o Astroflix funciona inteiro — só a grade fica sem capas e a lista mostra{' '}
             <code>--:--</code> no lugar do tempo.
           </>
         ),
@@ -409,7 +409,7 @@ export const TOPICOS: Topico[] = [
       {
         t: 'p',
         texto:
-          'Depois de instalar, reinicie o Learnflix. As capas vão aparecendo conforme você abre os cursos — elas são geradas sob demanda, não todas de uma vez.',
+          'Depois de instalar, reinicie o Astroflix. As capas vão aparecendo conforme você abre os cursos — elas são geradas sob demanda, não todas de uma vez.',
       },
       {
         t: 'nota',
@@ -440,7 +440,7 @@ export const TOPICOS: Topico[] = [
           </>,
           <>
             <b>Compartilhamento de rede fora do ar.</b> Monte a pasta de rede primeiro, depois abra o
-            Learnflix.
+            Astroflix.
           </>,
           <>
             <b>Pasta movida ou renomeada.</b> Use <b>Re-apontar pasta…</b> no menu ⋯ do curso.

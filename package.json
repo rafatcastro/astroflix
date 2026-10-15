@@ -1,5 +1,5 @@
 {
-  "name": "learnflix",
+  "name": "astroflix",
   "version": "2.1.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,11 @@
   "author": "OnaitsirC-MiromA",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/rafatcastro/learnflix-v2.git"
+    "url": "git+https://github.com/rafatcastro/astroflix.git"
   },
-  "homepage": "https://github.com/rafatcastro/learnflix-v2#readme",
+  "homepage": "https://github.com/rafatcastro/astroflix#readme",
   "bugs": {
-    "url": "https://github.com/rafatcastro/learnflix-v2/issues"
+    "url": "https://github.com/rafatcastro/astroflix/issues"
   },
   "keywords": [
     "cursos",

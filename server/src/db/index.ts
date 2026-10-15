@@ -22,7 +22,7 @@ const { DatabaseSync } = requerer('node:sqlite') as {
 };
 
 /**
- * O banco do Learnflix usa o SQLite que já vem dentro do Node (`node:sqlite`),
+ * O banco do Astroflix usa o SQLite que já vem dentro do Node (`node:sqlite`),
  * e não um módulo nativo.
  *
  * O motivo é a embalagem: um `.node` compilado não entra num executável único,

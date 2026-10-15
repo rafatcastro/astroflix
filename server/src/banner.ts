@@ -23,7 +23,7 @@ const COMO_INSTALAR_FFMPEG: Partial<Record<NodeJS.Platform, string>> = {
  * ir. Nada de log de framework, nada de aviso sobre o qual não dá para agir.
  */
 export function mensagemDeBoot(e: EstadoDoBoot): string[] {
-  const linhas = [`Learnflix ${e.versao}`, `  dados em ${e.dataDir}`];
+  const linhas = [`Astroflix ${e.versao}`, `  dados em ${e.dataDir}`];
 
   if (e.herdouDoV1) {
     linhas.push('  progresso do Learnflix v1 adotado — nada foi perdido');
