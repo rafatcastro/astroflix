@@ -33,3 +33,24 @@ export function parseLinkDrive(texto: string): LinkDrive | null {
   const resourceKey = url.searchParams.get('resourcekey') || null;
   return { folderId, resourceKey };
 }
+
+// PDF do Drive: o link pode ser de um arquivo (/file/d/<id>/view, compartilhado
+// pelo "Copiar link") ou de uma pasta, cujos PDFs entram todos. O tipo só se
+// sabe perguntando ao Drive: o id puro e o open?id= servem para os dois.
+const CAMINHO_ARQUIVO = /^\/file\/(?:u\/\d+\/)?d\/([^/]+)(?:\/[^/]*)?\/?$/;
+
+export function parseLinkArquivoOuPastaDrive(texto: string): { id: string; resourceKey: string | null } | null {
+  const pasta = parseLinkDrive(texto);
+  if (pasta) return { id: pasta.folderId, resourceKey: pasta.resourceKey };
+  let url: URL;
+  try {
+    url = new URL(texto.trim());
+  } catch {
+    return null;
+  }
+  if (url.hostname !== 'drive.google.com') return null;
+  const m = CAMINHO_ARQUIVO.exec(url.pathname);
+  const id = m?.[1];
+  if (!id || !ID.test(id)) return null;
+  return { id, resourceKey: url.searchParams.get('resourcekey') || null };
+}

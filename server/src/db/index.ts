@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 7;
+const ULTIMA_VERSAO = 8;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -312,6 +312,20 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
                 INSERT INTO nuvem_fila (tabela, chave) VALUES ('flashcard', OLD.id); END;
       `);
       pragma(db, 'user_version = 7');
+    });
+  }
+  if (version < 8 && ate >= 8) {
+    // PDFs do Google Drive: lidos direto de lá (Range), sem cópia no disco. O
+    // caminho fica vazio; `drive_resource_keys` é o cabeçalho que o Drive pede
+    // para arquivos compartilhados por link antigo.
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE documentos ADD COLUMN origem TEXT NOT NULL DEFAULT 'local';
+        ALTER TABLE documentos ADD COLUMN drive_id TEXT;
+        ALTER TABLE documentos ADD COLUMN drive_resource_keys TEXT;
+        CREATE INDEX idx_documentos_drive ON documentos(drive_id);
+      `);
+      pragma(db, 'user_version = 8');
     });
   }
 }

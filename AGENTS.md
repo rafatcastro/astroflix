@@ -191,7 +191,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   páginas são desenhados pela interface com o pdf.js e enviados de volta (`PUT .../capa`): no
   servidor seria outra dependência só para isso. Sobe para a conta como os cursos
   (`documentos` + `documentos_por_maquina` no `schema.sql`); um projeto sem essas tabelas (404)
-  deixa os PDFs na fila sem travar a sincronização dos cursos.
+  deixa os PDFs na fila sem travar a sincronização dos cursos. **PDF do Google Drive** (v8:
+  `origem='drive'`, `drive_id`, `drive_resource_keys`): `POST /api/documentos/drive` com o link
+  de um arquivo ou de uma pasta (`drive/pdfs.ts` lista os PDFs, subpastas e atalhos inclusive);
+  o arquivo é repassado do Drive por Range (`repassarDoDrive`), sem cópia no disco, com o mesmo
+  login do Google dos cursos.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.

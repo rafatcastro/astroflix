@@ -73,6 +73,8 @@ export interface Documento {
   id: string; titulo: string; caminho: string; tamanho: number;
   /** Livros, Questões, Apostilas… (filtro dentro da aba PDFs). */
   tipo: string | null;
+  /** 'drive': lido direto do Google Drive, sem arquivo nesta máquina. */
+  origem: 'local' | 'drive';
   categoriaId: string | null;
   paginas: number | null; pagina: number; lido: boolean; lidoEm: string | null;
   leituraEm: string | null; criadoEm: string; disponivel: boolean; temCapa: boolean;
@@ -176,6 +178,34 @@ export type RespostaDrive =
 
 // Falhas do Drive (sem acesso, cota, sem credenciais…) são resultados esperados que a interface
 // explica à pessoa; por isso voltam como valor em vez de exceção do jsonFetch.
+export type RespostaDrivePdfs =
+  | { tipo: 'pdfs'; resultado: ResultadoAdicionarPdfs }
+  | { tipo: 'autorizar'; url: string }
+  | { tipo: 'erro'; erro: string };
+
+// PDFs de um link do Drive (o arquivo, ou todos os da pasta). Mesmo contrato do curso.
+async function adicionarPdfsDoDrive(link: string, categoriaId?: string): Promise<RespostaDrivePdfs> {
+  let res: Response;
+  try {
+    res = await fetch('/api/documentos/drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ link, categoriaId }),
+    });
+  } catch {
+    return { tipo: 'erro', erro: 'sem-conexao' };
+  }
+  let corpo: Partial<ResultadoAdicionarPdfs> & { precisaAutorizar?: boolean; url?: string; error?: string } = {};
+  try {
+    corpo = (await res.json()) as typeof corpo;
+  } catch {
+    // corpo ilegível: cai no erro genérico abaixo
+  }
+  if (res.ok && corpo.ids) return { tipo: 'pdfs', resultado: corpo as ResultadoAdicionarPdfs };
+  if (res.status === 401 && corpo.precisaAutorizar && corpo.url) return { tipo: 'autorizar', url: corpo.url };
+  return { tipo: 'erro', erro: corpo.error ?? 'google' };
+}
+
 async function driveCriarCurso(link: string): Promise<RespostaDrive> {
   let res: Response;
   try {
@@ -315,6 +345,7 @@ export const api = {
   apagarFlashcard: (id: string) => jsonFetch<{ anki: EstadoAnki }>(`/api/flashcards/${id}`, { method: 'DELETE' }),
   ankiStatus: () => jsonFetch<{ estado: EstadoAnki; pendentes: number }>('/api/anki/status'),
   driveCriarCurso,
+  adicionarPdfsDoDrive,
   driveStatus: () => jsonFetch<DriveStatus>('/api/drive/status'),
   driveDesconectar: () => jsonFetch<void>('/api/drive/auth', { method: 'DELETE' }),
   driveSalvarCredenciais: (c: Partial<Record<CredencialDrive, string>>) =>

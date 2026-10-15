@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type Documento } from '../api/client';
+import { api, type Documento, type ResultadoAdicionarPdfs } from '../api/client';
+import DriveLinkModal from '../components/DriveLinkModal';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { useCollections } from '../api/hooks';
 import { FileText, Plus, Settings as SettingsIcon, Check } from '../components/icons';
@@ -35,6 +36,9 @@ export default function Pdfs({ categoria }: { categoria: string }) {
   const [menuAdicionar, setMenuAdicionar] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
   const [pedindoCategoria, setPedindoCategoria] = useState<{ caminhos?: string[]; pasta?: string } | null>(null);
+  const [doDrive, setDoDrive] = useState(false);
+  // Os que acabaram de chegar do Drive: o tipo é perguntado depois (o link vem antes).
+  const [tipoPara, setTipoPara] = useState<string[] | null>(null);
   const [acoes, setAcoes] = useState<Documento | null>(null);
 
   const categorias = useMemo(
@@ -73,15 +77,17 @@ export default function Pdfs({ categoria }: { categoria: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(docs ?? []).filter((d) => d.disponivel && (!d.temCapa || !d.paginas)).map((d) => d.id).join()]);
 
+  function avisar(r: ResultadoAdicionarPdfs) {
+    void qc.invalidateQueries({ queryKey: ['documentos'] });
+    const partes = [`${r.criados} PDF${r.criados === 1 ? '' : 's'} adicionado${r.criados === 1 ? '' : 's'}`];
+    if (r.jaExistiam) partes.push(`${r.jaExistiam} já estava${r.jaExistiam === 1 ? '' : 'm'} aqui`);
+    if (r.recusados) partes.push(`${r.recusados} fora das pastas permitidas ou ilegíve${r.recusados === 1 ? 'l' : 'is'}`);
+    setAviso(r.criados === 0 && !r.jaExistiam && !r.recusados ? 'Nenhum PDF encontrado nessa pasta.' : partes.join(' · '));
+  }
+
   const adicionar = useMutation({
     mutationFn: api.adicionarPdfs,
-    onSuccess: (r) => {
-      void qc.invalidateQueries({ queryKey: ['documentos'] });
-      const partes = [`${r.criados} PDF${r.criados === 1 ? '' : 's'} adicionado${r.criados === 1 ? '' : 's'}`];
-      if (r.jaExistiam) partes.push(`${r.jaExistiam} já estava${r.jaExistiam === 1 ? '' : 'm'} aqui`);
-      if (r.recusados) partes.push(`${r.recusados} fora das pastas permitidas ou ilegíve${r.recusados === 1 ? 'l' : 'is'}`);
-      setAviso(r.criados === 0 && !r.jaExistiam && !r.recusados ? 'Nenhum PDF encontrado nessa pasta.' : partes.join(' · '));
-    },
+    onSuccess: (r) => avisar(r),
     onError: (e) => setAviso(e instanceof Error && e.message === 'forbidden' ? 'Essa pasta está fora das pastas permitidas (Configurações).' : 'Não deu para adicionar.'),
   });
 
@@ -118,6 +124,18 @@ export default function Pdfs({ categoria }: { categoria: string }) {
             <button type="button" className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800" onClick={() => void escolher('pasta')}>
               Pasta…
               <div className="text-xs text-neutral-500">Todos os PDFs dentro dela, subpastas inclusive</div>
+            </button>
+            <button
+              type="button"
+              className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800"
+              onClick={() => {
+                setMenuAdicionar(false);
+                setAviso(null);
+                setDoDrive(true);
+              }}
+            >
+              Do Google Drive
+              <div className="text-xs text-neutral-500">Link de um PDF ou de uma pasta; lido de lá, sem baixar</div>
             </button>
           </div>
         </>
@@ -208,6 +226,34 @@ export default function Pdfs({ categoria }: { categoria: string }) {
         />
       )}
 
+      {doDrive && (
+        <DriveLinkModal
+          categoriaId={categoria === SEM ? undefined : categoria}
+          onClose={() => setDoDrive(false)}
+          pdfs={{
+            aoAdicionar: (r) => {
+              avisar(r);
+              if (r.ids.length) setTipoPara(r.ids);
+            },
+          }}
+        />
+      )}
+
+      {tipoPara && (
+        <DialogoCategoria
+          titulo="Que tipo de PDF?"
+          categorias={categorias}
+          inicial={filtro && filtro !== SEM_CATEGORIA ? filtro : ''}
+          confirmar="Salvar"
+          onCancelar={() => setTipoPara(null)}
+          onConfirmar={(tipo) => {
+            const ids = tipoPara;
+            setTipoPara(null);
+            if (tipo) void Promise.all(ids.map((id) => api.editarDocumento(id, { tipo }))).then(() => qc.invalidateQueries({ queryKey: ['documentos'] }));
+          }}
+        />
+      )}
+
       {acoes && <AcoesPdf d={acoes} categorias={categorias} onFechar={() => setAcoes(null)} />}
     </div>
   );
@@ -269,6 +315,7 @@ function CartaoPdf({ d, onAcoes }: { d: Documento; onAcoes: () => void }) {
           ' '
         )}
         {d.tipo && <span className="text-neutral-500"> · {d.tipo}</span>}
+        {d.origem === 'drive' && <span className="text-neutral-500"> · Drive</span>}
       </div>
     </div>
   );
@@ -402,9 +449,11 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
             <button type="button" className={itemMenu} onClick={() => editar.mutate({ lido: !d.lido })}>
               {d.lido ? 'Marcar como não lido' : 'Marcar como lido'}
             </button>
-            <button type="button" className={itemMenu} onClick={() => void reapontar()}>
-              Re-apontar arquivo…
-            </button>
+            {d.origem !== 'drive' && (
+              <button type="button" className={itemMenu} onClick={() => void reapontar()}>
+                Re-apontar arquivo…
+              </button>
+            )}
             <button type="button" className={`${itemMenu} text-red-400`} onClick={() => setFluxo('remover')}>
               Remover da estante…
             </button>

@@ -11,6 +11,7 @@ export const TEXTOS_ERRO_DRIVE: Record<string, string> = {
   'sem-conexao': 'Sem conexão com o Google Drive.',
   'nao-autorizado': 'A autorização do Google expirou.',
   'sem-espaco': 'O disco está cheio. Libere espaço para o download continuar.',
+  'nao-e-pdf': 'Esse link não é de um PDF nem de uma pasta. Cole o link de um PDF ou de uma pasta do Google Drive.',
   carregando: 'A pasta ainda está sendo lida. Espere terminar e tente de novo.',
   'sem-credenciais': 'O app do Google não está configurado. Configure um app próprio em Configurações → Google Drive.',
 };
