@@ -201,6 +201,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   login do Google dos cursos. Para escolher sem colar link, `GET /api/drive/navegar?pasta=`
   (`root`, `compartilhados` ou o id) lista pastas e PDFs com a conta Google conectada
   (`SeletorDrive.tsx`); o Google Picker não serve, porque o login do Google é recusado na webview.
+- `routes/estudo.ts`: o painel de estudo (v10). `pomodoros` guarda cada foco concluído;
+  `tempo_aula`, os segundos de aula assistidos por máquina, dia e curso (o id junta os três, então
+  máquinas não disputam o número; a nuvem só deixa crescer). `dia` é a data local. O timer roda na
+  interface (`web/src/lib/pomodoro.tsx`, estado com a hora do fim da fase no localStorage): na pausa,
+  a aula para e não toca (`BloqueioDaPausa`) até acabar ou ser pulada; o fim da pausa espera a
+  pessoa começar o próximo foco.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.

@@ -13,6 +13,8 @@ import HelpLink from '../components/HelpLink';
 import { ATALHOS } from '../help/content';
 import { ArrowLeft, Camera, SkipBack, SkipForward, Check, Repeat, HelpCircle, X, Expand, Cards } from '../components/icons';
 import FlashcardsPanel from '../components/FlashcardsPanel';
+import { BloqueioDaPausa, WidgetPomodoro } from '../components/Pomodoro';
+import { usePomodoro } from '../lib/pomodoro';
 
 type SaveState = 'idle' | 'saved' | 'error';
 type Notice = { kind: 'success' | 'error'; text: string };
@@ -68,6 +70,14 @@ export default function Lesson() {
   const boostRef = useRef(false);
   const prevRateRef = useRef(1);
   const pressingRef = useRef(false);
+  // Pausa do pomodoro: o vídeo para e não volta a tocar até ela acabar ou ser pulada.
+  const { emPausa } = usePomodoro();
+  const emPausaRef = useRef(emPausa);
+  emPausaRef.current = emPausa;
+  // Tempo de aula do painel de estudo: o tempo de relógio com o vídeo tocando (em 2×,
+  // 10 minutos contam 10), mandado aos pedaços.
+  const assistidoMs = useRef(0);
+  const ultimoTique = useRef(0);
   const [boost, setBoost] = useState(false);
   const [seekFlash, setSeekFlash] = useState<'back' | 'fwd' | null>(null);
   // Zonas de double-tap só existem em ponteiro grosso (touch): no desktop o
@@ -227,9 +237,42 @@ export default function Lesson() {
     if (v && lesson && !lesson.completed && lesson.position > 0) v.currentTime = lesson.position;
   };
 
+  const mandarAssistido = useCallback(
+    (tudo: boolean) => {
+      const s = Math.floor(assistidoMs.current / 1000);
+      if (s < (tudo ? 1 : 30)) return;
+      assistidoMs.current -= s * 1000;
+      void api.registrarTempoAula(id, s);
+    },
+    [id],
+  );
+
+  // Saiu da aula (ou trocou de aula): o que faltava mandar vai junto.
+  useEffect(
+    () => () => {
+      mandarAssistido(true);
+      ultimoTique.current = 0;
+    },
+    [mandarAssistido],
+  );
+
+  useEffect(() => {
+    if (!emPausa) return;
+    const v = videoRef.current;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    if (v && !v.paused) v.pause();
+  }, [emPausa]);
+
   const onTimeUpdate = () => {
     const v = videoRef.current;
     if (!v) return;
+    if (!v.paused) {
+      const t = Date.now();
+      // Um salto grande é o vídeo parado (aba escondida, buffer): não é estudo.
+      if (ultimoTique.current && t - ultimoTique.current < 3000) assistidoMs.current += t - ultimoTique.current;
+      ultimoTique.current = t;
+      mandarAssistido(false);
+    }
     furthestRef.current = Math.max(furthestRef.current, v.currentTime);
     const now = Date.now();
     if (now - lastSaveRef.current > 5000) {
@@ -817,10 +860,20 @@ export default function Lesson() {
             playsInline
             onLoadedMetadata={onLoaded}
             onTimeUpdate={onTimeUpdate}
-            onPause={() => save()}
+            onPlay={() => {
+              ultimoTique.current = Date.now();
+              if (emPausaRef.current) videoRef.current?.pause();
+            }}
+            onPause={() => {
+              ultimoTique.current = 0;
+              mandarAssistido(true);
+              save();
+            }}
             onEnded={onEnded}
             onError={onVideoError}
           />
+
+          <BloqueioDaPausa />
 
           {coarsePointer && (
             // Só INDICADORES (pointer-events-none): nada pode cobrir o <video>,
@@ -848,6 +901,8 @@ export default function Lesson() {
             </div>
           )}
         </div>
+
+        <WidgetPomodoro variante="barra" />
 
         <div className="px-4 py-4">
           {lesson.module && <div className="text-xs text-neutral-500">{lesson.module}</div>}

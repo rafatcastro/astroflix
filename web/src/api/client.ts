@@ -281,7 +281,28 @@ async function telegramPost(url: string, link: string): Promise<RespostaTelegram
   return { tipo: 'erro', erro: corpo.error ?? 'telegram', esperaSeg: corpo.esperaSeg };
 }
 
+export interface PeriodoEstudo { pomodoros: number; segundosAula: number }
+export interface ResumoEstudo {
+  hoje: PeriodoEstudo;
+  semana: PeriodoEstudo;
+  mes: PeriodoEstudo;
+  total: PeriodoEstudo;
+  /** De hoje, pelo id da categoria ('sem' = sem categoria). */
+  porCategoria: Record<string, PeriodoEstudo>;
+}
+
 export const api = {
+  estudoResumo: () => jsonFetch<ResumoEstudo>('/api/estudo/resumo'),
+  registrarPomodoro: (b: { categoriaId: string | null; inicio: string; fim: string; minutos: number }) =>
+    jsonFetch<{ id: string }>('/api/estudo/pomodoros', { method: 'POST', body: JSON.stringify(b) }),
+  // keepalive: o último pedaço vai ao sair da aula, quando a página já está desmontando.
+  registrarTempoAula: (lessonId: string, segundos: number) =>
+    fetch('/api/estudo/aula', {
+      method: 'POST',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lessonId, segundos }),
+    }).then(() => undefined, () => undefined),
   listarDocumentos: (categoria?: string) =>
     jsonFetch<Documento[]>(`/api/documentos${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ''}`),
   documento: (id: string) => jsonFetch<Documento>(`/api/documentos/${id}`),

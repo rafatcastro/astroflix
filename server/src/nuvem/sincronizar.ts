@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { transaction, type Db } from '../db';
 import { PLAYABLE_EXTS } from '../scan/derive';
+import { maquinaId as maquinaDoBanco } from './maquina';
 import { FalhaNuvem, type ClienteSupabase } from './cliente';
 
 // A nuvem é a fonte da verdade da conta; o SQLite é o cache em que as rotas leem.
@@ -38,7 +39,7 @@ export interface Sincronizador {
 const LOTE = 500;
 const PAGINA = 1000;
 // Ordem importa: aula e progresso apontam para o curso (chave estrangeira lá).
-const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'documento', 'flashcard'] as const;
+const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'documento', 'flashcard', 'pomodoro', 'tempo_aula'] as const;
 type Item = (typeof ORDEM)[number];
 
 const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
@@ -48,13 +49,15 @@ const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
   progresso: { tabela: 'progresso', conflito: 'curso_id,rel_path' },
   flashcard: { tabela: 'flashcards', conflito: 'id' },
   documento: { tabela: 'documentos', conflito: 'id' },
+  pomodoro: { tabela: 'pomodoros', conflito: 'id' },
+  tempo_aula: { tabela: 'tempo_aula', conflito: 'id' },
 };
 // Documentos antes dos flashcards: o card de um PDF aponta para ele.
-const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina', 'flashcards'] as const;
+const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina', 'flashcards', 'pomodoros', 'tempo_aula'] as const;
 // Os PDFs chegaram depois da conta: um projeto em que o schema.sql novo ainda não
 // foi aplicado não tem essas tabelas (404). Nesse caso elas esperam na fila, sem
 // derrubar a sincronização dos cursos.
-const TABELAS_NOVAS = new Set(['documentos', 'documentos_por_maquina']);
+const TABELAS_NOVAS = new Set(['documentos', 'documentos_por_maquina', 'pomodoros', 'tempo_aula']);
 const tabelaAusente = (tabela: string, e: unknown) => TABELAS_NOVAS.has(tabela) && e instanceof FalhaNuvem && e.status === 404;
 
 const tipoDaFalha = (e: unknown): EstadoNuvem['erro'] => (e instanceof FalhaNuvem ? e.tipo : 'sem-conexao');
@@ -78,15 +81,7 @@ export function criarSincronizador(deps: {
     db.prepare('INSERT INTO nuvem_estado (chave, valor) VALUES (?, ?) ON CONFLICT(chave) DO UPDATE SET valor=excluded.valor').run(k, v);
   const apagarEstado = (k: string) => db.prepare('DELETE FROM nuvem_estado WHERE chave=?').run(k);
 
-  // Um id por computador, para a nuvem saber onde fica a pasta de cada curso local nele.
-  function maquinaId(): string {
-    let id = lerEstado('maquina');
-    if (!id) {
-      id = randomUUID();
-      gravarEstado('maquina', id);
-    }
-    return id;
-  }
+  const maquinaId = () => maquinaDoBanco(db);
 
   /** Escreve no cache sem acordar os gatilhos (o que veio da nuvem não sobe de volta). */
   function aplicando(fn: () => void): void {
@@ -213,6 +208,14 @@ export function criarSincronizador(deps: {
           // O arquivo é desta máquina, como a pasta de um curso local.
           pasta: d.caminho ? { documento_id: d.id, maquina_id: maquinaId(), caminho: d.caminho } : undefined,
         };
+      }
+      case 'pomodoro': {
+        const p = db.prepare('SELECT * FROM pomodoros WHERE id=?').get(chave) as any;
+        return p ? { linha: { id: p.id, colecao_id: p.collection_id, inicio: p.inicio, fim: p.fim, minutos: p.minutos, dia: p.dia } } : null;
+      }
+      case 'tempo_aula': {
+        const t = db.prepare('SELECT * FROM tempo_aula WHERE id=?').get(chave) as any;
+        return t ? { linha: { id: t.id, dia: t.dia, curso_id: t.course_id, colecao_id: t.collection_id, segundos: t.segundos } } : null;
       }
     }
   }
@@ -433,6 +436,23 @@ export function criarSincronizador(deps: {
         if (r.maquina_id !== maquinaId()) return;
         db.prepare('UPDATE documentos SET caminho=? WHERE id=?').run(r.caminho, r.documento_id);
         return;
+      case 'pomodoros': {
+        const col = r.colecao_id && db.prepare('SELECT 1 FROM collections WHERE id=?').get(r.colecao_id) ? r.colecao_id : null;
+        db.prepare(
+          `INSERT INTO pomodoros (id, collection_id, inicio, fim, minutos, dia) VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET collection_id=excluded.collection_id`,
+        ).run(r.id, col, r.inicio, r.fim, r.minutos, String(r.dia).slice(0, 10));
+        return;
+      }
+      case 'tempo_aula': {
+        const col = r.colecao_id && db.prepare('SELECT 1 FROM collections WHERE id=?').get(r.colecao_id) ? r.colecao_id : null;
+        // O tempo só cresce: a linha desta máquina aqui pode estar à frente da nuvem.
+        db.prepare(
+          `INSERT INTO tempo_aula (id, dia, course_id, collection_id, segundos) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET segundos=MAX(segundos, excluded.segundos), collection_id=excluded.collection_id`,
+        ).run(r.id, String(r.dia).slice(0, 10), r.curso_id ?? null, col, r.segundos ?? 0);
+        return;
+      }
     }
   }
 
@@ -505,6 +525,8 @@ export function criarSincronizador(deps: {
         // para ela. Downloads e conversões ficam (são arquivos desta máquina).
         aplicando(() => {
           db.prepare('DELETE FROM flashcards').run();
+          db.prepare('DELETE FROM pomodoros').run();
+          db.prepare('DELETE FROM tempo_aula').run();
           db.prepare('DELETE FROM documentos').run();
           db.prepare('DELETE FROM courses').run();
           db.prepare('DELETE FROM collections').run();
@@ -522,6 +544,8 @@ export function criarSincronizador(deps: {
             INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'progresso', lesson_id FROM progress;
             INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'flashcard', id FROM flashcards;
             INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'documento', id FROM documentos;
+            INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'pomodoro', id FROM pomodoros;
+            INSERT OR IGNORE INTO nuvem_fila (tabela, chave) SELECT 'tempo_aula', id FROM tempo_aula;
           `);
         });
       }

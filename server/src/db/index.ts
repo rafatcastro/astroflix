@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 9;
+const ULTIMA_VERSAO = 10;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -343,6 +343,49 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
                 INSERT INTO nuvem_fila (tabela, chave) VALUES ('colecao', OLD.id); END;
       `);
       pragma(db, 'user_version = 9');
+    });
+  }
+  if (version < 10 && ate >= 10) {
+    // Estudo: pomodoros concluídos e tempo de aula assistido, para o painel da tela
+    // principal (hoje, semana, mês, total). `dia` é a data local de quem estudou:
+    // "hoje" é o dia do relógio da pessoa, não o do UTC. `tempo_aula` tem uma linha
+    // por máquina, dia e curso (o id junta os três), então duas máquinas nunca
+    // disputam o mesmo número: a nuvem só guarda cada uma e o painel soma.
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE pomodoros (
+          id TEXT PRIMARY KEY,
+          collection_id TEXT REFERENCES collections(id) ON DELETE SET NULL,
+          inicio TEXT NOT NULL,
+          fim TEXT NOT NULL,
+          minutos INTEGER NOT NULL,
+          dia TEXT NOT NULL
+        );
+        CREATE INDEX idx_pomodoros_dia ON pomodoros(dia);
+        CREATE TABLE tempo_aula (
+          id TEXT PRIMARY KEY,
+          dia TEXT NOT NULL,
+          course_id TEXT,
+          collection_id TEXT REFERENCES collections(id) ON DELETE SET NULL,
+          segundos INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX idx_tempo_aula_dia ON tempo_aula(dia);
+        CREATE TRIGGER nuvem_pomodoros_ins AFTER INSERT ON pomodoros
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN INSERT OR IGNORE INTO nuvem_fila (tabela, chave) VALUES ('pomodoro', NEW.id); END;
+        CREATE TRIGGER nuvem_pomodoros_upd AFTER UPDATE ON pomodoros
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'pomodoro' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('pomodoro', NEW.id); END;
+        CREATE TRIGGER nuvem_tempo_aula_ins AFTER INSERT ON tempo_aula
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN INSERT OR IGNORE INTO nuvem_fila (tabela, chave) VALUES ('tempo_aula', NEW.id); END;
+        CREATE TRIGGER nuvem_tempo_aula_upd AFTER UPDATE ON tempo_aula
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'tempo_aula' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('tempo_aula', NEW.id); END;
+      `);
+      pragma(db, 'user_version = 10');
     });
   }
 }

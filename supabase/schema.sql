@@ -168,11 +168,48 @@ begin
   return new;
 end $$;
 
+-- Estudo (painel da tela principal): pomodoros concluídos e tempo de aula. `dia` é
+-- a data local de quem estudou. tempo_aula tem uma linha por máquina, dia e curso
+-- (o id junta os três): cada máquina só escreve a sua, e o painel soma.
+create table if not exists public.pomodoros (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  colecao_id text,
+  inicio timestamptz not null,
+  fim timestamptz not null,
+  minutos integer not null,
+  dia date not null,
+  atualizado_em timestamptz not null default now()
+);
+
+create table if not exists public.tempo_aula (
+  id text primary key,
+  user_id uuid not null default auth.uid() references auth.users on delete cascade,
+  dia date not null,
+  curso_id text,
+  colecao_id text,
+  segundos integer not null default 0,
+  atualizado_em timestamptz not null default now()
+);
+
+-- Tempo assistido só cresce: uma subida atrasada não pode apagar o que já chegou.
+create or replace function public.mesclar_tempo_aula() returns trigger
+language plpgsql as $$
+begin
+  new.segundos := greatest(new.segundos, old.segundos);
+  return new;
+end $$;
+
+drop trigger if exists mesclar on public.tempo_aula;
+create trigger mesclar before update on public.tempo_aula
+  for each row execute function public.mesclar_tempo_aula();
+
 do $$
 declare
   t text;
 begin
-  foreach t in array array['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina'] loop
+  foreach t in array array['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina',
+                           'pomodoros', 'tempo_aula'] loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "so o dono" on public.%I', t);
     execute format(
