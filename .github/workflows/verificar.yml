@@ -1,0 +1,23 @@
+name: Verificar
+
+# Cada Pull Request passa pelo build (tipos do server e da web, empacotamento)
+# antes do merge. A release só sai quando o PR entra na main: um merge, uma
+# release, em vez de uma fila de releases a cada push.
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: verificar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
