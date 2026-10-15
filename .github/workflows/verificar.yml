@@ -5,7 +5,7 @@ name: Verificar
 # release, em vez de uma fila de releases a cada push.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 concurrency:
   group: verificar-${{ github.ref }}

@@ -1,0 +1,55 @@
+name: Develop
+
+# A develop é onde as mudanças são testadas antes de virarem release: cada push
+# gera só o app de Mac (Apple Silicon), em poucos minutos, sem publicar nada nem
+# mexer no atualizador de quem usa. O .dmg fica nos artefatos da execução. Esse
+# build não procura atualização (VITE_CANAL): a release estável o substituiria.
+on:
+  push:
+    branches: [develop]
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE']
+  workflow_dispatch:
+
+concurrency:
+  group: develop
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm }
+      - uses: dtolnay/rust-toolchain@stable
+      # O mesmo cache da release: a develop aproveita o que a main já compilou.
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: desktop/src-tauri, shared-key: desktop-macos-14 }
+      - run: pnpm install --frozen-lockfile
+      - id: versao
+        run: |
+          base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+          echo "versao=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+      - run: node scripts/sincronizar-versao.mjs "${{ steps.versao.outputs.versao }}"
+      - name: Build
+        run: pnpm build
+        env:
+          VITE_CANAL: develop
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      - run: pnpm build:binario
+      - run: node scripts/preparar-sidecar.mjs
+      # Só o .dmg: o pacote do atualizador não serve para nada aqui.
+      - run: pnpm tauri build --bundles dmg -c '{"bundle":{"createUpdaterArtifacts":false}}'
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Astroflix-develop-${{ steps.versao.outputs.versao }}
+          path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          retention-days: 14
