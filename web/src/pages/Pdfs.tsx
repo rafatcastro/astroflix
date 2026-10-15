@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Documento, type ResultadoAdicionarPdfs } from '../api/client';
@@ -14,15 +14,9 @@ import { gerarCapa } from '../lib/pdf';
 // A estante de PDFs: livros, questões, apostilas. Cada PDF é um arquivo do disco
 // que o app só lê; a página onde a pessoa parou vai com a conta.
 
-const chip = (ativo: boolean) =>
-  `min-h-[44px] rounded-full px-4 text-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-    ativo ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
-  }`;
 const itemMenu = 'block w-full rounded-lg px-3 py-2.5 text-left text-sm hover:bg-neutral-800';
 const campo =
   'min-h-[44px] w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 text-sm text-neutral-100 outline-none focus:ring-2 focus:ring-blue-600';
-
-const SEM_CATEGORIA = '__sem__';
 
 function progresso(d: Documento): number {
   if (d.lido) return 100;
@@ -34,31 +28,13 @@ function progresso(d: Documento): number {
 export default function Pdfs({ categoria }: { categoria: string }) {
   const qc = useQueryClient();
   const { data: docs, isLoading } = useQuery({ queryKey: ['documentos', categoria], queryFn: () => api.listarDocumentos(categoria) });
-  const [filtro, setFiltro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [pedindoCategoria, setPedindoCategoria] = useState<{ caminhos?: string[]; pasta?: string } | null>(null);
   const [doDrive, setDoDrive] = useState(false);
   const [seletorDrive, setSeletorDrive] = useState(false);
-  const aoAdicionarDoDrive = (r: ResultadoAdicionarPdfs) => {
-    avisar(r);
-    if (r.ids.length) setTipoPara(r.ids);
-  };
-  // Os que acabaram de chegar do Drive: o tipo é perguntado depois (o link vem antes).
-  const [tipoPara, setTipoPara] = useState<string[] | null>(null);
   const [acoes, setAcoes] = useState<Documento | null>(null);
 
-  const categorias = useMemo(
-    () => [...new Set((docs ?? []).map((d) => d.tipo).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
-    [docs],
-  );
-  const semCategoria = (docs ?? []).some((d) => !d.tipo);
-  const visiveis = (docs ?? []).filter((d) =>
-    filtro === null ? true : filtro === SEM_CATEGORIA ? !d.tipo : d.tipo === filtro,
-  );
-  // O filtro some quando a última da categoria sai dela.
-  useEffect(() => {
-    if (filtro && filtro !== SEM_CATEGORIA && !categorias.includes(filtro)) setFiltro(null);
-  }, [categorias, filtro]);
+  // Dentro da categoria não há outra divisão: a estante mostra todos os PDFs dela.
+  const visiveis = docs ?? [];
 
   // Capa e número de páginas saem do próprio PDF, desenhados aqui (um de cada vez).
   useEffect(() => {
@@ -97,14 +73,19 @@ export default function Pdfs({ categoria }: { categoria: string }) {
     onError: (e) => setAviso(e instanceof Error && e.message === 'forbidden' ? 'Essa pasta está fora das pastas permitidas (Configurações).' : 'Não deu para adicionar.'),
   });
 
+  function adicionarNaCategoria(alvo: { caminhos?: string[]; pasta?: string }) {
+    setAviso('Adicionando…');
+    adicionar.mutate({ ...alvo, tipo: null, categoriaId: categoria === SEM ? null : categoria });
+  }
+
   async function escolher(tipo: 'arquivos' | 'pasta') {
     setAviso(null);
     if (tipo === 'arquivos') {
       const caminhos = await escolherPdfs('Escolha um ou mais PDFs');
-      if (caminhos.length) setPedindoCategoria({ caminhos });
+      if (caminhos.length) adicionarNaCategoria({ caminhos });
     } else {
       const pasta = await escolherPasta('Escolha a pasta com os PDFs');
-      if (pasta) setPedindoCategoria({ pasta });
+      if (pasta) adicionarNaCategoria({ pasta });
     }
   }
 
@@ -153,24 +134,6 @@ export default function Pdfs({ categoria }: { categoria: string }) {
         </div>
       )}
 
-      {categorias.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Tipos">
-          <button type="button" className={chip(filtro === null)} aria-pressed={filtro === null} onClick={() => setFiltro(null)}>
-            Todas
-          </button>
-          {categorias.map((c) => (
-            <button key={c} type="button" className={chip(filtro === c)} aria-pressed={filtro === c} onClick={() => setFiltro(c)}>
-              {c}
-            </button>
-          ))}
-          {semCategoria && (
-            <button type="button" className={chip(filtro === SEM_CATEGORIA)} aria-pressed={filtro === SEM_CATEGORIA} onClick={() => setFiltro(SEM_CATEGORIA)}>
-              Sem tipo
-            </button>
-          )}
-        </div>
-      )}
-
       {isLoading && <p className="text-sm text-neutral-500">Carregando…</p>}
 
       {docs && docs.length === 0 && (
@@ -191,27 +154,11 @@ export default function Pdfs({ categoria }: { categoria: string }) {
         </div>
       )}
 
-      {pedindoCategoria && (
-        <DialogoCategoria
-          titulo="Que tipo de PDF?"
-          categorias={categorias}
-          inicial={filtro && filtro !== SEM_CATEGORIA ? filtro : ''}
-          confirmar="Adicionar"
-          onCancelar={() => setPedindoCategoria(null)}
-          onConfirmar={(tipo) => {
-            const alvo = pedindoCategoria;
-            setPedindoCategoria(null);
-            setAviso('Adicionando…');
-            adicionar.mutate({ ...alvo, tipo: tipo || null, categoriaId: categoria === SEM ? null : categoria });
-          }}
-        />
-      )}
-
       {doDrive && (
         <DriveLinkModal
           categoriaId={categoria === SEM ? undefined : categoria}
           onClose={() => setDoDrive(false)}
-          pdfs={{ aoAdicionar: aoAdicionarDoDrive }}
+          pdfs={{ aoAdicionar: avisar }}
         />
       )}
 
@@ -223,26 +170,11 @@ export default function Pdfs({ categoria }: { categoria: string }) {
             setSeletorDrive(false);
             setDoDrive(true);
           }}
-          aoAdicionar={aoAdicionarDoDrive}
+          aoAdicionar={avisar}
         />
       )}
 
-      {tipoPara && (
-        <DialogoCategoria
-          titulo="Que tipo de PDF?"
-          categorias={categorias}
-          inicial={filtro && filtro !== SEM_CATEGORIA ? filtro : ''}
-          confirmar="Salvar"
-          onCancelar={() => setTipoPara(null)}
-          onConfirmar={(tipo) => {
-            const ids = tipoPara;
-            setTipoPara(null);
-            if (tipo) void Promise.all(ids.map((id) => api.editarDocumento(id, { tipo }))).then(() => qc.invalidateQueries({ queryKey: ['documentos'] }));
-          }}
-        />
-      )}
-
-      {acoes && <AcoesPdf d={acoes} categorias={categorias} onFechar={() => setAcoes(null)} />}
+      {acoes && <AcoesPdf d={acoes} onFechar={() => setAcoes(null)} />}
     </div>
   );
 }
@@ -302,79 +234,15 @@ function CartaoPdf({ d, onAcoes }: { d: Documento; onAcoes: () => void }) {
         ) : (
           ' '
         )}
-        {d.tipo && <span className="text-neutral-500"> · {d.tipo}</span>}
         {d.origem === 'drive' && <span className="text-neutral-500"> · Drive</span>}
       </div>
     </div>
   );
 }
 
-function DialogoCategoria({
-  titulo,
-  categorias,
-  inicial,
-  confirmar,
-  onCancelar,
-  onConfirmar,
-}: {
-  titulo: string;
-  categorias: string[];
-  inicial: string;
-  confirmar: string;
-  onCancelar: () => void;
-  onConfirmar: (categoria: string) => void;
-}) {
-  const [valor, setValor] = useState(inicial);
-  return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={onCancelar}>
-      <form
-        role="dialog"
-        aria-modal="true"
-        aria-label={titulo}
-        className="w-full max-w-sm rounded-xl bg-neutral-900 p-5"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.key === 'Escape' && onCancelar()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          onConfirmar(valor.trim());
-        }}
-      >
-        <h2 className="font-medium text-neutral-100">{titulo}</h2>
-        <p className="mt-1 text-sm text-neutral-400">Livros, Questões, Apostilas… Vira um filtro da aba PDFs. Pode ficar em branco.</p>
-        {categorias.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {categorias.map((c) => (
-              <button key={c} type="button" className={chip(valor === c)} onClick={() => setValor(c)}>
-                {c}
-              </button>
-            ))}
-          </div>
-        )}
-        <input
-          autoFocus
-          value={valor}
-          onChange={(e) => setValor(e.target.value)}
-          placeholder="Novo tipo"
-          maxLength={60}
-          autoComplete="off"
-          className={`${campo} mt-3`}
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="min-h-[44px] px-3 text-sm text-neutral-400 hover:text-neutral-200" onClick={onCancelar}>
-            Cancelar
-          </button>
-          <button type="submit" className="min-h-[44px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500">
-            {confirmar}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
-function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: string[]; onFechar: () => void }) {
+function AcoesPdf({ d, onFechar }: { d: Documento; onFechar: () => void }) {
   const qc = useQueryClient();
-  const [fluxo, setFluxo] = useState<'menu' | 'renomear' | 'categoria' | 'mover' | 'remover'>('menu');
+  const [fluxo, setFluxo] = useState<'menu' | 'renomear' | 'mover' | 'remover'>('menu');
   const [titulo, setTitulo] = useState(d.titulo);
   const { data: cats } = useCollections();
   const [erro, setErro] = useState<string | null>(null);
@@ -399,19 +267,6 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
     }
   }
 
-  if (fluxo === 'categoria') {
-    return (
-      <DialogoCategoria
-        titulo="Tipo"
-        categorias={categorias}
-        inicial={d.tipo ?? ''}
-        confirmar="Salvar"
-        onCancelar={onFechar}
-        onConfirmar={(tipo) => editar.mutate({ tipo: tipo || null })}
-      />
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={onFechar}>
       <div
@@ -427,9 +282,6 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
           <>
             <button type="button" autoFocus className={itemMenu} onClick={() => setFluxo('renomear')}>
               Renomear…
-            </button>
-            <button type="button" className={itemMenu} onClick={() => setFluxo('categoria')}>
-              Tipo…
             </button>
             <button type="button" className={itemMenu} onClick={() => setFluxo('mover')}>
               Mover para categoria…

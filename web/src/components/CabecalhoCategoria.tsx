@@ -1,9 +1,10 @@
-import { useEffect, type ReactNode } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { useCollections } from '../api/hooks';
-import { ArrowLeft } from './icons';
+import DialogoCategoria from './DialogoCategoria';
+import { ArrowLeft, Pencil } from './icons';
 
 // Dentro de uma categoria: o nome dela e as três abas (Cursos, PDFs, Questões).
 // `cat` é o id da categoria ou 'sem' (o que ainda não tem categoria).
@@ -39,6 +40,25 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
   const nome = useNomeCategoria(cat);
   const emoji = useEmojiCategoria(cat);
   const qc = useQueryClient();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [editando, setEditando] = useState(false);
+
+  // Editar "Sem categoria" a transforma numa categoria de verdade, levando tudo o
+  // que estava sem (cursos, PDFs, questões gerais); a tela segue nela, na mesma aba.
+  async function salvar(c: { name: string; emoji: string | null }) {
+    if (cat === SEM) {
+      const nova = await api.createCollection(c.name, c.emoji, true);
+      setEditando(false);
+      void qc.invalidateQueries();
+      navigate(pathname.replace(`/c/${SEM}`, `/c/${nova.id}`), { replace: true });
+      return;
+    }
+    await api.editarCategoria(cat, c);
+    setEditando(false);
+    void qc.invalidateQueries({ queryKey: ['collections'] });
+    void qc.invalidateQueries({ queryKey: ['flashcards'] });
+  }
 
   // Entrou: ela vai para o começo do menu principal (a última aberta primeiro).
   useEffect(() => {
@@ -65,14 +85,25 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
       </Link>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">
-            {emoji && (
-              <span className="mr-2" aria-hidden>
-                {emoji}
-              </span>
-            )}
-            {nome ?? '\u00a0'}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="truncate text-2xl font-semibold tracking-tight">
+              {emoji && (
+                <span className="mr-2" aria-hidden>
+                  {emoji}
+                </span>
+              )}
+              {nome ?? '\u00a0'}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setEditando(true)}
+              aria-label={cat === SEM ? 'Dar um nome a esta categoria' : 'Editar categoria'}
+              title={cat === SEM ? 'Dar um nome' : 'Editar categoria'}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-neutral-500 hover:bg-neutral-900 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <Pencil size={16} />
+            </button>
+          </div>
           {info && <div className="mt-1 text-sm text-neutral-500">{info}</div>}
         </div>
         {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}
@@ -88,6 +119,14 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
           Questões
         </NavLink>
       </nav>
+      {editando && (
+        <DialogoCategoria
+          inicial={cat === SEM ? undefined : { name: nome ?? '', emoji }}
+          aviso={cat === SEM ? 'Tudo o que está sem categoria (cursos, PDFs e questões) vai para ela.' : undefined}
+          onSalvar={salvar}
+          onCancelar={() => setEditando(false)}
+        />
+      )}
     </header>
   );
 }

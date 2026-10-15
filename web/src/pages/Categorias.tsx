@@ -29,9 +29,8 @@ export default function Categorias() {
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<Collection | null>(null);
   // Menu do botão direito (ou do ⋯, para quem usa o teclado), na posição do clique.
-  const [menu, setMenu] = useState<{ c: Collection | typeof SEM; x: number; y: number } | null>(null);
-  // "Sem categoria" → Editar: vira uma categoria de verdade, com tudo o que estava sem.
-  const [nomeandoSem, setNomeandoSem] = useState(false);
+  // "Sem categoria" não tem: o nome se dá pelo lápis no cabeçalho dela.
+  const [menu, setMenu] = useState<{ c: Collection; x: number; y: number } | null>(null);
   const [excluindo, setExcluindo] = useState<Collection | null>(null);
 
   const semCursos = cursos?.filter((c) => !c.collectionId).length ?? 0;
@@ -45,13 +44,6 @@ export default function Categorias() {
   async function criar(c: { name: string; emoji: string | null }) {
     const nova = await api.createCollection(c.name, c.emoji);
     setCriando(false);
-    atualizar();
-    navigate(caminhoDaCategoria(nova.id));
-  }
-
-  async function adotar(c: { name: string; emoji: string | null }) {
-    const nova = await api.createCollection(c.name, c.emoji, true);
-    setNomeandoSem(false);
     atualizar();
     navigate(caminhoDaCategoria(nova.id));
   }
@@ -127,10 +119,6 @@ export default function Categorias() {
         {(semCursos > 0 || semPdfs > 0) && (
           <Link
             to={caminhoDaCategoria(SEM)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setMenu({ c: SEM, x: e.clientX, y: e.clientY });
-            }}
             className="flex min-h-[120px] flex-col justify-end rounded-xl border border-dashed border-neutral-800 p-4 outline-none hover:border-neutral-600 focus-visible:ring-2 focus-visible:ring-blue-600"
           >
             <div className="text-lg font-medium text-neutral-300">Sem categoria</div>
@@ -163,37 +151,27 @@ export default function Categorias() {
               autoFocus
               className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
               onClick={() => {
-                if (menu.c === SEM) setNomeandoSem(true);
-                else setEditando(menu.c);
+                setEditando(menu.c);
                 setMenu(null);
               }}
             >
-              {menu.c === SEM ? 'Dar nome e emoji…' : 'Editar…'}
+              Editar…
             </button>
-            {menu.c !== SEM && (
             <button
               type="button"
               role="menuitem"
               className="block w-full px-3 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
               onClick={() => {
-                if (menu.c !== SEM) setExcluindo(menu.c);
+                setExcluindo(menu.c);
                 setMenu(null);
               }}
             >
               Excluir…
             </button>
-            )}
           </div>
         </>
       )}
 
-      {nomeandoSem && (
-        <DialogoCategoria
-          aviso={`Tudo o que está sem categoria (${contagem(semCursos, semPdfs)}) vai para ela, com as questões.`}
-          onSalvar={adotar}
-          onCancelar={() => setNomeandoSem(false)}
-        />
-      )}
       {criando && <DialogoCategoria onSalvar={criar} onCancelar={() => setCriando(false)} />}
       {editando && (
         <DialogoCategoria inicial={{ name: editando.name, emoji: editando.emoji }} onSalvar={editar} onCancelar={() => setEditando(null)} />
