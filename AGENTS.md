@@ -4,7 +4,7 @@ Orientações para agentes de código (Claude Code, Codex e afins) trabalharem n
 
 ## O que é
 
-**Learnflix** é um app local para assistir cursos em vídeo guardados em pastas do disco, com
+**Astroflix** é um app local para assistir cursos em vídeo guardados em pastas do disco, com
 progresso confiável. Cada pasta escolhida vira um "curso"; o app escaneia, lista as aulas (com
 módulos, materiais, duração e capas), transmite o vídeo por HTTP Range e guarda posição e conclusão
 no SQLite. Tudo se organiza em **categorias** (a tabela `collections`, que antes eram as bibliotecas de
@@ -12,13 +12,20 @@ cursos): o menu principal lista as categorias (a última aberta primeiro) e cada
 Cursos, PDFs e Questões (flashcards do Anki). A categoria tem nome e emoji (v9), editados pelo
 botão direito no cartão (`DialogoCategoria.tsx`).
 
-O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
+O Astroflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
 carrega a interface dele. **O app exige conta** (login com Google, sessão no Supabase): a nuvem
 guarda os metadados da pessoa (cursos, aulas, progresso, bibliotecas e flashcards) e o SQLite local
 é o cache. Sem rede, o app abre só com uma sessão já salva nesta máquina. Build sem projeto Supabase
 (fork, desenvolvimento) roda sem conta. Os outros recursos de rede (Drive, Telegram, Anki) continuam
 **opcionais**: quem não usa nunca precisa configurar nada para eles.
+
+**Nome:** o app se chamava Learnflix e virou **Astroflix** (repositório `rafatcastro/astroflix`; o
+GitHub redireciona o nome antigo, então o atualizador de quem tem uma versão velha continua achando
+as releases). Ficaram com o nome antigo, de propósito, os identificadores que dão continuidade: o
+`identifier` do Tauri, a pasta de dados (`~/.learnflix`, `%LOCALAPPDATA%\Learnflix`), o formato do
+backup (`learnflix-library`), o tipo de nota "Learnflix" do Anki, o sidecar `learnflix-server` e a
+linha `LEARNFLIX_URL=`. Os baralhos `Learnflix::…` são movidos sozinhos para `Astroflix::…`.
 
 O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
 motivou a decisão), não o quê. Siga esse estilo.
@@ -40,8 +47,8 @@ pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
 pnpm test                  # testes do server e da web
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
-pnpm repo                  # audita onde o nome do repositório GitHub aparece
-pnpm repo dono/repo        # troca o repositório em package.json, README.md e tauri.conf.json
+pnpm run repo              # audita onde o nome do repositório GitHub aparece (o `pnpm repo` puro é um comando do próprio pnpm)
+pnpm run repo dono/repo    # troca o repositório em package.json, README.md e tauri.conf.json
 ```
 
 Um teste só:
@@ -76,7 +83,7 @@ Lidas em `server/src/config.ts`:
 
 - `PORT`: padrão 7777. Se estiver ocupada, o app anda para a próxima (ver `listen.ts`).
 - `BIND`: padrão 127.0.0.1.
-- `DATA_DIR`: padrão `~/.learnflix`, ou `%LOCALAPPDATA%\Learnflix` no Windows. Guarda `app.db`,
+- `DATA_DIR`: padrão `~/.learnflix`, ou `%LOCALAPPDATA%\Astroflix` no Windows. Guarda `app.db`,
   `thumbs/`, `converted/` e `downloads/` (cópias dos cursos do Drive).
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
@@ -163,12 +170,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   ele, um canal privado não é achado depois de reiniciar.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
-  próprio "Learnflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
-  dos campos e monta o baralho (`baralhoDe`: `Learnflix::<categoria>` para as gerais da categoria,
-  `…::Cursos::<curso>` e `…::PDFs::<PDF>` embaixo; sem categoria, `Learnflix::Sem categoria`; o
-  geral sem categoria, `Learnflix`). `flashcards.baralho` é onde o card está no Anki: o que
+  próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
+  dos campos e monta o baralho (`baralhoDe`: `Astroflix::<categoria>` para as gerais da categoria,
+  `…::Cursos::<curso>` e `…::PDFs::<PDF>` embaixo; sem categoria, `Astroflix::Sem categoria`; o
+  geral sem categoria, `Astroflix`). `flashcards.baralho` é onde o card está no Anki: o que
   difere do baralho pedido (renomeou, mudou de categoria, ou veio da estrutura antiga
-  `Learnflix::Cursos`) é movido com `changeDeck`, e o baralho antigo que ficou vazio sai, `servicos` é o espelho local
+  `Astroflix::Cursos`) é movido com `changeDeck`, e o baralho antigo que ficou vazio sai, `servicos` é o espelho local
   (tabela `flashcards`, v4) com a fila de pendentes: o Anki é a fonte da verdade, mas criar com ele
   fechado funciona e vai depois. Ao listar, relê as notas (edição lá vem para cá, nota apagada sai;
   se **nenhuma** for achada, assume outro perfil e não apaga nada). `routes/flashcards.ts` expõe a

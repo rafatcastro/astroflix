@@ -1,4 +1,4 @@
-// Casca desktop do Learnflix. O app de verdade continua sendo o servidor Node
+// Casca desktop do Astroflix. O app de verdade continua sendo o servidor Node
 // (server/), empacotado como sidecar: esta casca sobe o servidor, espera ele
 // dizer em que URL ficou e carrega a interface dele na janela.
 //

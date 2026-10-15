@@ -1,14 +1,14 @@
-# Política de privacidade do Learnflix
+# Política de privacidade do Astroflix
 
 **Última atualização:** 13 de outubro de 2026
 
-O Learnflix roda no seu computador e usa uma **conta** (entrar com o Google) para guardar os seus
+O Astroflix roda no seu computador e usa uma **conta** (entrar com o Google) para guardar os seus
 metadados na nuvem e levá-los para qualquer computador em que você entrar.
 
 ## O que vai para a nuvem da conta
 
 Ao entrar com o Google, o app recebe só o seu e-mail e um identificador da conta (escopos `openid
-email profile`). Ficam no banco do Learnflix no Supabase, visíveis só para a sua conta (regra de
+email profile`). Ficam no banco do Astroflix no Supabase, visíveis só para a sua conta (regra de
 acesso por usuário no próprio banco):
 
 - a lista de cursos (título, origem, o link do Drive ou do Telegram e o caminho da pasta de cada
@@ -35,7 +35,7 @@ O app **nunca** cria, altera, move, compartilha ou apaga nada no seu Drive.
 ## O que o app acessa no Telegram
 
 Quando você cola o link de um grupo ou canal do Telegram, o app pede para você conectar a **sua
-conta** do Telegram (por QR code). A sessão aparece como "Learnflix" em Telegram → Configurações →
+conta** do Telegram (por QR code). A sessão aparece como "Astroflix" em Telegram → Configurações →
 Dispositivos. Com ela, o app:
 
 - lê as mensagens com vídeo ou arquivo do grupo que você indicou, para montar o curso (legenda,
@@ -51,15 +51,15 @@ seus contatos.
 ## O que o app faz com o Anki
 
 Se você usa flashcards, o app fala com o **Anki aberto no seu computador**, pelo complemento
-AnkiConnect, sem passar pela internet. Ele cria o tipo de nota "Learnflix" e os baralhos
-`Learnflix::Cursos…`, adiciona, edita e apaga **só os cards que você criou no Learnflix**, lê esses
+AnkiConnect, sem passar pela internet. Ele cria o tipo de nota "Astroflix" e os baralhos
+`Astroflix::Cursos…`, adiciona, edita e apaga **só os cards que você criou no Astroflix**, lê esses
 mesmos cards para mostrar as edições feitas no Anki e pede ao Anki para sincronizar com a sua conta
 do AnkiWeb. Uma cópia dos cards fica no banco do app (`app.db`).
 
 ## Onde os dados ficam
 
 Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
-`%LOCALAPPDATA%\Learnflix` no Windows):
+`%LOCALAPPDATA%\Astroflix` no Windows):
 
 - a lista de aulas e o seu progresso;
 - as miniaturas baixadas;
@@ -67,7 +67,7 @@ Tudo fica só no seu computador, na pasta de dados do app (`~/.learnflix`, ou
 - a sessão do Telegram e o seu nome de usuário;
 - as cópias dos cursos do Google Drive (`downloads/`) e os vídeos convertidos (`converted/`).
 
-Nada disso é enviado ao projeto Learnflix nem a terceiros. O app só se comunica com:
+Nada disso é enviado ao projeto Astroflix nem a terceiros. O app só se comunica com:
 
 - os servidores do Google e do Telegram, para ler o que você pediu;
 - o GitHub, para conferir se há uma versão nova do app (sem enviar nenhum dado seu).
@@ -90,4 +90,4 @@ incluindo os requisitos de uso limitado.
 ## Contato
 
 Dúvidas: abra uma issue em
-[github.com/rafatcastro/learnflix-v2/issues](https://github.com/rafatcastro/learnflix-v2/issues).
+[github.com/rafatcastro/astroflix/issues](https://github.com/rafatcastro/astroflix/issues).

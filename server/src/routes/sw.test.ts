@@ -3,9 +3,9 @@ import { openDb } from '../db/index';
 import { loadConfig } from '../config';
 import { buildApp } from '../app';
 
-// O Learnflix não é um PWA. Mas se a origem (ex.: localhost:7777) já hospedou um
+// O Astroflix não é um PWA. Mas se a origem (ex.: localhost:7777) já hospedou um
 // app que registrou um service worker, esse SW continua registrado e serve a
-// casca ANTIGA do cache — o Learnflix nunca aparece, por mais que o servidor
+// casca ANTIGA do cache — o Astroflix nunca aparece, por mais que o servidor
 // entregue o build novo. Servir um /sw.js que se autodestrói é o que quebra esse
 // impasse: o navegador rebusca o script, instala este, e ele apaga os caches e
 // se desregistra.

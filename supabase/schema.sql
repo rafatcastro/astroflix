@@ -1,4 +1,4 @@
--- Schema da conta do Learnflix no Supabase (ver docs/specs/2026-10-13-conta-supabase-design.md).
+-- Schema da conta do Astroflix no Supabase (ver docs/specs/2026-10-13-conta-supabase-design.md).
 -- Aplicar no SQL Editor do projeto. Idempotente: rodar de novo não quebra nada.
 --
 -- Toda tabela tem user_id (o dono) e RLS "só o dono vê e mexe". O app só carrega

@@ -134,7 +134,7 @@ export async function flashcardsRoutes(app: FastifyInstance, opts: { db: Db; ank
       if (!db.prepare('SELECT 1 FROM courses WHERE id=?').get(b.courseId)) return reply.code(404).send({ error: 'curso' });
       courseId = b.courseId;
     } else if (typeof b.categoriaId === 'string') {
-      // Questão geral da categoria: vai para Learnflix::<categoria>.
+      // Questão geral da categoria: vai para Astroflix::<categoria>.
       if (!db.prepare('SELECT 1 FROM collections WHERE id=?').get(b.categoriaId)) return reply.code(404).send({ error: 'categoria' });
       categoriaId = b.categoriaId;
     }

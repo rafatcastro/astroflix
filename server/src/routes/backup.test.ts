@@ -32,7 +32,7 @@ describe('GET /api/library/export', () => {
     const res = await app.inject({ method: 'GET', url: '/api/library/export' });
 
     expect(res.statusCode).toBe(200);
-    expect(res.headers['content-disposition']).toMatch(/attachment; filename="learnflix-\d{4}-\d{2}-\d{2}\.json"/);
+    expect(res.headers['content-disposition']).toMatch(/attachment; filename="astroflix-\d{4}-\d{2}-\d{2}\.json"/);
     const body = res.json();
     expect(body.format).toBe('learnflix-library');
     expect(body.courses[0].lessons[0].progress).toMatchObject({ furthestSec: 200 });
@@ -60,14 +60,14 @@ describe('POST /api/library/import/preview', () => {
     db.close();
   });
 
-  it('recusa um arquivo que não é do Learnflix, explicando o motivo', async () => {
+  it('recusa um arquivo que não é do Astroflix, explicando o motivo', async () => {
     const db = openDb(':memory:');
     const app = makeApp(db);
 
     const res = await app.inject({ method: 'POST', url: '/api/library/import/preview', payload: { nome: 'outra coisa' } });
 
     expect(res.statusCode).toBe(400);
-    expect(res.json().error).toMatch(/não parece ser um arquivo do Learnflix/i);
+    expect(res.json().error).toMatch(/não parece ser um arquivo do Astroflix/i);
 
     db.close();
   });

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Gera o executável único do Learnflix para ESTA máquina, usando o SEA
+// Gera o executável único do Astroflix para ESTA máquina, usando o SEA
 // (Single Executable Application) do próprio Node.
 //
 // O resultado é uma cópia do binário do Node com o nosso bundle injetado dentro.

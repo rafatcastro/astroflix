@@ -44,7 +44,7 @@ export interface Flashcard {
   minutoSec: number | null;
   documentoId: string | null; documentoTitulo: string | null; pagina: number | null;
   categoriaId: string | null;
-  /** Onde o card mora no Anki (Learnflix::<categoria>[::Cursos|PDFs::<título>]). */
+  /** Onde o card mora no Anki (Astroflix::<categoria>[::Cursos|PDFs::<título>]). */
   baralho: string;
   frente: string; verso: string;
   noAnki: boolean;

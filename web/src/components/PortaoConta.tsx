@@ -102,7 +102,7 @@ function Tela({ children }: { children: ReactNode }) {
   return (
     <main className="grid min-h-screen place-items-center bg-studio-black px-6">
       <div className="flex flex-col items-center gap-6 text-center">
-        <h1 className="text-3xl font-semibold tracking-tight text-neutral-100">Learnflix</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-neutral-100">Astroflix</h1>
         {children}
       </div>
     </main>

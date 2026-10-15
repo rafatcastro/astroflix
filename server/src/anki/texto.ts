@@ -1,4 +1,4 @@
-// Os campos do Anki são HTML; o Learnflix guarda texto puro. A ida escapa e
+// Os campos do Anki são HTML; o Astroflix guarda texto puro. A ida escapa e
 // troca a quebra de linha por <br>; a volta faz o caminho contrário, para que o
 // card editado no Anki apareça certo no app (formatação fica para trás).
 
@@ -29,14 +29,16 @@ export function deHtml(html: string): string {
     .replace(/^\n+|\n+$/g, '');
 }
 
-// Baralhos: Learnflix::<categoria> guarda as questões gerais da categoria, e cada
+// Baralhos: Astroflix::<categoria> guarda as questões gerais da categoria, e cada
 // curso ou PDF tem o seu embaixo, em Cursos ou PDFs. Revisar a categoria pega
 // tudo dela. Sem categoria vai para "Sem categoria"; o card geral sem categoria
 // nenhuma, para a raiz.
-export const BARALHO_RAIZ = 'Learnflix';
+export const BARALHO_RAIZ = 'Astroflix';
 export const SEM_CATEGORIA = 'Sem categoria';
 /** A estrutura antiga (até a v2.1.25): os cards de lá são movidos para a nova. */
 export const BARALHO_ANTIGO = 'Learnflix::Cursos';
+/** A raiz de quando o app se chamava Learnflix (até a v2.1.28): os cards vêm para Astroflix. */
+export const RAIZ_ANTIGA = 'Learnflix';
 
 /** `::` no nome criaria subbaralhos no Anki. */
 const limpar = (nome: string) => nome.replace(/::/g, ':').replace(/\s+/g, ' ').trim();

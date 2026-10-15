@@ -21,9 +21,9 @@ const redirectDe = (req: FastifyRequest) => `http://${req.headers.host}/api/driv
 // /api/drive/auth/resultado. Nada vindo da query entra no HTML.
 function paginaCallback(ok: boolean): string {
   return `<!doctype html>
-<html lang="pt-BR"><head><meta charset="utf-8"><title>Learnflix</title></head>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>Astroflix</title></head>
 <body style="font-family:sans-serif;background:#0a0a0a;color:#eee;padding:2rem">
-<p>${ok ? 'Conta conectada. Pode fechar esta aba e voltar ao Learnflix.' : 'Não foi possível conectar a conta. Volte ao Learnflix e tente de novo.'}</p>
+<p>${ok ? 'Conta conectada. Pode fechar esta aba e voltar ao Astroflix.' : 'Não foi possível conectar a conta. Volte ao Astroflix e tente de novo.'}</p>
 </body></html>`;
 }
 

@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 // Service worker de autodestruição.
 //
-// O Learnflix não é um PWA e não registra service worker nenhum. Mas o navegador
+// O Astroflix não é um PWA e não registra service worker nenhum. Mas o navegador
 // guarda service workers por ORIGEM, não por aplicação: se algum dia outro app
 // rodou em http://localhost:7777 e registrou um SW com precache (o caso do
 // Cursos Locais, que deu origem a este projeto), esse SW continua registrado e
@@ -14,7 +14,7 @@ import type { FastifyInstance } from 'fastify';
 // navegador recusa (não é JavaScript) e mantém o SW antigo para sempre.
 // Servindo este script, a checagem de atualização do navegador instala ELE,
 // que limpa os caches, se desregistra e recarrega as abas — voltando ao normal.
-const SELF_DESTROY_SW = `// Learnflix — service worker de autodestruição.
+const SELF_DESTROY_SW = `// Astroflix — service worker de autodestruição.
 // Não guarda cache nem intercepta requisição alguma: só existe para remover
 // service workers herdados desta origem e devolver o controle ao servidor.
 self.addEventListener('install', () => self.skipWaiting());

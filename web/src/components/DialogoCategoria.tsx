@@ -131,7 +131,7 @@ export default function DialogoCategoria({
           )}
         </div>
 
-        <p className="mt-3 text-xs text-neutral-500">No Anki, as questões dela ficam em Learnflix::{nome.trim().replace(/::/g, ':') || '…'}.</p>
+        <p className="mt-3 text-xs text-neutral-500">No Anki, as questões dela ficam em Astroflix::{nome.trim().replace(/::/g, ':') || '…'}.</p>
         {erro && (
           <p role="alert" className="mt-2 text-sm text-amber-300">
             {erro}

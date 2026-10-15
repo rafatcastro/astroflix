@@ -242,7 +242,7 @@ export default function HelpDrawer() {
         </div>
 
         <footer className="border-t border-neutral-800 px-4 py-3 text-xs text-neutral-500">
-          Seus vídeos nunca saem da sua máquina. O Learnflix só lê as pastas que você aponta.
+          Seus vídeos nunca saem da sua máquina. O Astroflix só lê as pastas que você aponta.
         </footer>
       </div>
     </div>

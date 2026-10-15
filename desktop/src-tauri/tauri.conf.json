@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Learnflix",
+  "productName": "Astroflix",
   "version": "2.1.0",
   "identifier": "io.github.rafatcastro.learnflix",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Learnflix",
+        "title": "Astroflix",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
@@ -49,7 +49,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdBNDEyMERGMjRENDkxMDIKUldRQ2tkUWszeUJCZXQ1T3BDWkI0aGdBc092ZXJ5aUxYR215MWhyUHN3MWV1L0c4VFh3RWIvRk4K",
       "endpoints": [
-        "https://github.com/rafatcastro/learnflix-v2/releases/latest/download/latest.json"
+        "https://github.com/rafatcastro/astroflix/releases/latest/download/latest.json"
       ]
     }
   }

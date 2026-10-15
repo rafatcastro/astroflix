@@ -730,7 +730,7 @@ export default function Lesson() {
           )}
           {remuxable === false && semArquivo && (
             <p className="mb-4 text-sm text-neutral-400">
-              O formato deste vídeo não toca direto {ehDrive ? 'do Google Drive' : 'do Telegram'}. O Learnflix já está baixando a
+              O formato deste vídeo não toca direto {ehDrive ? 'do Google Drive' : 'do Telegram'}. O Astroflix já está baixando a
               aula e, quando ela chegar, converte sozinho para um formato que toca. Volte daqui a alguns minutos.
             </p>
           )}

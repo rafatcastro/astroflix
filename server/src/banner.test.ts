@@ -18,7 +18,7 @@ describe('mensagemDeBoot', () => {
   it('mostra versão, onde ficam os dados e o endereço', () => {
     const texto = juntas();
 
-    expect(texto).toContain('Learnflix 2.0.0');
+    expect(texto).toContain('Astroflix 2.0.0');
     expect(texto).toContain('/Users/ana/.learnflix');
     expect(texto).toContain('http://localhost:7777');
   });
