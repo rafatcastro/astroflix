@@ -305,16 +305,48 @@ function Segmentos<T extends string>({ opcoes, valor, onMudar, rotulo }: { opcoe
   );
 }
 
-/** O painel da tela principal: um período por vez, os dois números e a divisão por categoria. */
+/** Pomodoros do período numa barra só, dividida por categoria (mesmas cores da pizza). */
+function BarraPomodoros({ fatias }: { fatias: Fatia[] }) {
+  const [foco, setFoco] = useState<string | null>(null);
+  const total = fatias.reduce((s, f) => s + f.valor, 0);
+  return (
+    <div>
+      <div className="flex h-5 w-full gap-0.5 overflow-hidden rounded" role="img" aria-label="Pomodoros por categoria">
+        {fatias.map((f) => (
+          <div
+            key={f.id}
+            title={`${f.nome}: ${f.valor}`}
+            onMouseEnter={() => setFoco(f.id)}
+            onMouseLeave={() => setFoco(null)}
+            className="h-full first:rounded-l last:rounded-r transition-opacity motion-reduce:transition-none"
+            style={{ width: `${(f.valor / total) * 100}%`, background: f.cor, opacity: foco && foco !== f.id ? 0.45 : 1 }}
+          />
+        ))}
+      </div>
+      <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-sm">
+        {fatias.map((f) => (
+          <li key={f.id} className="flex items-center gap-2" onMouseEnter={() => setFoco(f.id)} onMouseLeave={() => setFoco(null)}>
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: f.cor }} aria-hidden />
+            <span className="text-neutral-200">{f.nome}</span>
+            <span className="tabular-nums text-neutral-400">{f.valor}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** O painel da tela principal: um período por vez, as aulas (pizza) e os pomodoros (barra) por categoria. */
 export function PainelEstudo() {
   const p = usePomodoro();
   const { data } = useQuery({ queryKey: ['estudo'], queryFn: api.estudoResumo, refetchInterval: 60_000 });
   const [escolhendo, setEscolhendo] = useState(false);
-  const [periodo, setPeriodo] = useState<Periodo>('semana');
-  const [medida, setMedida] = useState<Medida>('aula');
+  const [periodo, setPeriodo] = useState<Periodo>('hoje');
   const atual = data?.[periodo];
-  const fatias = useFatias(atual, medida);
-  const vazio = !!atual && !atual.pomodoros && atual.segundosAula < 60;
+  const aulas = useFatias(atual, 'aula');
+  const pomodoros = useFatias(atual, 'pomodoros');
+  const vazioNoPeriodo: Record<Periodo, string> = { hoje: 'hoje', semana: 'nesta semana', mes: 'neste mês', total: 'ainda' };
+  const titulo = 'mb-3 flex items-baseline justify-between gap-3';
   return (
     <section aria-label="Estudo" className="mb-8">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -338,36 +370,27 @@ export function PainelEstudo() {
           <Controles fechar={false} />
         </div>
       )}
-      <div className="grid gap-6 rounded-xl bg-neutral-900 p-5 md:grid-cols-[minmax(0,14rem)_1fr]">
-        <div className="flex gap-8 md:flex-col md:gap-4">
-          <div>
-            <div className="text-3xl font-semibold tabular-nums text-neutral-50">{atual ? formatarDuracao(atual.segundosAula) : '–'}</div>
-            <div className="text-sm text-neutral-400">de aula assistida</div>
+      <div className="grid gap-6 rounded-xl bg-neutral-900 p-5 md:grid-cols-2">
+        <div className="min-w-0">
+          <div className={titulo}>
+            <h3 className="text-sm font-medium text-neutral-200">Aulas assistidas</h3>
+            <span className="text-sm tabular-nums text-neutral-400">{atual ? formatarDuracao(atual.segundosAula) : '–'}</span>
           </div>
-          <div>
-            <div className="text-3xl font-semibold tabular-nums text-neutral-50">{atual?.pomodoros ?? '–'}</div>
-            <div className="text-sm text-neutral-400">pomodoro{atual?.pomodoros === 1 ? '' : 's'} concluído{atual?.pomodoros === 1 ? '' : 's'}</div>
-          </div>
+          {atual && !aulas.length ? (
+            <p className="py-6 text-sm text-neutral-500">Nenhuma aula assistida {vazioNoPeriodo[periodo]}.</p>
+          ) : (
+            <Pizza fatias={aulas} medida="aula" />
+          )}
         </div>
         <div className="min-w-0 border-neutral-800 md:border-l md:pl-6">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <span className="text-xs uppercase tracking-wide text-neutral-500">Por categoria</span>
-            <Segmentos
-              rotulo="Medida"
-              opcoes={[
-                { chave: 'aula', rotulo: 'Aulas' },
-                { chave: 'pomodoros', rotulo: 'Pomodoros' },
-              ]}
-              valor={medida}
-              onMudar={setMedida}
-            />
+          <div className={titulo}>
+            <h3 className="text-sm font-medium text-neutral-200">Pomodoros</h3>
+            <span className="text-sm tabular-nums text-neutral-400">{atual?.pomodoros ?? '–'}</span>
           </div>
-          {vazio || (atual && !fatias.length) ? (
-            <p className="py-8 text-sm text-neutral-500">
-              {vazio ? 'Nada neste período ainda. Assista uma aula ou inicie um pomodoro.' : medida === 'aula' ? 'Nenhuma aula assistida neste período.' : 'Nenhum pomodoro neste período.'}
-            </p>
+          {atual && !pomodoros.length ? (
+            <p className="py-6 text-sm text-neutral-500">Nenhum pomodoro concluído {vazioNoPeriodo[periodo]}.</p>
           ) : (
-            <Pizza fatias={fatias} medida={medida} />
+            <BarraPomodoros fatias={pomodoros} />
           )}
         </div>
       </div>
