@@ -6,7 +6,7 @@ import DriveLinkModal from '../components/DriveLinkModal';
 import SeletorDrive from '../components/SeletorDrive';
 import MenuAdicionar from '../components/MenuAdicionar';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
-import { useCollections } from '../api/hooks';
+import { useCollections, useConexaoDrive } from '../api/hooks';
 import { FileText, Settings as SettingsIcon, Check } from '../components/icons';
 import { escolherPasta, escolherPdfs } from '../lib/desktop';
 import { gerarCapa } from '../lib/pdf';
@@ -89,19 +89,26 @@ export default function Pdfs({ categoria }: { categoria: string }) {
     }
   }
 
+  const drive = useConexaoDrive();
   const botaoAdicionar = (
     <MenuAdicionar
       opcoes={[
         { rotulo: 'Arquivos PDF…', descricao: 'Um ou vários', onClick: () => void escolher('arquivos') },
         { rotulo: 'Pasta…', descricao: 'Todos os PDFs dentro dela, subpastas inclusive', onClick: () => void escolher('pasta') },
-        {
-          rotulo: 'Do Google Drive',
-          descricao: 'Escolha PDFs ou uma pasta do seu Drive; lidos de lá, sem baixar',
-          onClick: () => {
-            setAviso(null);
-            setSeletorDrive(true);
-          },
-        },
+        drive.conectado === false
+          ? {
+              rotulo: drive.conectando ? 'Esperando o Google…' : 'Conectar o Google Drive',
+              descricao: 'Para trazer PDFs do seu Drive',
+              onClick: () => void drive.conectar().then((ok) => ok && setSeletorDrive(true)),
+            }
+          : {
+              rotulo: 'Do Google Drive',
+              descricao: 'Escolha PDFs ou uma pasta do seu Drive; lidos de lá, sem baixar',
+              onClick: () => {
+                setAviso(null);
+                setSeletorDrive(true);
+              },
+            },
       ]}
     />
   );

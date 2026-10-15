@@ -46,17 +46,10 @@ pnpm install               # primeira vez
 pnpm dev                   # janela do Tauri sobre o Vite (:5173, /api → :7777) + Fastify, hot reload
 pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/learnflix.cjs
 pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
-pnpm test                  # testes do server e da web
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm run repo              # audita onde o nome do repositório GitHub aparece (o `pnpm repo` puro é um comando do próprio pnpm)
 pnpm run repo dono/repo    # troca o repositório em package.json, README.md e tauri.conf.json
-```
-
-Um teste só:
-
-```bash
-pnpm --filter server test src/scan/derive.test.ts
 ```
 
 **Não há script separado de typecheck nem de lint.** O `tsc --noEmit` roda dentro do `build` de
@@ -131,7 +124,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   a casca em URLs que não começam com `/api`. **Nada é lido do disco.** No v1 a SPA era procurada
   relativa ao `cwd` e sumia se o processo subisse de outro lugar.
 - `bundled.ts`: **gerado** por `scripts/gerar-bundled.mjs` (interface + versão). Não versionado,
-  não editar à mão. `pnpm dev`, `pnpm test` e `pnpm build` o regeneram.
+  não editar à mão. `pnpm dev` e `pnpm build` o regeneram.
 - `db/`: `openDb` liga WAL e foreign keys e roda `migrate`, guardado por **`PRAGMA user_version`**.
   Para evoluir o schema, **acrescente um bloco `if (version < N)`**. Nunca edite o `SCHEMA_V1`. O
   SQLite é o do próprio Node (`node:sqlite`), sem módulo nativo. Ele entra por `require()` e não por
@@ -181,17 +174,17 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   (tabela `flashcards`, v4) com a fila de pendentes: o Anki é a fonte da verdade, mas criar com ele
   fechado funciona e vai depois. Ao listar, relê as notas (edição lá vem para cá, nota apagada sai;
   se **nenhuma** for achada, assume outro perfil e não apaga nada). `routes/flashcards.ts` expõe a
-  API; os testes usam `anki-falso.ts` (`buildApp(..., { anki })`).
+  API.
 - `nuvem/`: conta e sincronização. `cliente` fala com o Supabase por REST (`fetch` injetável),
-  `conta` faz o login (o OAuth com PKCE do Drive, `openid email profile`, trocado por sessão do
+  `conta` faz o login (o OAuth com PKCE do Drive, `openid email profile` mais `drive.readonly`: o Drive é pedido já na entrada e, se a pessoa o deixa marcado, vira a conexão do Drive (`aoConcederDrive` → `auth.adotar`); desmarcado, os menus mostram "Conectar o Google Drive" no lugar de importar; trocado por sessão do
   Supabase com `id_token`; sessão em `settings`), `sincronizar` sobe a `nuvem_fila` (preenchida por
   gatilhos da v5, calados quando quem escreve é a descida) e desce o que o banco carimbou depois da
   última marca de cada tabela. Conflito: a nuvem vence, mas o progresso nunca anda para trás e
   "concluída" vale a escolha mais recente (a mesma regra em `supabase/schema.sql`). A pasta de um
   curso local é de cada máquina (`pastas_por_maquina`). Outra conta na mesma máquina limpa o cache;
   a primeira entrada sobe tudo. `buildApp(..., { exigirConta })` (só no `index.ts`) liga a trava
-  (401 `precisa-entrar` em toda rota fora de `/api/conta`) e a sincronização a cada minuto; os
-  testes usam `supabase-falso.ts` (`buildApp(..., { supabase })`). O schema do Postgres fica em
+  (401 `precisa-entrar` em toda rota fora de `/api/conta`) e a sincronização a cada minuto; 
+  O schema do Postgres fica em
   `supabase/schema.sql` (aplicar no SQL Editor; idempotente, rodar de novo a cada tabela nova).
 - `routes/documentos.ts`: a estante de **PDFs** (livros, questões, apostilas; tabela `documentos`,
   v6). Cada PDF é um arquivo do disco que o app só lê: adicionar arquivos ou uma pasta (com
@@ -288,9 +281,8 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 
 ## Convenções
 
-- **TDD na lógica de verdade** (scan/derive, parsing de Range, migrações, config, backup, guarda)
-  com Vitest. Os testes de rota usam `app.inject(...)` do Fastify. Os testes que dependem do ffmpeg
-  são guardados por uma checagem de capacidade (`it.skipIf(!hasFfmpeg())`).
+- **Sem testes automatizados por enquanto**: a suíte (Vitest) foi removida a pedido, para focar em
+  funcionalidade; ela está no histórico do git. O CI só calcula a versão e gera os instaladores.
 - ffmpeg/ffprobe são **opcionais**. Capas, duração e conversão degradam com elegância
   (placeholder, 404, aviso claro) quando faltam.
 - A interface é verificada por build e checagem manual, não por testes de UI.

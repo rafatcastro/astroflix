@@ -3,7 +3,7 @@ import { escolherPasta } from '../lib/desktop';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
+import { useCollections, useConexaoDrive, useCourseRoots, useCourses } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
 import CourseCardMenu from '../components/CourseCardMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
@@ -642,12 +642,19 @@ export default function Library({ categoria }: { categoria: string }) {
     }
   };
 
+  const drive = useConexaoDrive();
   // Mesmo botão e mesmo menu da aba PDFs (MenuAdicionar), com as origens de curso.
   const addMenuButton = (
     <MenuAdicionar
       opcoes={[
         { rotulo: 'Dos arquivos…', descricao: 'Uma pasta com um curso ou com vários', onClick: () => void adicionarDosArquivos() },
-        { rotulo: 'Do Google Drive', descricao: 'Escolha a pasta do curso no seu Drive', onClick: () => setPicking('drive') },
+        drive.conectado === false
+          ? {
+              rotulo: drive.conectando ? 'Esperando o Google…' : 'Conectar o Google Drive',
+              descricao: 'Para trazer cursos do seu Drive',
+              onClick: () => void drive.conectar().then((ok) => ok && setPicking('drive')),
+            }
+          : { rotulo: 'Do Google Drive', descricao: 'Escolha a pasta do curso no seu Drive', onClick: () => setPicking('drive') },
         ...(temTelegram
           ? [{ rotulo: 'Do Telegram', descricao: 'Cole o link de um grupo ou canal', onClick: () => setPicking('telegram') }]
           : []),

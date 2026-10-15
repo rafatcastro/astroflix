@@ -182,6 +182,8 @@ export default function Categorias() {
           title={`Excluir a categoria "${excluindo.name}"?`}
           message="Só a categoria some: os cursos, os PDFs e as questões dela vão para Sem categoria, com o progresso intacto."
           confirmLabel="Excluir"
+          danger
+          digitar="confirmar"
           onConfirm={async () => {
             await api.deleteCollection(excluindo.id);
             setExcluindo(null);

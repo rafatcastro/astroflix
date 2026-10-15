@@ -28,17 +28,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Testar uma vez só, antes de gastar a matriz inteira: se a suíte quebra, não
-  # há por que construir quatro instaladores.
-  testar:
+  # A versão é calculada uma vez só, para os quatro instaladores saírem com a mesma.
+  versao:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '22', cache: pnpm }
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm test
       - id: versao
         run: |
           base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
@@ -50,7 +44,7 @@ jobs:
   # releases/latest/download/latest.json, e "latest" ignora rascunhos: assim
   # ninguém recebe uma versão com metade das plataformas anexadas.
   rascunho:
-    needs: testar
+    needs: versao
     if: github.event_name == 'push' || inputs.publicar
     runs-on: ubuntu-latest
     outputs:
@@ -60,7 +54,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: v${{ needs.testar.outputs.versao }}
+          TAG: v${{ needs.versao.outputs.versao }}
         # A tag nasce junto com a release, no commit deste push. O id vem da
         # própria resposta da criação: a listagem de releases demora a enxergar
         # um rascunho recém-criado e devolvia vazio. Idempotente: numa
@@ -76,10 +70,10 @@ jobs:
           echo "id=${id}" >> "$GITHUB_OUTPUT"
 
   desktop:
-    needs: [testar, rascunho]
+    needs: [versao, rascunho]
     # Num ensaio (workflow_dispatch sem publicar) o rascunho é pulado e a matriz só
     # ensaia o build.
-    if: ${{ !failure() && !cancelled() && needs.testar.result == 'success' }}
+    if: ${{ !failure() && !cancelled() && needs.versao.result == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -110,7 +104,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       # Antes do build: o APP_VERSION embutido no servidor sai do package.json.
-      - run: node scripts/sincronizar-versao.mjs "${{ needs.testar.outputs.versao }}"
+      - run: node scripts/sincronizar-versao.mjs "${{ needs.versao.outputs.versao }}"
       - name: Build
         run: pnpm build
         env:
@@ -136,13 +130,13 @@ jobs:
           includeUpdaterJson: true
 
   publicar:
-    needs: [testar, rascunho, desktop]
+    needs: [versao, rascunho, desktop]
     runs-on: ubuntu-latest
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: v${{ needs.testar.outputs.versao }}
+          TAG: v${{ needs.versao.outputs.versao }}
         # Os quatro jobs da matriz atualizam o mesmo latest.json, cada um com a sua
         # plataforma; dois terminando juntos podem sobrescrever um ao outro. Se
         # faltar uma, quem usa aquele sistema nunca mais receberia atualização —
