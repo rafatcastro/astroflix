@@ -9,7 +9,8 @@ progresso confiável. Cada pasta escolhida vira um "curso"; o app escaneia, list
 módulos, materiais, duração e capas), transmite o vídeo por HTTP Range e guarda posição e conclusão
 no SQLite. Tudo se organiza em **categorias** (a tabela `collections`, que antes eram as bibliotecas de
 cursos): o menu principal lista as categorias (a última aberta primeiro) e cada uma tem as abas
-Cursos, PDFs e Questões (flashcards do Anki).
+Cursos, PDFs e Questões (flashcards do Anki). A categoria tem nome e emoji (v9), editados pelo
+botão direito no cartão (`DialogoCategoria.tsx`).
 
 O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
@@ -195,7 +196,9 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `origem='drive'`, `drive_id`, `drive_resource_keys`): `POST /api/documentos/drive` com o link
   de um arquivo ou de uma pasta (`drive/pdfs.ts` lista os PDFs, subpastas e atalhos inclusive);
   o arquivo é repassado do Drive por Range (`repassarDoDrive`), sem cópia no disco, com o mesmo
-  login do Google dos cursos.
+  login do Google dos cursos. Para escolher sem colar link, `GET /api/drive/navegar?pasta=`
+  (`root`, `compartilhados` ou o id) lista pastas e PDFs com a conta Google conectada
+  (`SeletorDrive.tsx`); o Google Picker não serve, porque o login do Google é recusado na webview.
 - `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.

@@ -141,6 +141,8 @@ alter table public.documentos add column if not exists colecao_id text;
 alter table public.flashcards add column if not exists documento_id text;
 alter table public.flashcards add column if not exists pagina integer;
 alter table public.flashcards add column if not exists colecao_id text;
+-- Emoji da categoria (v2.1.28).
+alter table public.colecoes add column if not exists emoji text;
 -- PDFs do Google Drive (v2.1.27): lidos de lá, sem caminho em máquina nenhuma.
 alter table public.documentos add column if not exists origem text not null default 'local';
 alter table public.documentos add column if not exists drive_id text;

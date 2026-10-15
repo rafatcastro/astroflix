@@ -109,8 +109,8 @@ export function criarSincronizador(deps: {
       case 'colecao': {
         const c = db.prepare('SELECT * FROM collections WHERE id=?').get(chave) as any;
         return c
-          ? { linha: { id: c.id, nome: c.name, sort_index: c.sort_index, criado_em: c.created_at, excluido: false } }
-          : { linha: { id: chave, nome: '', sort_index: null, criado_em: new Date().toISOString(), excluido: true } };
+          ? { linha: { id: c.id, nome: c.name, emoji: c.emoji ?? null, sort_index: c.sort_index, criado_em: c.created_at, excluido: false } }
+          : { linha: { id: chave, nome: '', emoji: null, sort_index: null, criado_em: new Date().toISOString(), excluido: true } };
       }
       case 'curso': {
         const c = db
@@ -265,9 +265,9 @@ export function criarSincronizador(deps: {
         if (bool(r.excluido)) db.prepare('DELETE FROM collections WHERE id=?').run(r.id);
         else
           db.prepare(
-            `INSERT INTO collections (id, name, created_at, sort_index) VALUES (?, ?, ?, ?)
-             ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_index=excluded.sort_index`,
-          ).run(r.id, r.nome, r.criado_em, r.sort_index ?? null);
+            `INSERT INTO collections (id, name, created_at, sort_index, emoji) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET name=excluded.name, sort_index=excluded.sort_index, emoji=excluded.emoji`,
+          ).run(r.id, r.nome, r.criado_em, r.sort_index ?? null, r.emoji ?? null);
         return;
       case 'cursos': {
         if (bool(r.excluido)) {

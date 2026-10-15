@@ -36,6 +36,7 @@ function montar(fetchImpl: typeof fetch, token: string | null = 'tok') {
   const cliente: ClienteDrive = {
     getArquivo: async (id) => (id === 'raiz' ? arq('raiz', 'Curso Drive', { mimeType: PASTA }) : arq(id, id)),
     listarFilhos: async (id) => arvore[id] ?? [],
+    listar: async () => [],
     baixar: async () => new Response(null),
   };
   const config = loadConfig({ DATA_DIR: path.join(tmp, 'dados-' + Math.random().toString(36).slice(2)) });

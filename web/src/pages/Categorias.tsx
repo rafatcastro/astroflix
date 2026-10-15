@@ -5,6 +5,7 @@ import { api, type Collection } from '../api/client';
 import { useCollections, useCourses } from '../api/hooks';
 import { caminhoDaCategoria, SEM } from '../components/CabecalhoCategoria';
 import ConfirmDialog from '../components/ConfirmDialog';
+import DialogoCategoria from '../components/DialogoCategoria';
 import HelpLink from '../components/HelpLink';
 import { Download, HelpCircle, Plus, Settings as SettingsIcon } from '../components/icons';
 import { cliqueFora } from '../lib/desktop';
@@ -13,8 +14,6 @@ import { cliqueFora } from '../lib/desktop';
 // primeiro. Cada uma junta cursos, PDFs e questões. O que ainda não tem
 // categoria aparece em "Sem categoria", para nada sumir.
 
-const campo =
-  'min-h-[44px] w-full rounded-lg border border-neutral-700 bg-neutral-800 px-3 text-sm text-neutral-100 outline-none focus:ring-2 focus:ring-blue-600';
 
 function contagem(cursos: number, pdfs: number): string {
   const partes = [];
@@ -30,8 +29,9 @@ export default function Categorias() {
   const { data: cursos } = useCourses();
   const { data: docs } = useQuery({ queryKey: ['documentos', 'todos'], queryFn: () => api.listarDocumentos() });
   const [criando, setCriando] = useState(false);
-  const [nome, setNome] = useState('');
   const [editando, setEditando] = useState<Collection | null>(null);
+  // Menu do botão direito (ou do ⋯, para quem usa o teclado), na posição do clique.
+  const [menu, setMenu] = useState<{ c: Collection; x: number; y: number } | null>(null);
   const [excluindo, setExcluindo] = useState<Collection | null>(null);
 
   const semCursos = cursos?.filter((c) => !c.collectionId).length ?? 0;
@@ -42,18 +42,16 @@ export default function Categorias() {
     void qc.invalidateQueries({ queryKey: ['documentos'] });
   };
 
-  async function criar() {
-    if (!nome.trim()) return;
-    const c = await api.createCollection(nome.trim());
+  async function criar(c: { name: string; emoji: string | null }) {
+    const nova = await api.createCollection(c.name, c.emoji);
     setCriando(false);
-    setNome('');
     atualizar();
-    navigate(caminhoDaCategoria(c.id));
+    navigate(caminhoDaCategoria(nova.id));
   }
 
-  async function renomear() {
-    if (!editando || !nome.trim()) return;
-    await api.renameCollection(editando.id, nome.trim());
+  async function editar(c: { name: string; emoji: string | null }) {
+    if (!editando) return;
+    await api.editarCategoria(editando.id, c);
     setEditando(null);
     atualizar();
   }
@@ -88,10 +86,7 @@ export default function Categorias() {
           </Link>
           <button
             type="button"
-            onClick={() => {
-              setNome('');
-              setCriando(true);
-            }}
+            onClick={() => setCriando(true)}
             className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
             <Plus size={18} /> Nova categoria
@@ -103,34 +98,38 @@ export default function Categorias() {
 
       <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}>
         {(cats ?? []).map((c, i) => (
-          <div key={c.id} className="group relative">
+          <div
+            key={c.id}
+            className="group relative"
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ c, x: e.clientX, y: e.clientY });
+            }}
+          >
             <Link
               to={caminhoDaCategoria(c.id)}
               className="flex h-full min-h-[120px] flex-col justify-end rounded-xl bg-neutral-900 p-4 outline-none transition-shadow hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none"
             >
+              {c.emoji && (
+                <div className="mb-2 text-3xl leading-none" aria-hidden>
+                  {c.emoji}
+                </div>
+              )}
               {i === 0 && c.acessadoEm && <div className="mb-1 text-xs uppercase tracking-wide text-blue-400">Última aberta</div>}
               <div className="truncate pr-10 text-lg font-medium text-neutral-50">{c.name}</div>
               <div className="mt-1 text-sm text-neutral-400">{contagem(c.courseCount, c.pdfCount)}</div>
             </Link>
-            <div className="absolute right-2 top-2 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
-              <button
-                type="button"
-                onClick={() => {
-                  setNome(c.name);
-                  setEditando(c);
-                }}
-                className="min-h-[36px] rounded-lg bg-black/40 px-2 text-xs text-neutral-300 hover:bg-black/60 hover:text-white"
-              >
-                Renomear
-              </button>
-              <button
-                type="button"
-                onClick={() => setExcluindo(c)}
-                className="min-h-[36px] rounded-lg bg-black/40 px-2 text-xs text-neutral-300 hover:bg-black/60 hover:text-red-300"
-              >
-                Excluir
-              </button>
-            </div>
+            <button
+              type="button"
+              aria-label={`Ações de ${c.name}`}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setMenu({ c, x: r.left, y: r.bottom + 4 });
+              }}
+              className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-lg bg-black/40 text-neutral-300 opacity-100 hover:bg-black/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+            >
+              ⋯
+            </button>
           </div>
         ))}
         {(semCursos > 0 || semPdfs > 0) && (
@@ -153,45 +152,45 @@ export default function Categorias() {
         </div>
       )}
 
-      {(criando || editando) && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={() => (setCriando(false), setEditando(null))}>
-          <form
-            role="dialog"
-            aria-modal="true"
-            aria-label={editando ? 'Renomear categoria' : 'Nova categoria'}
-            className="w-full max-w-sm rounded-xl bg-neutral-900 p-5"
-            onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.key === 'Escape' && (setCriando(false), setEditando(null))}
-            onSubmit={(e) => {
-              e.preventDefault();
-              void (editando ? renomear() : criar());
-            }}
+      {menu && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setMenu(null)} onContextMenu={(e) => (e.preventDefault(), setMenu(null))} />
+          <div
+            role="menu"
+            className="fixed z-40 w-48 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 shadow-lg shadow-black/40"
+            style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 100) }}
+            onKeyDown={(e) => e.key === 'Escape' && setMenu(null)}
           >
-            <h2 className="font-medium text-neutral-100">{editando ? 'Renomear categoria' : 'Nova categoria'}</h2>
-            <input
+            <button
+              type="button"
+              role="menuitem"
               autoFocus
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Ex.: Pós em Engenharia"
-              maxLength={80}
-              autoComplete="off"
-              className={`${campo} mt-3`}
-            />
-            <p className="mt-2 text-xs text-neutral-500">No Anki, as questões dela ficam em Learnflix::{nome.trim().replace(/::/g, ':') || '…'}.</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                type="button"
-                className="min-h-[44px] px-3 text-sm text-neutral-400 hover:text-neutral-200"
-                onClick={() => (setCriando(false), setEditando(null))}
-              >
-                Cancelar
-              </button>
-              <button type="submit" className="min-h-[44px] rounded-lg bg-blue-600 px-4 text-sm font-medium text-white hover:bg-blue-500">
-                {editando ? 'Salvar' : 'Criar'}
-              </button>
-            </div>
-          </form>
-        </div>
+              className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
+              onClick={() => {
+                setEditando(menu.c);
+                setMenu(null);
+              }}
+            >
+              Editar…
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full px-3 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
+              onClick={() => {
+                setExcluindo(menu.c);
+                setMenu(null);
+              }}
+            >
+              Excluir…
+            </button>
+          </div>
+        </>
+      )}
+
+      {criando && <DialogoCategoria onSalvar={criar} onCancelar={() => setCriando(false)} />}
+      {editando && (
+        <DialogoCategoria inicial={{ name: editando.name, emoji: editando.emoji }} onSalvar={editar} onCancelar={() => setEditando(null)} />
       )}
 
       {excluindo && (

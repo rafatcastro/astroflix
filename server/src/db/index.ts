@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 8;
+const ULTIMA_VERSAO = 9;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -326,6 +326,23 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
         CREATE INDEX idx_documentos_drive ON documentos(drive_id);
       `);
       pragma(db, 'user_version = 8');
+    });
+  }
+  if (version < 9 && ate >= 9) {
+    // Emoji da categoria (o que a representa no menu principal). Vai para a conta,
+    // então entra no gatilho de UPDATE das coleções.
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE collections ADD COLUMN emoji TEXT;
+        DROP TRIGGER nuvem_collections_upd;
+        CREATE TRIGGER nuvem_collections_upd AFTER UPDATE OF name, sort_index, emoji ON collections
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'colecao' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('colecao', NEW.id);
+                DELETE FROM nuvem_fila WHERE tabela = 'colecao' AND chave = OLD.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('colecao', OLD.id); END;
+      `);
+      pragma(db, 'user_version = 9');
     });
   }
 }

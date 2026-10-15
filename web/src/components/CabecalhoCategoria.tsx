@@ -30,8 +30,14 @@ export function useNomeCategoria(cat: string): string | null {
   return data?.find((c) => c.id === cat)?.name ?? null;
 }
 
+function useEmojiCategoria(cat: string): string | null {
+  const { data } = useCollections();
+  return data?.find((c) => c.id === cat)?.emoji ?? null;
+}
+
 export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; acoes?: ReactNode; info?: ReactNode }) {
   const nome = useNomeCategoria(cat);
+  const emoji = useEmojiCategoria(cat);
   const qc = useQueryClient();
 
   // Entrou: ela vai para o começo do menu principal (a última aberta primeiro).
@@ -59,7 +65,14 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
       </Link>
       <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight">{nome ?? ' '}</h1>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">
+            {emoji && (
+              <span className="mr-2" aria-hidden>
+                {emoji}
+              </span>
+            )}
+            {nome ?? '\u00a0'}
+          </h1>
           {info && <div className="mt-1 text-sm text-neutral-500">{info}</div>}
         </div>
         {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}

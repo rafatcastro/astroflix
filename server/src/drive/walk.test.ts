@@ -12,6 +12,7 @@ type No = ArquivoDrive;
 function falso(nos: No[], filhos: Record<string, string[]>, negados: string[] = []): ClienteDrive {
   const porId = new Map(nos.map((n) => [n.id, n]));
   return {
+    listar: async () => [],
     async getArquivo(id) {
       if (negados.includes(id)) throw new FalhaDrive('sem-acesso', 404);
       const n = porId.get(id);

@@ -26,6 +26,8 @@ export interface DepsCliente {
 export interface ClienteDrive {
   getArquivo(id: string): Promise<ArquivoDrive>;
   listarFilhos(pastaId: string): Promise<ArquivoDrive[]>;
+  /** Listagem por consulta livre do Drive (o seletor usa `sharedWithMe`). */
+  listar(q: string): Promise<ArquivoDrive[]>;
   baixar(id: string, range: string | undefined, signal?: AbortSignal): Promise<Response>;
 }
 
@@ -152,14 +154,18 @@ export function criarClienteDrive(deps: DepsCliente): ClienteDrive {
       return (await res.json()) as ArquivoDrive;
     },
 
-    async listarFilhos(pastaId) {
+    listarFilhos(pastaId) {
+      return this.listar(`'${pastaId}' in parents and trashed=false`);
+    },
+
+    async listar(q) {
       const todos: ArquivoDrive[] = [];
       let pagina: string | undefined;
       do {
         const params: Record<string, string> = {
           includeItemsFromAllDrives: 'true',
           pageSize: '1000',
-          q: `'${pastaId}' in parents and trashed=false`,
+          q,
           fields: `nextPageToken,files(${CAMPOS_ARQUIVO})`,
         };
         if (pagina) params.pageToken = pagina;

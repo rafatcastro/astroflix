@@ -115,4 +115,23 @@ describe('PDFs do Google Drive', () => {
     expect(r.statusCode).toBe(401);
     expect(r.json().precisaAutorizar).toBe(true);
   });
+
+  it('seletor: lista pastas e PDFs (atalhos pelo alvo), pastas primeiro; sem conta, pede o login', async () => {
+    const chamadas: Array<{ url: string; range: string | null; chaves: string | null }> = [];
+    const { app, db } = montar(fetchFalso(chamadas));
+    salvarCredenciais(db, { clientId: 'cid', clientSecret: 's' });
+    const navegar = (pasta: string) => app.inject({ method: 'GET', url: `/api/drive/navegar?pasta=${pasta}`, headers: { host: 'localhost:7777' } });
+    expect((await navegar(RAIZ)).json().precisaAutorizar).toBe(true);
+    db.prepare("INSERT INTO settings (key, value) VALUES ('drive.refresh_token','R'),('drive.email','a@b.c')").run();
+    const r = await navegar(RAIZ);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().itens.map((i: any) => [i.tipo, i.nome, i.id])).toEqual([
+      ['pasta', 'Questões', SUB],
+      ['pdf', 'Atalho para Física.pdf', 'pdf-alvo-12345'],
+      ['pdf', 'Cálculo_I.pdf', 'pdf-calculo-1234'],
+    ]);
+    await navegar('compartilhados');
+    expect(chamadas.some((c) => new URL(c.url).searchParams.get('q')?.startsWith('sharedWithMe'))).toBe(true);
+    expect((await navegar("x' or '1")).statusCode).toBe(400);
+  });
 });
