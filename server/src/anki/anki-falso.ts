@@ -47,8 +47,30 @@ export function ankiFalso() {
         return p.notes.map((id: number) => {
           const n = estado.notas.get(id);
           if (!n) return {};
-          return { noteId: id, fields: Object.fromEntries(Object.entries(n.campos).map(([k, v], order) => [k, { value: v, order }])) };
+          // Um card por nota, com id derivado do da nota.
+          return {
+            noteId: id,
+            cards: [id * 10],
+            fields: Object.fromEntries(Object.entries(n.campos).map(([k, v], order) => [k, { value: v, order }])),
+          };
         });
+      case 'changeDeck':
+        estado.baralhos.add(p.deck);
+        for (const card of p.cards) {
+          const n = estado.notas.get(card / 10);
+          if (n) n.baralho = p.deck;
+        }
+        return null;
+      case 'deckNames':
+        return [...estado.baralhos];
+      case 'findCards': {
+        const deck = /^"deck:(.*)"$/.exec(p.query)![1].replace(/\\(.)/g, '$1');
+        return [...estado.notas.entries()].filter(([, n]) => n.baralho === deck || n.baralho.startsWith(`${deck}::`)).map(([id]) => id * 10);
+      }
+      case 'deleteDecks':
+        if (!p.cardsToo) throw new Error('cardsToo must be true');
+        for (const d of p.decks) for (const b of [...estado.baralhos]) if (b === d || b.startsWith(`${d}::`)) estado.baralhos.delete(b);
+        return null;
       case 'sync':
         estado.sincronizou++;
         return null;

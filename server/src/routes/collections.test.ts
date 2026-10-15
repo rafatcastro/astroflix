@@ -31,7 +31,7 @@ describe('coleções', () => {
     expect(assign.statusCode).toBe(200);
 
     const list = await app.inject({ method: 'GET', url: '/api/collections' });
-    expect(list.json()).toEqual([{ id: col.id, name: 'Programação', courseCount: 1 }]);
+    expect(list.json()).toEqual([{ id: col.id, name: 'Programação', courseCount: 1, pdfCount: 0, acessadoEm: null }]);
 
     // curso lista com collectionId
     const courses = await app.inject({ method: 'GET', url: '/api/courses' });

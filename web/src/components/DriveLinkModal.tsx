@@ -6,7 +6,8 @@ import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
 import { abrirFora } from '../lib/desktop';
 import TextField from './TextField';
 
-export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
+// `categoriaId`: aberto dentro de uma categoria, o curso entra nela.
+export default function DriveLinkModal({ onClose, categoriaId }: { onClose: () => void; categoriaId?: string }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [link, setLink] = useState('');
@@ -69,6 +70,7 @@ export default function DriveLinkModal({ onClose }: { onClose: () => void }) {
         if (res.tipo === 'autorizar') res = { tipo: 'erro', erro: 'nao-autorizado' };
       }
       if (res.tipo === 'criado') {
+        if (categoriaId) await api.patchCourse(res.id, { collectionId: categoriaId }).catch(() => undefined);
         qc.invalidateQueries({ queryKey: ['courses'] });
         navigate(`/course/${res.id}`);
         return;

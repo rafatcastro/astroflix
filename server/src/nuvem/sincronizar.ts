@@ -38,7 +38,7 @@ export interface Sincronizador {
 const LOTE = 500;
 const PAGINA = 1000;
 // Ordem importa: aula e progresso apontam para o curso (chave estrangeira lá).
-const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'flashcard', 'documento'] as const;
+const ORDEM = ['colecao', 'curso', 'aula', 'progresso', 'documento', 'flashcard'] as const;
 type Item = (typeof ORDEM)[number];
 
 const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
@@ -49,7 +49,8 @@ const TABELA_NUVEM: Record<Item, { tabela: string; conflito: string }> = {
   flashcard: { tabela: 'flashcards', conflito: 'id' },
   documento: { tabela: 'documentos', conflito: 'id' },
 };
-const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'flashcards', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina'] as const;
+// Documentos antes dos flashcards: o card de um PDF aponta para ele.
+const DESCIDA = ['colecoes', 'cursos', 'aulas', 'progresso', 'pastas_por_maquina', 'documentos', 'documentos_por_maquina', 'flashcards'] as const;
 // Os PDFs chegaram depois da conta: um projeto em que o schema.sql novo ainda não
 // foi aplicado não tem essas tabelas (404). Nesse caso elas esperam na fila, sem
 // derrubar a sincronização dos cursos.
@@ -183,12 +184,13 @@ export function criarSincronizador(deps: {
               linha: {
                 id: f.id, curso_id: f.course_id, aula_rel_path: f.rel_path ?? null, minuto_sec: f.minuto_sec, frente: f.frente,
                 verso: f.verso, anki_note_id: f.anki_note_id, criado_em: f.criado_em, excluido: f.pendente === 'apagar',
+                documento_id: f.documento_id ?? null, pagina: f.pagina ?? null, colecao_id: f.collection_id ?? null,
               },
             }
           : {
               linha: {
                 id: chave, curso_id: null, aula_rel_path: null, minuto_sec: null, frente: '', verso: '', anki_note_id: null,
-                criado_em: new Date().toISOString(), excluido: true,
+                criado_em: new Date().toISOString(), excluido: true, documento_id: null, pagina: null, colecao_id: null,
               },
             };
       }
@@ -197,14 +199,14 @@ export function criarSincronizador(deps: {
         if (!d) {
           return {
             linha: {
-              id: chave, titulo: '', categoria: null, tamanho: 0, paginas: null, pagina: 1, lido: false, lido_em: null,
+              id: chave, titulo: '', tipo: null, colecao_id: null, tamanho: 0, paginas: null, pagina: 1, lido: false, lido_em: null,
               leitura_em: null, criado_em: new Date().toISOString(), excluido: true,
             },
           };
         }
         return {
           linha: {
-            id: d.id, titulo: d.titulo, categoria: d.categoria, tamanho: d.tamanho, paginas: d.paginas, pagina: d.pagina,
+            id: d.id, titulo: d.titulo, tipo: d.tipo, colecao_id: d.collection_id, tamanho: d.tamanho, paginas: d.paginas, pagina: d.pagina,
             lido: !!d.lido, lido_em: d.lido_em, leitura_em: d.leitura_em, criado_em: d.criado_em, excluido: false,
           },
           // O arquivo é desta máquina, como a pasta de um curso local.
@@ -367,6 +369,9 @@ export function criarSincronizador(deps: {
         }
         const curso = r.curso_id && db.prepare('SELECT 1 FROM courses WHERE id=?').get(r.curso_id) ? r.curso_id : null;
         if (r.curso_id && !curso) return; // curso que não está aqui (ainda): desce na próxima volta
+        const documento = r.documento_id && db.prepare('SELECT 1 FROM documentos WHERE id=?').get(r.documento_id) ? r.documento_id : null;
+        if (r.documento_id && !documento) return;
+        const colecao = r.colecao_id && db.prepare('SELECT 1 FROM collections WHERE id=?').get(r.colecao_id) ? r.colecao_id : null;
         const aula =
           curso && r.aula_rel_path
             ? ((db.prepare('SELECT id FROM lessons WHERE course_id=? AND rel_path=?').get(curso, r.aula_rel_path) as { id: string } | undefined)?.id ?? null)
@@ -375,12 +380,14 @@ export function criarSincronizador(deps: {
         // card manda ao Anki dele. Card que desce não fica pendente aqui (viraria
         // nota duplicada); um pendente local (edição feita aqui) continua.
         db.prepare(
-          `INSERT INTO flashcards (id, course_id, lesson_id, minuto_sec, frente, verso, anki_note_id, pendente, criado_em, atualizado_em)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
+          `INSERT INTO flashcards (id, course_id, lesson_id, minuto_sec, documento_id, pagina, collection_id, frente, verso, anki_note_id, pendente,
+             criado_em, atualizado_em)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
            ON CONFLICT(id) DO UPDATE SET course_id=excluded.course_id, lesson_id=excluded.lesson_id, minuto_sec=excluded.minuto_sec,
+             documento_id=excluded.documento_id, pagina=excluded.pagina, collection_id=excluded.collection_id,
              frente=excluded.frente, verso=excluded.verso, anki_note_id=COALESCE(excluded.anki_note_id, anki_note_id),
              atualizado_em=excluded.atualizado_em`,
-        ).run(r.id, curso, aula, r.minuto_sec ?? null, r.frente, r.verso, r.anki_note_id ?? null, r.criado_em, String(r.atualizado_em));
+        ).run(r.id, curso, aula, r.minuto_sec ?? null, documento, r.pagina ?? null, colecao, r.frente, r.verso, r.anki_note_id ?? null, r.criado_em, String(r.atualizado_em));
         return;
       }
       case 'pastas_por_maquina':
@@ -394,14 +401,15 @@ export function criarSincronizador(deps: {
         }
         const local = db.prepare('SELECT leitura_em FROM documentos WHERE id=?').get(r.id) as { leitura_em: string | null } | undefined;
         const agora = new Date().toISOString();
+        const colecaoDoc = r.colecao_id && db.prepare('SELECT 1 FROM collections WHERE id=?').get(r.colecao_id) ? r.colecao_id : null;
         if (!local) {
           // Sem caminho: o PDF é de outra máquina até a pessoa re-apontar (ou até a
           // linha de documentos_por_maquina desta máquina descer, logo depois).
           db.prepare(
-            `INSERT INTO documentos (id, titulo, categoria, caminho, tamanho, paginas, pagina, lido, lido_em, leitura_em, criado_em, atualizado_em)
-             VALUES (?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO documentos (id, titulo, tipo, collection_id, caminho, tamanho, paginas, pagina, lido, lido_em, leitura_em, criado_em, atualizado_em)
+             VALUES (?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?)`,
           ).run(
-            r.id, r.titulo, r.categoria ?? null, r.tamanho ?? 0, r.paginas ?? null, r.pagina ?? 1, bool(r.lido) ? 1 : 0,
+            r.id, r.titulo, r.tipo ?? null, colecaoDoc, r.tamanho ?? 0, r.paginas ?? null, r.pagina ?? 1, bool(r.lido) ? 1 : 0,
             r.lido_em ?? null, r.leitura_em ?? null, r.criado_em, agora,
           );
           return;
@@ -409,8 +417,8 @@ export function criarSincronizador(deps: {
         // A leitura vale a mais recente (a mesma regra de mesclar_leitura na nuvem).
         const recente = !local.leitura_em || (r.leitura_em != null && String(r.leitura_em) >= local.leitura_em);
         db.prepare(
-          `UPDATE documentos SET titulo=?, categoria=?, paginas=COALESCE(?, paginas), atualizado_em=? WHERE id=?`,
-        ).run(r.titulo, r.categoria ?? null, r.paginas ?? null, agora, r.id);
+          `UPDATE documentos SET titulo=?, tipo=?, collection_id=?, paginas=COALESCE(?, paginas), atualizado_em=? WHERE id=?`,
+        ).run(r.titulo, r.tipo ?? null, colecaoDoc, r.paginas ?? null, agora, r.id);
         if (recente) {
           db.prepare('UPDATE documentos SET pagina=?, lido=?, lido_em=?, leitura_em=? WHERE id=?').run(
             r.pagina ?? 1, bool(r.lido) ? 1 : 0, r.lido_em ?? null, r.leitura_em ?? null, r.id,

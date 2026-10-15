@@ -173,26 +173,27 @@ export const TOPICOS: Topico[] = [
 
   {
     id: 'bibliotecas',
-    titulo: 'Bibliotecas',
-    resumo: 'Agrupar cursos por assunto',
+    titulo: 'Categorias',
+    resumo: 'Cursos, PDFs e questões por assunto',
     blocos: [
       {
         t: 'p',
         texto:
-          'Com muitos cursos, a grade única vira bagunça. Bibliotecas são grupos com nome — Programação, Inglês, Faculdade — que separam a tela inicial por assunto.',
+          'A tela inicial lista as categorias (Pós, Concurso, Inglês…), a última aberta primeiro. Dentro de cada uma há três abas: Cursos, PDFs e Questões.',
       },
       {
         t: 'passos',
         itens: [
           <>
-            Abra o menu ⋯ de um curso e escolha <b>Coleção…</b>
+            Crie a categoria em <b>Nova categoria</b>, na tela inicial, e entre nela.
           </>,
           <>
-            Escolha uma biblioteca existente ou digite um nome novo para criar na hora.
+            O que você adiciona lá dentro (curso ou PDF) já entra nela. Para mudar depois, use o menu ⋯ e{' '}
+            <b>Mover para categoria…</b>
           </>,
           <>
-            Na tela inicial, os filtros no topo alternam entre <b>Todas</b>, cada biblioteca e{' '}
-            <b>Sem coleção</b>.
+            Em <b>Questões</b>, os flashcards da categoria. No Anki ficam em <b>Learnflix::&lt;categoria&gt;</b> (as gerais) e,
+            embaixo, <b>Cursos::&lt;curso&gt;</b> e <b>PDFs::&lt;PDF&gt;</b>.
           </>,
         ],
       },
@@ -200,8 +201,8 @@ export const TOPICOS: Topico[] = [
         t: 'p',
         texto: (
           <>
-            Para mover vários cursos de uma vez, use <b>Selecionar</b> no cabeçalho da biblioteca,
-            marque os cursos e atribua todos juntos.
+            Para mover vários cursos de uma vez, use <b>Selecionar</b> na aba Cursos, marque os cursos e
+            mova todos juntos.
           </>
         ),
       },
@@ -210,8 +211,8 @@ export const TOPICOS: Topico[] = [
         tom: 'info',
         texto: (
           <>
-            <b>Excluir uma biblioteca não apaga curso nenhum.</b> Os cursos voltam para a lista
-            geral, com todo o progresso intacto. Biblioteca é organização, não posse.
+            <b>Excluir uma categoria não apaga nada.</b> Os cursos, PDFs e questões dela vão para{' '}
+            <b>Sem categoria</b>, com todo o progresso intacto.
           </>
         ),
       },

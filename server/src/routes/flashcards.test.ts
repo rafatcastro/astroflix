@@ -31,17 +31,17 @@ describe('flashcards e Anki', () => {
     expect(r.json()).toMatchObject({ anki: 'conectado', card: { courseId: 'c1', lessonId: 'l1', minutoSec: 760, noAnki: true } });
     expect(anki.modelos.has('Learnflix')).toBe(true);
     expect(nota(anki)).toEqual({
-      baralho: 'Learnflix::Cursos::Algoritmos',
+      baralho: 'Learnflix::Sem categoria::Cursos::Algoritmos',
       campos: { Frente: 'O que é O(n)?', Verso: 'Linear', Origem: 'Algoritmos › Big O · 12:40' },
       tags: ['learnflix'],
     });
     expect(anki.sincronizou).toBe(1);
   });
 
-  it('card geral vai para Learnflix::Cursos', async () => {
+  it('card geral sem categoria vai para a raiz Learnflix', async () => {
     const { anki, criar, listar } = montar();
     await criar({ frente: 'F', verso: 'V' });
-    expect(nota(anki).baralho).toBe('Learnflix::Cursos');
+    expect(nota(anki).baralho).toBe('Learnflix');
     expect(nota(anki).campos.Origem).toBe('Geral');
     expect((await listar('?geral=1')).cards).toHaveLength(1);
     expect((await listar('?lessonId=l1')).cards).toHaveLength(0);
@@ -161,5 +161,45 @@ describe('flashcards e Anki', () => {
     expect((await app.inject({ method: 'GET', url: '/api/anki/status' })).json()).toEqual({ estado: 'conectado', pendentes: 0 });
     anki.aberto = false;
     expect((await app.inject({ method: 'GET', url: '/api/anki/status' })).json()).toEqual({ estado: 'fechado', pendentes: 0 });
+  });
+
+  it('categoria: gerais em Learnflix::<categoria>, cursos e PDFs embaixo, e a lista da categoria pega tudo', async () => {
+    const { db, anki, criar, listar } = montar();
+    db.prepare("INSERT INTO collections (id, name, created_at) VALUES ('k1', 'Pós', 'x')").run();
+    db.prepare("UPDATE courses SET collection_id='k1' WHERE id='c1'").run();
+    db.prepare(
+      "INSERT INTO documentos (id, titulo, caminho, collection_id, criado_em, atualizado_em) VALUES ('d1', 'Cálculo I', '/x.pdf', 'k1', 'x', 'x')",
+    ).run();
+    await criar({ frente: 'Geral', verso: 'V', categoriaId: 'k1' });
+    await criar({ frente: 'Aula', verso: 'V', lessonId: 'l1' });
+    const r = await criar({ frente: 'Página', verso: 'V', documentoId: 'd1', pagina: 12 });
+    expect(r.json().card).toMatchObject({ documentoId: 'd1', pagina: 12, baralho: 'Learnflix::Pós::PDFs::Cálculo I' });
+    const porFrente = Object.fromEntries([...anki.notas.values()].map((n) => [n.campos.Frente, n]));
+    expect(porFrente.Geral.baralho).toBe('Learnflix::Pós');
+    expect(porFrente.Aula.baralho).toBe('Learnflix::Pós::Cursos::Algoritmos');
+    expect(porFrente['Página']).toMatchObject({ baralho: 'Learnflix::Pós::PDFs::Cálculo I', campos: { Origem: 'Cálculo I · p. 12' } });
+    expect((await listar('?categoria=k1')).cards).toHaveLength(3);
+    expect((await listar('?categoria=k1&geral=1')).cards).toHaveLength(1);
+    expect((await listar('?documentoId=d1')).cards).toHaveLength(1);
+    expect((await listar('?categoria=sem')).cards).toHaveLength(0);
+  });
+
+  it('cards da estrutura antiga e de curso que mudou de categoria são movidos, e o baralho vazio sai', async () => {
+    const { db, anki, criar, listar } = montar();
+    await criar({ frente: 'Velho', verso: 'V', lessonId: 'l1' });
+    // Como estava até a v2.1.25: no baralho antigo, sem baralho anotado.
+    const [id] = [...anki.notas.keys()];
+    anki.notas.get(id)!.baralho = 'Learnflix::Cursos::Algoritmos';
+    anki.baralhos.add('Learnflix::Cursos').add('Learnflix::Cursos::Algoritmos');
+    db.prepare('UPDATE flashcards SET baralho=NULL').run();
+    await listar();
+    expect(anki.notas.get(id)!.baralho).toBe('Learnflix::Sem categoria::Cursos::Algoritmos');
+    expect([...anki.baralhos].filter((b) => b.startsWith('Learnflix::Cursos'))).toEqual([]);
+
+    db.prepare("INSERT INTO collections (id, name, created_at) VALUES ('k2', 'Concurso', 'x')").run();
+    db.prepare("UPDATE courses SET collection_id='k2' WHERE id='c1'").run();
+    await listar();
+    expect(anki.notas.get(id)!.baralho).toBe('Learnflix::Concurso::Cursos::Algoritmos');
+    expect([...anki.baralhos].some((b) => b.startsWith('Learnflix::Sem categoria'))).toBe(false);
   });
 });

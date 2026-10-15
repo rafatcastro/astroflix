@@ -39,7 +39,17 @@ export interface ClienteAnki {
   ler(ids: number[]): Promise<NotaAnki[]>;
   /** Pede ao Anki para sincronizar com o AnkiWeb. */
   sincronizar(): Promise<void>;
+  /** Move os cards destas notas para o baralho (criado se não existe). O histórico de revisão vai junto. */
+  mover(notas: number[], baralho: string): Promise<void>;
+  baralhos(): Promise<string[]>;
+  /** Quantos cards há no baralho, subbaralhos inclusive. */
+  contarCards(baralho: string): Promise<number>;
+  /** Só para baralhos já vazios: o AnkiConnect exige cardsToo e apagaria o que houvesse dentro. */
+  apagarBaralhosVazios(nomes: string[]): Promise<void>;
 }
+
+// Na busca do Anki, `_` e `*` são curingas e `"` fecha o termo.
+const termoDeBaralho = (nome: string) => `"deck:${nome.replace(/[\\"*_]/g, (c) => `\\${c}`)}"`;
 
 // Local e rápido: se não respondeu nisso, o Anki está travado num diálogo.
 const TIMEOUT_MS = 5000;
@@ -128,6 +138,21 @@ export function criarClienteAnki(fetchFn: Fetch = fetch, url = URL_ANKI): Client
     async sincronizar() {
       // Sincronizar com o AnkiWeb pode levar uns segundos.
       await chamar('sync', undefined, 60_000);
+    },
+    async mover(notas, baralho) {
+      if (!notas.length) return;
+      const info = await chamar<Array<{ cards?: number[] }>>('notesInfo', { notes: notas });
+      const cards = info.flatMap((n) => n?.cards ?? []);
+      if (cards.length) await chamar('changeDeck', { cards, deck: baralho });
+    },
+    baralhos: () => chamar<string[]>('deckNames'),
+    async contarCards(baralho) {
+      return (await chamar<number[]>('findCards', { query: termoDeBaralho(baralho) })).length;
+    },
+    async apagarBaralhosVazios(nomes) {
+      const vazios: string[] = [];
+      for (const n of nomes) if ((await this.contarCards(n)) === 0) vazios.push(n);
+      if (vazios.length) await chamar('deleteDecks', { decks: vazios, cardsToo: true });
     },
   };
 }

@@ -29,12 +29,33 @@ export function deHtml(html: string): string {
     .replace(/^\n+|\n+$/g, '');
 }
 
-/** Nome do baralho: `::` no título criaria subbaralhos no Anki. */
-export const BARALHO_RAIZ = 'Learnflix::Cursos';
-export function baralhoDoCurso(titulo: string | null): string {
-  if (!titulo) return BARALHO_RAIZ;
-  const limpo = titulo.replace(/::/g, ':').replace(/\s+/g, ' ').trim();
-  return limpo ? `${BARALHO_RAIZ}::${limpo}` : BARALHO_RAIZ;
+// Baralhos: Learnflix::<categoria> guarda as questões gerais da categoria, e cada
+// curso ou PDF tem o seu embaixo, em Cursos ou PDFs. Revisar a categoria pega
+// tudo dela. Sem categoria vai para "Sem categoria"; o card geral sem categoria
+// nenhuma, para a raiz.
+export const BARALHO_RAIZ = 'Learnflix';
+export const SEM_CATEGORIA = 'Sem categoria';
+/** A estrutura antiga (até a v2.1.25): os cards de lá são movidos para a nova. */
+export const BARALHO_ANTIGO = 'Learnflix::Cursos';
+
+/** `::` no nome criaria subbaralhos no Anki. */
+const limpar = (nome: string) => nome.replace(/::/g, ':').replace(/\s+/g, ' ').trim();
+
+export interface OrigemDoCard {
+  /** Nome da categoria; null = sem categoria. */
+  categoria: string | null;
+  curso?: string | null;
+  pdf?: string | null;
+  /** Card geral sem categoria: vai para a raiz. */
+  geral?: boolean;
+}
+
+export function baralhoDe(o: OrigemDoCard): string {
+  if (o.geral && !o.categoria) return BARALHO_RAIZ;
+  const categoria = `${BARALHO_RAIZ}::${(o.categoria && limpar(o.categoria)) || SEM_CATEGORIA}`;
+  if (o.curso && limpar(o.curso)) return `${categoria}::Cursos::${limpar(o.curso)}`;
+  if (o.pdf && limpar(o.pdf)) return `${categoria}::PDFs::${limpar(o.pdf)}`;
+  return categoria;
 }
 
 export function formatarMinuto(seg: number): string {

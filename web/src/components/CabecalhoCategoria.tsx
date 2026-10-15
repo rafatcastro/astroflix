@@ -1,0 +1,80 @@
+import { useEffect, type ReactNode } from 'react';
+import { Link, NavLink } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { api } from '../api/client';
+import { useCollections } from '../api/hooks';
+import { ArrowLeft } from './icons';
+
+// Dentro de uma categoria: o nome dela e as três abas (Cursos, PDFs, Questões).
+// `cat` é o id da categoria ou 'sem' (o que ainda não tem categoria).
+
+export const SEM = 'sem';
+const CHAVE_ULTIMA = 'categoriaAtual';
+
+/** A categoria em que a pessoa estava: o "voltar" do curso e do leitor leva para ela. */
+export function ultimaCategoria(): string {
+  try {
+    return localStorage.getItem(CHAVE_ULTIMA) || SEM;
+  } catch {
+    return SEM;
+  }
+}
+
+export function caminhoDaCategoria(cat: string | null | undefined, aba: '' | 'pdfs' | 'questoes' = ''): string {
+  return `/c/${cat || SEM}${aba ? `/${aba}` : ''}`;
+}
+
+export function useNomeCategoria(cat: string): string | null {
+  const { data } = useCollections();
+  if (cat === SEM) return 'Sem categoria';
+  return data?.find((c) => c.id === cat)?.name ?? null;
+}
+
+export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; acoes?: ReactNode; info?: ReactNode }) {
+  const nome = useNomeCategoria(cat);
+  const qc = useQueryClient();
+
+  // Entrou: ela vai para o começo do menu principal (a última aberta primeiro).
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAVE_ULTIMA, cat);
+    } catch {
+      /* modo privado */
+    }
+    if (cat !== SEM) void api.acessarCategoria(cat).then(() => qc.invalidateQueries({ queryKey: ['collections'] }), () => undefined);
+  }, [cat, qc]);
+
+  const aba = ({ isActive }: { isActive: boolean }) =>
+    `inline-flex min-h-[44px] items-center border-b-2 px-1 text-sm font-medium outline-none transition-colors motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+      isActive ? 'border-blue-500 text-neutral-50' : 'border-transparent text-neutral-400 hover:text-neutral-200'
+    }`;
+
+  return (
+    <header className="mb-6">
+      <Link
+        to="/"
+        className="inline-flex items-center gap-1.5 rounded text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+      >
+        <ArrowLeft size={16} /> Categorias
+      </Link>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{nome ?? ' '}</h1>
+          {info && <div className="mt-1 text-sm text-neutral-500">{info}</div>}
+        </div>
+        {acoes && <div className="flex flex-wrap items-center gap-2">{acoes}</div>}
+      </div>
+      <nav aria-label="Conteúdo da categoria" className="mt-4 flex gap-6 border-b border-neutral-800">
+        <NavLink to={caminhoDaCategoria(cat)} end className={aba}>
+          Cursos
+        </NavLink>
+        <NavLink to={caminhoDaCategoria(cat, 'pdfs')} className={aba}>
+          PDFs
+        </NavLink>
+        <NavLink to={caminhoDaCategoria(cat, 'questoes')} className={aba}>
+          Questões
+        </NavLink>
+      </nav>
+    </header>
+  );
+}

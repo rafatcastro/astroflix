@@ -56,7 +56,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
     try {
       await api.patchCourse(course.id, { collectionId });
       invalidate();
-      onNotice(collectionId ? 'Curso adicionado à coleção.' : 'Curso removido da coleção.');
+      onNotice(collectionId ? 'Curso movido para a categoria.' : 'Curso tirado da categoria.');
     } catch {
       onNotice('Falha na operação. Tente novamente.');
     }
@@ -69,7 +69,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       const col = await api.createCollection(newColName.trim());
       await api.patchCourse(course.id, { collectionId: col.id });
       invalidate();
-      onNotice(`Curso adicionado à nova coleção "${col.name}".`);
+      onNotice(`Curso movido para a nova categoria "${col.name}".`);
     } catch {
       onNotice('Falha na operação. Tente novamente.');
     }
@@ -134,7 +134,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
             <div className="truncate px-3 pb-2 pt-2 text-sm font-medium text-neutral-200">{course.title}</div>
             <button type="button" className={sheetItem} onClick={() => setFlow('rename')}>Renomear…</button>
             <button type="button" className={sheetItem} onClick={doRescan}>Re-escanear</button>
-            <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Coleção…</button>
+            <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button type="button" className={sheetItem} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>
             <button type="button" className={sheetItem} onClick={doArchiveToggle}>Arquivar</button>
             <button type="button" className={`${sheetItem} text-red-400`} onClick={() => setFlow('confirmDelete')}>Excluir…</button>
@@ -173,9 +173,9 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       {flow === 'collection' && (
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={(e) => { e.preventDefault(); close(); }}>
           <div className="w-full max-w-sm rounded-xl bg-neutral-900 p-5" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-            <div className="mb-3 font-medium">Coleção</div>
+            <div className="mb-3 font-medium">Categoria</div>
             {(collections ?? []).length === 0 && (
-              <p className="mb-3 text-sm text-neutral-500">Nenhuma coleção ainda — crie a primeira abaixo.</p>
+              <p className="mb-3 text-sm text-neutral-500">Nenhuma categoria ainda — crie a primeira abaixo.</p>
             )}
             {(collections ?? []).length > 0 && (
               <div className="mb-3 max-h-56 space-y-1 overflow-y-auto">
@@ -201,7 +201,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
                 onClick={() => void assignCollection(null)}
                 className="mb-3 min-h-[44px] w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
               >
-                Remover da coleção
+                Tirar da categoria
               </button>
             )}
             <div className="flex gap-2">
@@ -209,7 +209,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createAndAssign()}
-                placeholder="Nova coleção"
+                placeholder="Nova categoria"
               />
               <button
                 type="button"
@@ -227,7 +227,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       {flow === 'confirmReset' && (
         <ConfirmDialog
           title={`Zerar o progresso de "${course.title}"?`}
-          message="Posições e aulas concluídas deste curso voltam a zero. As aulas, a capa e a coleção permanecem. Não dá para desfazer."
+          message="Posições e aulas concluídas deste curso voltam a zero. As aulas, a capa e a categoria permanecem. Não dá para desfazer."
           confirmLabel="Zerar progresso"
           danger
           onConfirm={doResetProgress}

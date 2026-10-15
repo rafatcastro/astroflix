@@ -42,7 +42,8 @@ function pdfsDaPasta(dir: string, orcamento = { entradas: ENTRADAS_MAX }, nivel 
 interface LinhaDocumento {
   id: string;
   titulo: string;
-  categoria: string | null;
+  tipo: string | null;
+  collection_id: string | null;
   caminho: string;
   tamanho: number;
   paginas: number | null;
@@ -53,7 +54,7 @@ interface LinhaDocumento {
   criado_em: string;
 }
 
-const categoriaLimpa = (c: unknown): string | null => (typeof c === 'string' && c.trim() ? c.trim().slice(0, 60) : null);
+const tipoLimpo = (c: unknown): string | null => (typeof c === 'string' && c.trim() ? c.trim().slice(0, 60) : null);
 
 export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
   const { db, config } = opts;
@@ -71,7 +72,9 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
   const dto = (d: LinhaDocumento) => ({
     id: d.id,
     titulo: d.titulo,
-    categoria: d.categoria,
+    // Livros, Questões, Apostilas…: o filtro dentro da aba PDFs de uma categoria.
+    tipo: d.tipo,
+    categoriaId: d.collection_id,
     caminho: d.caminho,
     tamanho: d.tamanho,
     paginas: d.paginas,
@@ -85,8 +88,15 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
   });
   const buscar = (id: string) => db.prepare('SELECT * FROM documentos WHERE id=?').get(id) as LinhaDocumento | undefined;
 
-  app.get('/api/documentos', async () => {
-    const linhas = db.prepare('SELECT * FROM documentos').all() as unknown as LinhaDocumento[];
+  app.get('/api/documentos', async (req) => {
+    const cat = (req.query as { categoria?: string }).categoria;
+    const linhas = (
+      cat === 'sem'
+        ? db.prepare('SELECT * FROM documentos WHERE collection_id IS NULL').all()
+        : cat
+          ? db.prepare('SELECT * FROM documentos WHERE collection_id=?').all(cat)
+          : db.prepare('SELECT * FROM documentos').all()
+    ) as unknown as LinhaDocumento[];
     // Os lidos por último primeiro (é o que a pessoa quer retomar); os nunca abertos
     // depois, pela ordem do título.
     linhas.sort((a, b) => {
@@ -104,7 +114,7 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
   // Arquivos escolhidos e/ou uma pasta (cada PDF dentro dela, subpastas inclusive).
   // Idempotente: um PDF que já está aqui (mesmo caminho) não duplica.
   app.post('/api/documentos', async (req, reply) => {
-    const body = (req.body ?? {}) as { caminhos?: unknown; pasta?: unknown; categoria?: unknown };
+    const body = (req.body ?? {}) as { caminhos?: unknown; pasta?: unknown; tipo?: unknown; categoriaId?: unknown };
     const candidatos: string[] = [];
     if (Array.isArray(body.caminhos)) {
       for (const c of body.caminhos) if (typeof c === 'string' && c) candidatos.push(path.resolve(c));
@@ -117,14 +127,16 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
     if (!candidatos.length && !Array.isArray(body.caminhos) && typeof body.pasta !== 'string') {
       return reply.code(400).send({ error: 'caminhos_required' });
     }
-    const categoria = categoriaLimpa(body.categoria);
+    const tipo = tipoLimpo(body.tipo);
+    const categoriaId =
+      typeof body.categoriaId === 'string' && db.prepare('SELECT 1 FROM collections WHERE id=?').get(body.categoriaId) ? body.categoriaId : null;
     const agora = new Date().toISOString();
     const ids: string[] = [];
     let jaExistiam = 0;
     let recusados = 0;
     const existe = db.prepare('SELECT id FROM documentos WHERE caminho=?');
     const inserir = db.prepare(
-      `INSERT INTO documentos (id, titulo, categoria, caminho, tamanho, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO documentos (id, titulo, tipo, collection_id, caminho, tamanho, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     transaction(db, () => {
       for (const c of new Set(candidatos)) {
@@ -146,7 +158,7 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
           continue;
         }
         const id = randomUUID();
-        inserir.run(id, cleanTitle(path.basename(c)), categoria, c, tamanho, agora, agora);
+        inserir.run(id, cleanTitle(path.basename(c)), tipo, categoriaId, c, tamanho, agora, agora);
         ids.push(id);
       }
     });
@@ -157,11 +169,23 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
     const id = (req.params as { id: string }).id;
     const d = buscar(id);
     if (!d) return reply.code(404).send({ error: 'not_found' });
-    const b = (req.body ?? {}) as { titulo?: unknown; categoria?: unknown; pagina?: unknown; paginas?: unknown; lido?: unknown };
+    const b = (req.body ?? {}) as {
+      titulo?: unknown;
+      tipo?: unknown;
+      categoriaId?: unknown;
+      pagina?: unknown;
+      paginas?: unknown;
+      lido?: unknown;
+    };
     const agora = new Date().toISOString();
     const novo = { ...d };
     if (typeof b.titulo === 'string' && b.titulo.trim()) novo.titulo = b.titulo.trim().slice(0, 300);
-    if ('categoria' in b) novo.categoria = categoriaLimpa(b.categoria);
+    if ('tipo' in b) novo.tipo = tipoLimpo(b.tipo);
+    if (b.categoriaId === null) novo.collection_id = null;
+    else if (typeof b.categoriaId === 'string') {
+      if (!db.prepare('SELECT 1 FROM collections WHERE id=?').get(b.categoriaId)) return reply.code(404).send({ error: 'categoria' });
+      novo.collection_id = b.categoriaId;
+    }
     if (typeof b.paginas === 'number' && Number.isInteger(b.paginas) && b.paginas > 0) novo.paginas = b.paginas;
     let mexeuNaLeitura = false;
     if (typeof b.pagina === 'number' && Number.isInteger(b.pagina) && b.pagina >= 1) {
@@ -180,8 +204,8 @@ export async function documentosRoutes(app: FastifyInstance, opts: { db: Db; con
     }
     if (mexeuNaLeitura) novo.leitura_em = agora;
     db.prepare(
-      `UPDATE documentos SET titulo=?, categoria=?, paginas=?, pagina=?, lido=?, lido_em=?, leitura_em=?, atualizado_em=? WHERE id=?`,
-    ).run(novo.titulo, novo.categoria, novo.paginas, novo.pagina, novo.lido, novo.lido_em, novo.leitura_em, agora, id);
+      `UPDATE documentos SET titulo=?, tipo=?, collection_id=?, paginas=?, pagina=?, lido=?, lido_em=?, leitura_em=?, atualizado_em=? WHERE id=?`,
+    ).run(novo.titulo, novo.tipo, novo.collection_id, novo.paginas, novo.pagina, novo.lido, novo.lido_em, novo.leitura_em, agora, id);
     return dto(buscar(id)!);
   });
 

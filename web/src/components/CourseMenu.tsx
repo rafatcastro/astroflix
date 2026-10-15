@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import { caminhoDaCategoria } from './CabecalhoCategoria';
 import { api, type CourseDetail, type RepointSummary } from '../api/client';
 import { useCollections } from '../api/hooks';
 import DirPicker from './DirPicker';
@@ -36,12 +37,12 @@ export default function CourseMenu({
     qc.invalidateQueries({ queryKey: ['collections'] });
   };
 
-  // Coleção é organização opcional: atribuir/remover nunca mexe em progresso.
+  // Categoria é organização: atribuir/remover nunca mexe em progresso.
   const assignCollection = async (collectionId: string | null) => {
     try {
       await api.patchCourse(course.id, { collectionId });
       invalidate();
-      onNotice(collectionId ? 'Curso adicionado à coleção.' : 'Curso removido da coleção.');
+      onNotice(collectionId ? 'Curso movido para a categoria.' : 'Curso tirado da categoria.');
     } catch {
       onNotice('Falha na operação. Tente novamente.');
     }
@@ -54,7 +55,7 @@ export default function CourseMenu({
       const col = await api.createCollection(newColName.trim());
       await api.patchCourse(course.id, { collectionId: col.id });
       invalidate();
-      onNotice(`Curso adicionado à nova coleção "${col.name}".`);
+      onNotice(`Curso movido para a nova categoria "${col.name}".`);
     } catch {
       onNotice('Falha na operação. Tente novamente.');
     }
@@ -136,7 +137,7 @@ export default function CourseMenu({
     try {
       await api.patchCourse(course.id, { archived: true });
       invalidate();
-      navigate('/');
+      navigate(caminhoDaCategoria(course.collectionId));
     } catch {
       close();
       onNotice('Falha na operação. Tente novamente.');
@@ -147,7 +148,7 @@ export default function CourseMenu({
     try {
       await api.deleteCourse(course.id);
       invalidate();
-      navigate('/');
+      navigate(caminhoDaCategoria(course.collectionId));
     } catch {
       close();
       onNotice('Falha na operação. Tente novamente.');
@@ -176,7 +177,7 @@ export default function CourseMenu({
             {course.source === 'local' && <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
             <button className={item} onClick={doRescan}>Re-escanear agora</button>
             <button className={item} onClick={() => { setTitle(course.title); setFlow('rename'); }}>Renomear…</button>
-            <button className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Coleção…</button>
+            <button className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button className={item} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>
             <button className={item} onClick={() => setFlow('confirmArchive')}>Arquivar</button>
             <button className={`${item} text-red-400`} onClick={() => setFlow('confirmDelete')}>Excluir…</button>
@@ -214,9 +215,9 @@ export default function CourseMenu({
       {flow === 'collection' && (
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={close}>
           <div className="w-full max-w-sm rounded-xl bg-neutral-900 p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-3 font-medium">Coleção</div>
+            <div className="mb-3 font-medium">Categoria</div>
             {(collections ?? []).length === 0 && (
-              <p className="mb-3 text-sm text-neutral-500">Nenhuma coleção ainda — crie a primeira abaixo.</p>
+              <p className="mb-3 text-sm text-neutral-500">Nenhuma categoria ainda — crie a primeira abaixo.</p>
             )}
             {(collections ?? []).length > 0 && (
               <div className="mb-3 max-h-56 space-y-1 overflow-y-auto">
@@ -242,7 +243,7 @@ export default function CourseMenu({
                 onClick={() => void assignCollection(null)}
                 className="mb-3 min-h-[44px] w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
               >
-                Remover da coleção
+                Tirar da categoria
               </button>
             )}
             <div className="flex gap-2">
@@ -250,7 +251,7 @@ export default function CourseMenu({
                 value={newColName}
                 onChange={(e) => setNewColName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && createAndAssign()}
-                placeholder="Nova coleção"
+                placeholder="Nova categoria"
               />
               <button
                 type="button"
@@ -268,7 +269,7 @@ export default function CourseMenu({
       {flow === 'confirmReset' && (
         <ConfirmDialog
           title={`Zerar o progresso de "${course.title}"?`}
-          message="Posições e aulas concluídas deste curso voltam a zero. As aulas, a capa e a coleção permanecem. Não dá para desfazer."
+          message="Posições e aulas concluídas deste curso voltam a zero. As aulas, a capa e a categoria permanecem. Não dá para desfazer."
           confirmLabel="Zerar progresso"
           danger
           onConfirm={doResetProgress}

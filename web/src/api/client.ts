@@ -42,23 +42,38 @@ export interface Flashcard {
   courseId: string | null; courseTitle: string | null;
   lessonId: string | null; lessonTitle: string | null;
   minutoSec: number | null;
+  documentoId: string | null; documentoTitulo: string | null; pagina: number | null;
+  categoriaId: string | null;
+  /** Onde o card mora no Anki (Learnflix::<categoria>[::Cursos|PDFs::<título>]). */
+  baralho: string;
   frente: string; verso: string;
   noAnki: boolean;
   criadoEm: string;
 }
 export type EstadoAnki = 'conectado' | 'fechado' | 'erro';
 export interface ListaFlashcards { cards: Flashcard[]; anki: EstadoAnki; pendentes: number; }
-export type FiltroFlashcards = { lessonId: string } | { courseId: string } | { geral: true } | Record<string, never>;
-export interface NovoFlashcard { frente: string; verso: string; courseId?: string; lessonId?: string; minutoSec?: number; }
+/** `categoria`: id da categoria ou 'sem'. */
+export type FiltroFlashcards =
+  | { lessonId: string } | { courseId: string } | { documentoId: string } | { categoria: string } | { geral: true }
+  | Record<string, never>;
+export interface NovoFlashcard {
+  frente: string; verso: string; courseId?: string; lessonId?: string; minutoSec?: number;
+  documentoId?: string; pagina?: number; categoriaId?: string;
+}
 const qsFlashcards = (f: FiltroFlashcards): string =>
   'lessonId' in f ? `?lessonId=${encodeURIComponent(f.lessonId)}`
   : 'courseId' in f ? `?courseId=${encodeURIComponent(f.courseId)}`
+  : 'documentoId' in f ? `?documentoId=${encodeURIComponent(f.documentoId)}`
+  : 'categoria' in f ? `?categoria=${encodeURIComponent(f.categoria)}`
   : 'geral' in f ? '?geral=1' : '';
 
 // PDFs (ver server/src/routes/documentos.ts). `disponivel` = o arquivo está nesta
 // máquina; um PDF que veio da conta, de outro computador, chega sem ele.
 export interface Documento {
-  id: string; titulo: string; categoria: string | null; caminho: string; tamanho: number;
+  id: string; titulo: string; caminho: string; tamanho: number;
+  /** Livros, Questões, Apostilas… (filtro dentro da aba PDFs). */
+  tipo: string | null;
+  categoriaId: string | null;
   paginas: number | null; pagina: number; lido: boolean; lidoEm: string | null;
   leituraEm: string | null; criadoEm: string; disponivel: boolean; temCapa: boolean;
 }
@@ -83,7 +98,8 @@ export interface BrowseResult { path: string | null; parent: string | null; dirs
 export interface RepointSummary { matched: number; relinked: number; missing: number; added: number; structureChanged: boolean; }
 export interface RootUnavailable { status: 'root_unavailable'; }
 export interface Settings { allowedRootsExtra: string[]; }
-export interface Collection { id: string; name: string; courseCount: number; }
+// Categoria (a API ainda diz collection: eram as bibliotecas de cursos).
+export interface Collection { id: string; name: string; courseCount: number; pdfCount: number; acessadoEm: string | null; }
 export interface BatchImportResult {
   created: number; skipped: number; noVideos: number;
   courses: { id: string; title: string }[];
@@ -217,11 +233,15 @@ async function telegramPost(url: string, link: string): Promise<RespostaTelegram
 }
 
 export const api = {
-  listarDocumentos: () => jsonFetch<Documento[]>('/api/documentos'),
+  listarDocumentos: (categoria?: string) =>
+    jsonFetch<Documento[]>(`/api/documentos${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ''}`),
   documento: (id: string) => jsonFetch<Documento>(`/api/documentos/${id}`),
-  adicionarPdfs: (body: { caminhos?: string[]; pasta?: string; categoria?: string | null }) =>
+  adicionarPdfs: (body: { caminhos?: string[]; pasta?: string; tipo?: string | null; categoriaId?: string | null }) =>
     jsonFetch<ResultadoAdicionarPdfs>('/api/documentos', { method: 'POST', body: JSON.stringify(body) }),
-  editarDocumento: (id: string, body: { titulo?: string; categoria?: string | null; pagina?: number; paginas?: number; lido?: boolean }) =>
+  editarDocumento: (
+    id: string,
+    body: { titulo?: string; tipo?: string | null; categoriaId?: string | null; pagina?: number; paginas?: number; lido?: boolean },
+  ) =>
     jsonFetch<Documento>(`/api/documentos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   reapontarDocumento: (id: string, caminho: string) =>
     jsonFetch<Documento>(`/api/documentos/${id}/caminho`, { method: 'POST', body: JSON.stringify({ caminho }) }),
@@ -271,6 +291,9 @@ export const api = {
   createCollection: (name: string) => jsonFetch<{ id: string; name: string }>('/api/collections', { method: 'POST', body: JSON.stringify({ name }) }),
   renameCollection: (id: string, name: string) => jsonFetch<{ ok: true }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
   deleteCollection: (id: string) => jsonFetch<void>(`/api/collections/${id}`, { method: 'DELETE' }),
+  acessarCategoria: (id: string) => jsonFetch<void>(`/api/collections/${id}/acesso`, { method: 'POST' }),
+  baralho: (q: { categoria?: string; courseId?: string; documentoId?: string }) =>
+    jsonFetch<{ baralho: string }>(`/api/anki/baralho?${new URLSearchParams(q as Record<string, string>)}`),
   batchImport: (path: string) => jsonFetch<BatchImportResult>('/api/courses/batch', { method: 'POST', body: JSON.stringify({ path }) }),
   listCourseRoots: () => jsonFetch<CourseRoot[]>('/api/courses/roots'),
   deleteCourseRoot: (id: string) => jsonFetch<void>(`/api/courses/roots/${id}`, { method: 'DELETE' }),

@@ -4,7 +4,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { PDFDocumentProxy, RenderTask } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { api } from '../api/client';
 import { abrirPdf } from '../lib/pdf';
-import { ArrowLeft, Check, ChevronLeft, ChevronRight, Minus, Plus } from '../components/icons';
+import { ArrowLeft, Cards, Check, ChevronLeft, ChevronRight, Minus, Plus } from '../components/icons';
+import { caminhoDaCategoria, ultimaCategoria } from '../components/CabecalhoCategoria';
+import { AvisoAnki, CartaoFlashcard, FormFlashcard } from '../components/Flashcards';
+import { useFlashcards, useMudarFlashcards } from '../api/hooks';
 
 // Leitor de PDF: as páginas em rolagem contínua, cada uma desenhada só quando
 // chega perto da tela (um livro de mil páginas não pode virar mil canvas), e a
@@ -31,6 +34,22 @@ export default function LeitorPdf() {
   const rolagem = useRef<HTMLDivElement>(null);
   const paginas = useRef<Array<HTMLDivElement | null>>([]);
   const posicionado = useRef(false);
+  // Painel de questões ao lado (tecla C), como o da aula.
+  const [painel, setPainel] = useState(() => {
+    try {
+      return localStorage.getItem('leitorPainel') === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('leitorPainel', painel ? '1' : '0');
+    } catch {
+      /* modo privado */
+    }
+  }, [painel]);
+  const voltar = caminhoDaCategoria(d?.categoriaId ?? (d ? null : ultimaCategoria()), 'pdfs');
 
   // Abre o arquivo (uma vez por PDF).
   const disponivel = d?.disponivel;
@@ -149,20 +168,21 @@ export default function LeitorPdf() {
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
       const alvo = e.target as HTMLElement;
-      if (alvo.tagName === 'INPUT' || alvo.isContentEditable) return;
+      if (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'ArrowRight') irPara(Math.min(total, atualRef.current + 1));
       else if (e.key === 'ArrowLeft') irPara(Math.max(1, atualRef.current - 1));
       else if (e.key === '+' || e.key === '=') setZoom((z) => Math.min(ZOOM_MAX, +(z + PASSO).toFixed(2)));
       else if (e.key === '-') setZoom((z) => Math.max(ZOOM_MIN, +(z - PASSO).toFixed(2)));
       else if (e.key === '0') setZoom(1);
-      else if (e.key === 'Escape') navigate('/pdfs');
+      else if (e.key === 'c' || e.key === 'C') setPainel((v) => !v);
+      else if (e.key === 'Escape') navigate(voltar);
       else return;
       e.preventDefault();
     };
     window.addEventListener('keydown', aoTeclar);
     return () => window.removeEventListener('keydown', aoTeclar);
-  }, [irPara, total, navigate]);
+  }, [irPara, total, navigate, voltar]);
 
   const botao =
     'grid h-10 w-10 place-items-center rounded-lg text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none';
@@ -173,7 +193,7 @@ export default function LeitorPdf() {
   return (
     <div className="flex h-dvh flex-col bg-neutral-950">
       <header className="flex shrink-0 items-center gap-2 border-b border-neutral-800 px-3 py-2">
-        <Link to="/pdfs" aria-label="Voltar para os PDFs" title="Voltar (Esc)" className={botao}>
+        <Link to={voltar} aria-label="Voltar para os PDFs" title="Voltar (Esc)" className={botao}>
           <ArrowLeft size={18} />
         </Link>
         <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-100" title={d?.titulo}>
@@ -216,16 +236,28 @@ export default function LeitorPdf() {
             >
               <Check size={16} /> {lido ? 'Lido' : 'Marcar como lido'}
             </button>
+            <button
+              type="button"
+              onClick={() => setPainel((v) => !v)}
+              aria-pressed={painel}
+              title="Questões deste PDF (C)"
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 text-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+                painel ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              <Cards size={16} /> <span className="hidden md:inline">Questões</span>
+            </button>
           </>
         )}
       </header>
 
-      <div ref={rolagem} className="relative flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1">
+      <div ref={rolagem} className="relative min-w-0 flex-1 overflow-auto">
         {problema ? (
           <div className="grid h-full place-items-center p-6 text-center">
             <div>
               <p className="text-neutral-300">{problema}</p>
-              <Link to="/pdfs" className="mt-4 inline-block text-sm text-blue-400 hover:text-blue-300">
+              <Link to={voltar} className="mt-4 inline-block text-sm text-blue-400 hover:text-blue-300">
                 Voltar para os PDFs
               </Link>
             </div>
@@ -250,6 +282,44 @@ export default function LeitorPdf() {
           </div>
         )}
       </div>
+      {painel && pdf && (
+        <aside className="w-80 shrink-0 overflow-y-auto border-l border-neutral-800 bg-neutral-950">
+          <PainelQuestoes documentoId={id} pagina={atual} onIrPara={(n) => irPara(n)} />
+        </aside>
+      )}
+      </div>
+    </div>
+  );
+}
+
+// As questões do PDF: o card novo guarda a página em que foi escrito.
+function PainelQuestoes({ documentoId, pagina, onIrPara }: { documentoId: string; pagina: number; onIrPara: (n: number) => void }) {
+  const { data, isLoading } = useFlashcards({ documentoId });
+  const { criar } = useMudarFlashcards();
+  return (
+    <div className="space-y-3 p-3">
+      <FormFlashcard
+        rotulo={`Adicionar card (p. ${pagina})`}
+        ocupado={criar.isPending}
+        onSalvar={(c) => criar.mutateAsync({ ...c, documentoId, pagina })}
+      />
+      {data?.cards[0] && (
+        <p className="text-xs text-neutral-500">
+          No Anki: <code>{data.cards[0].baralho}</code>
+        </p>
+      )}
+      <AvisoAnki anki={data?.anki} pendentes={data?.pendentes ?? 0} />
+      {isLoading ? (
+        <p className="text-sm text-neutral-500">Carregando…</p>
+      ) : data && data.cards.length > 0 ? (
+        <ul className="space-y-2">
+          {data.cards.map((c) => (
+            <CartaoFlashcard key={c.id} card={c} onIrParaPagina={onIrPara} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-neutral-500">Nenhuma questão deste PDF ainda. O card guarda a página em que você está.</p>
+      )}
     </div>
   );
 }
