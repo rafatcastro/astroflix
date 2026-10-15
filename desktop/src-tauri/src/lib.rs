@@ -155,7 +155,36 @@ fn parar_servidor_para_atualizar(app: AppHandle) {
     parar_servidor(&app);
 }
 
+/// O app se chamava Learnflix. A atualização troca o conteúdo do pacote mas mantém
+/// o caminho, então quem instalou antes da troca de nome continuava vendo
+/// "Learnflix.app" no Finder e no Dock. Na primeira abertura depois disso, o pacote
+/// se renomeia para Astroflix.app e reabre por lá (o atualizador usa o caminho do
+/// executável; sem reabrir, a próxima atualização recriaria o nome antigo).
+/// Devolve true quando renomeou e o processo deve sair.
+#[cfg(target_os = "macos")]
+fn renomear_pacote_antigo() -> bool {
+    let Ok(exe) = std::env::current_exe() else { return false };
+    // .../Learnflix.app/Contents/MacOS/learnflix
+    let Some(pacote) = exe.ancestors().nth(3) else { return false };
+    if pacote.file_name().and_then(|n| n.to_str()) != Some("Learnflix.app") {
+        return false;
+    }
+    let Some(pasta) = pacote.parent() else { return false };
+    let novo = pasta.join("Astroflix.app");
+    // Já existe um Astroflix.app ali (instalado à mão): não mexe em nada.
+    if novo.exists() || std::fs::rename(pacote, &novo).is_err() {
+        return false;
+    }
+    // Reabre depois que este processo sair: a instância única recusaria as duas juntas.
+    let reabrir = format!("sleep 1; open \"{}\"", novo.display());
+    std::process::Command::new("/bin/sh").arg("-c").arg(reabrir).spawn().is_ok()
+}
+
 pub fn run() {
+    #[cfg(target_os = "macos")]
+    if !tauri::is_dev() && renomear_pacote_antigo() {
+        std::process::exit(0);
+    }
     tauri::Builder::default()
         // Primeiro: uma segunda abertura só traz a janela existente para a frente.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
