@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Collection } from '../api/client';
@@ -30,9 +30,12 @@ export default function Categorias() {
   const [criando, setCriando] = useState(false);
   const [editando, setEditando] = useState<Collection | null>(null);
   // Menu do botão direito (ou do ⋯, para quem usa o teclado), na posição do clique.
-  // "Sem categoria" não tem: o nome se dá pelo lápis no cabeçalho dela.
-  const [menu, setMenu] = useState<{ c: Collection; x: number; y: number } | null>(null);
+  // `c` nulo é o "Sem categoria": editar dá um nome a ele (vira categoria com tudo o
+  // que estava sem) e remover apaga o conteúdo dele, já que não há categoria a excluir.
+  const [menu, setMenu] = useState<{ c: Collection | null; x: number; y: number } | null>(null);
   const [excluindo, setExcluindo] = useState<Collection | null>(null);
+  const [nomeandoSem, setNomeandoSem] = useState(false);
+  const [apagandoSem, setApagandoSem] = useState(false);
 
   const semCursos = cursos?.filter((c) => !c.collectionId).length ?? 0;
   const semPdfs = docs?.filter((d) => !d.categoriaId).length ?? 0;
@@ -55,6 +58,41 @@ export default function Categorias() {
     setEditando(null);
     atualizar();
   }
+
+  async function nomearSem(c: { name: string; emoji: string | null }) {
+    const nova = await api.createCollection(c.name, c.emoji, true);
+    setNomeandoSem(false);
+    atualizar();
+    navigate(caminhoDaCategoria(nova.id));
+  }
+
+  // Remove do app os cursos e PDFs sem categoria; os arquivos no disco ficam.
+  async function apagarSem() {
+    const idsCursos = (cursos ?? []).filter((c) => !c.collectionId).map((c) => c.id);
+    const idsPdfs = (docs ?? []).filter((d) => !d.categoriaId).map((d) => d.id);
+    await Promise.all([...idsCursos.map((id) => api.deleteCourse(id)), ...idsPdfs.map((id) => api.removerDocumento(id))]);
+    setApagandoSem(false);
+    atualizar();
+  }
+
+  const abrirMenu = (c: Collection | null) => (e: MouseEvent) => {
+    e.preventDefault();
+    setMenu({ c, x: e.clientX, y: e.clientY });
+  };
+
+  const botaoAcoes = (c: Collection | null) => (
+    <button
+      type="button"
+      aria-label={`Ações de ${c?.name ?? 'Sem categoria'}`}
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setMenu({ c, x: r.left, y: r.bottom + 4 });
+      }}
+      className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-lg bg-black/40 text-neutral-300 opacity-100 hover:bg-black/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+    >
+      ⋯
+    </button>
+  );
 
   const icone = 'grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800';
 
@@ -88,10 +126,7 @@ export default function Categorias() {
           <div
             key={c.id}
             className="group relative"
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setMenu({ c, x: e.clientX, y: e.clientY });
-            }}
+            onContextMenu={abrirMenu(c)}
           >
             <Link
               to={caminhoDaCategoria(c.id)}
@@ -107,28 +142,21 @@ export default function Categorias() {
               <div className="mt-1 text-sm text-neutral-400">{contagem(c.courseCount, c.pdfCount)}</div>
               <EstudoDeHoje categoriaId={c.id} />
             </Link>
-            <button
-              type="button"
-              aria-label={`Ações de ${c.name}`}
-              onClick={(e) => {
-                const r = e.currentTarget.getBoundingClientRect();
-                setMenu({ c, x: r.left, y: r.bottom + 4 });
-              }}
-              className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-lg bg-black/40 text-neutral-300 opacity-100 hover:bg-black/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-            >
-              ⋯
-            </button>
+            {botaoAcoes(c)}
           </div>
         ))}
         {(semCursos > 0 || semPdfs > 0) && (
-          <Link
-            to={caminhoDaCategoria(SEM)}
-            className="flex min-h-[120px] flex-col justify-end rounded-xl border border-dashed border-neutral-800 p-4 outline-none hover:border-neutral-600 focus-visible:ring-2 focus-visible:ring-blue-600"
-          >
-            <div className="text-lg font-medium text-neutral-300">Sem categoria</div>
-            <div className="mt-1 text-sm text-neutral-500">{contagem(semCursos, semPdfs)}</div>
-            <EstudoDeHoje categoriaId={SEM} />
-          </Link>
+          <div className="group relative" onContextMenu={abrirMenu(null)}>
+            <Link
+              to={caminhoDaCategoria(SEM)}
+              className="flex h-full min-h-[120px] flex-col justify-end rounded-xl border border-dashed border-neutral-800 p-4 outline-none hover:border-neutral-600 focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              <div className="pr-10 text-lg font-medium text-neutral-300">Sem categoria</div>
+              <div className="mt-1 text-sm text-neutral-500">{contagem(semCursos, semPdfs)}</div>
+              <EstudoDeHoje categoriaId={SEM} />
+            </Link>
+            {botaoAcoes(null)}
+          </div>
         )}
       </div>
 
@@ -156,7 +184,8 @@ export default function Categorias() {
               autoFocus
               className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
               onClick={() => {
-                setEditando(menu.c);
+                if (menu.c) setEditando(menu.c);
+                else setNomeandoSem(true);
                 setMenu(null);
               }}
             >
@@ -167,11 +196,12 @@ export default function Categorias() {
               role="menuitem"
               className="block w-full px-3 py-2.5 text-left text-sm text-red-400 hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
               onClick={() => {
-                setExcluindo(menu.c);
+                if (menu.c) setExcluindo(menu.c);
+                else setApagandoSem(true);
                 setMenu(null);
               }}
             >
-              Excluir…
+              Remover…
             </button>
           </div>
         </>
@@ -182,11 +212,31 @@ export default function Categorias() {
         <DialogoCategoria inicial={{ name: editando.name, emoji: editando.emoji }} onSalvar={editar} onCancelar={() => setEditando(null)} />
       )}
 
+      {nomeandoSem && (
+        <DialogoCategoria
+          aviso="Tudo o que está sem categoria (cursos, PDFs e questões) vai para ela."
+          onSalvar={nomearSem}
+          onCancelar={() => setNomeandoSem(false)}
+        />
+      )}
+
+      {apagandoSem && (
+        <ConfirmDialog
+          title="Remover tudo o que está sem categoria?"
+          message={`${contagem(semCursos, semPdfs)} saem do app, com o progresso. Os arquivos no disco ficam.`}
+          confirmLabel="Remover"
+          danger
+          digitar="confirmar"
+          onConfirm={() => void apagarSem()}
+          onCancel={() => setApagandoSem(false)}
+        />
+      )}
+
       {excluindo && (
         <ConfirmDialog
-          title={`Excluir a categoria "${excluindo.name}"?`}
+          title={`Remover a categoria "${excluindo.name}"?`}
           message="Só a categoria some: os cursos, os PDFs e as questões dela vão para Sem categoria, com o progresso intacto."
-          confirmLabel="Excluir"
+          confirmLabel="Remover"
           danger
           digitar="confirmar"
           onConfirm={async () => {
