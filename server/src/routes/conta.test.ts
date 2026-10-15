@@ -175,13 +175,13 @@ describe('conta e nuvem', () => {
     const pdf = path.join(tmp, 'livro.pdf');
     fs.writeFileSync(pdf, '%PDF-1.4');
     await a.entrar('gil');
-    const { ids } = (await a.post('/api/documentos', { caminhos: [pdf], categoria: 'Livros' })).json();
+    const { ids } = (await a.post('/api/documentos', { caminhos: [pdf], tipo: 'Livros' })).json();
     await a.app.inject({ method: 'PATCH', url: `/api/documentos/${ids[0]}`, payload: { paginas: 200, pagina: 42 }, headers: H });
     await a.sincronizar();
     const b = maquina(nuvem);
     await b.entrar('gil');
     expect((await b.get('/api/documentos')).json()).toMatchObject([
-      { id: ids[0], titulo: 'livro', categoria: 'Livros', pagina: 42, paginas: 200, disponivel: false },
+      { id: ids[0], titulo: 'livro', tipo: 'Livros', pagina: 42, paginas: 200, disponivel: false },
     ]);
     // Re-apontar na B não muda o caminho da A; ler na B leva a página para a A.
     await b.post(`/api/documentos/${ids[0]}/caminho`, { caminho: pdf });

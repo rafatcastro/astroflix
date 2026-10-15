@@ -13,6 +13,7 @@ import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
+import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
 import { ArrowLeft, Play, Check, List, LayoutGrid, Cards } from '../components/icons';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
@@ -31,6 +32,7 @@ function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
 export default function Course() {
   const { id = '' } = useParams();
   const { data, isLoading } = useCourse(id);
+  const nomeCategoria = useNomeCategoria(data?.collectionId ?? SEM);
   const setComplete = useSetComplete(id);
   const navigate = useNavigate();
   const [view, setView] = useState<'list' | 'grid'>(() => getPref<'list' | 'grid'>('course.view', 'list'));
@@ -114,17 +116,17 @@ export default function Course() {
       <div className="relative mx-auto max-w-6xl px-6 py-8">
       <div className="flex items-center justify-between">
         <Link
-          to="/"
+          to={caminhoDaCategoria(data.collectionId)}
           className="inline-flex items-center gap-1.5 rounded text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
         >
-          <ArrowLeft size={16} /> Biblioteca
+          <ArrowLeft size={16} /> {nomeCategoria ?? 'Categoria'}
         </Link>
         <div className="flex items-center gap-1">
           <Link
-            to={`/flashcards?curso=${id}`}
+            to={caminhoDaCategoria(data.collectionId, 'questoes')}
             className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
-            <Cards size={16} /> Flashcards
+            <Cards size={16} /> Questões
           </Link>
           <CourseMenu course={data} onEditCover={editCover} onNotice={(t) => setNotice(t)} />
         </div>

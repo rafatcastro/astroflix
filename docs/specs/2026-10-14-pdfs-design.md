@@ -38,3 +38,15 @@ lembra a página onde ela parou em qualquer computador da conta.
 ## Fora do escopo
 
 Anotações e marcações, PDF do Drive/Telegram, busca no texto, miniaturas laterais.
+
+## Categorias (v2.1.26)
+
+- As bibliotecas viraram **categorias**, o nível de cima de tudo: o menu principal (`/`) lista as
+  categorias, a última aberta primeiro (`collections.acessado_em`, desta máquina), e "Sem categoria"
+  para o que ainda não tem. Dentro: abas **Cursos | PDFs | Questões**.
+- O que era a "categoria" do PDF (Livros, Questões…) passou a se chamar **tipo** e é o filtro da aba
+  PDFs. O PDF ganhou `collection_id`.
+- **Questões**: os flashcards da categoria. Baralhos no Anki: `Learnflix::<categoria>` (gerais),
+  `Learnflix::<categoria>::Cursos::<curso>` e `Learnflix::<categoria>::PDFs::<PDF>`. Card de PDF
+  nasce no leitor (tecla C) com a página. Os cards já existentes em `Learnflix::Cursos::…` são
+  movidos (histórico de revisão junto) e o baralho antigo vazio é apagado.

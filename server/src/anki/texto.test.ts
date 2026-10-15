@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { baralhoDoCurso, deHtml, formatarMinuto, paraHtml } from './texto';
+import { baralhoDe, deHtml, formatarMinuto, paraHtml } from './texto';
 
 describe('texto dos cards', () => {
   it('vai para HTML escapado com <br> e volta igual', () => {
@@ -14,9 +14,12 @@ describe('texto dos cards', () => {
     expect(deHtml('caf&#233; &#x2192; ok')).toBe('café → ok');
   });
 
-  it('baralho do curso fica sob Learnflix::Cursos e :: no título não cria subbaralho', () => {
-    expect(baralhoDoCurso(null)).toBe('Learnflix::Cursos');
-    expect(baralhoDoCurso('  Pós::IA   Aplicada ')).toBe('Learnflix::Cursos::Pós:IA Aplicada');
+  it('baralho: Learnflix::<categoria>[::Cursos|PDFs::<título>], e :: num nome não cria subbaralho', () => {
+    expect(baralhoDe({ categoria: 'Pós', curso: '  Pós::IA   Aplicada ' })).toBe('Learnflix::Pós::Cursos::Pós:IA Aplicada');
+    expect(baralhoDe({ categoria: 'Pós', pdf: 'Cálculo I' })).toBe('Learnflix::Pós::PDFs::Cálculo I');
+    expect(baralhoDe({ categoria: 'Pós' })).toBe('Learnflix::Pós');
+    expect(baralhoDe({ categoria: null, curso: 'Redes' })).toBe('Learnflix::Sem categoria::Cursos::Redes');
+    expect(baralhoDe({ categoria: null, geral: true })).toBe('Learnflix');
   });
 
   it('minuto em m:ss ou h:mm:ss', () => {

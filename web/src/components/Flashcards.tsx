@@ -118,10 +118,13 @@ export function FormFlashcard({
 export function CartaoFlashcard({
   card,
   onIrPara,
+  onIrParaPagina,
   mostrarOrigem,
 }: {
   card: Flashcard;
   onIrPara?: (seg: number) => void;
+  /** No leitor de PDF: a página do card vira link. */
+  onIrParaPagina?: (pagina: number) => void;
   mostrarOrigem?: boolean;
 }) {
   const [aberto, setAberto] = useState(false);
@@ -155,6 +158,15 @@ export function CartaoFlashcard({
           >
             {formatarMinuto(card.minutoSec)}
           </button>
+        ) : card.pagina != null && onIrParaPagina ? (
+          <button
+            type="button"
+            onClick={() => onIrParaPagina(card.pagina!)}
+            title="Ir para esta página"
+            className="shrink-0 rounded bg-neutral-800 px-1.5 py-0.5 font-mono text-xs text-blue-300 hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            p. {card.pagina}
+          </button>
         ) : null}
         <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-neutral-100">{card.frente}</p>
       </div>
@@ -170,6 +182,7 @@ export function CartaoFlashcard({
         </button>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+        {mostrarOrigem && card.documentoId && card.pagina != null && <span>p. {card.pagina}</span>}
         {mostrarOrigem && card.lessonTitle && (
           <span className="min-w-0 truncate">
             {card.lessonTitle}

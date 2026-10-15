@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Documento } from '../api/client';
-import AbasPrincipais from '../components/AbasPrincipais';
+import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
+import { useCollections } from '../api/hooks';
 import { FileText, Plus, Settings as SettingsIcon, Check } from '../components/icons';
 import { escolherPasta, escolherPdfs } from '../lib/desktop';
 import { gerarCapa } from '../lib/pdf';
@@ -26,9 +27,10 @@ function progresso(d: Documento): number {
   return Math.round((d.pagina / d.paginas) * 100);
 }
 
-export default function Pdfs() {
+// A aba PDFs de uma categoria (`categoria` = id ou 'sem').
+export default function Pdfs({ categoria }: { categoria: string }) {
   const qc = useQueryClient();
-  const { data: docs, isLoading } = useQuery({ queryKey: ['documentos'], queryFn: api.listarDocumentos });
+  const { data: docs, isLoading } = useQuery({ queryKey: ['documentos', categoria], queryFn: () => api.listarDocumentos(categoria) });
   const [filtro, setFiltro] = useState<string | null>(null);
   const [menuAdicionar, setMenuAdicionar] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -36,12 +38,12 @@ export default function Pdfs() {
   const [acoes, setAcoes] = useState<Documento | null>(null);
 
   const categorias = useMemo(
-    () => [...new Set((docs ?? []).map((d) => d.categoria).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    () => [...new Set((docs ?? []).map((d) => d.tipo).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, 'pt-BR')),
     [docs],
   );
-  const semCategoria = (docs ?? []).some((d) => !d.categoria);
+  const semCategoria = (docs ?? []).some((d) => !d.tipo);
   const visiveis = (docs ?? []).filter((d) =>
-    filtro === null ? true : filtro === SEM_CATEGORIA ? !d.categoria : d.categoria === filtro,
+    filtro === null ? true : filtro === SEM_CATEGORIA ? !d.tipo : d.tipo === filtro,
   );
   // O filtro some quando a última da categoria sai dela.
   useEffect(() => {
@@ -125,27 +127,22 @@ export default function Pdfs() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="sr-only">PDFs</h1>
-          <AbasPrincipais />
-          {docs && docs.length > 0 && (
-            <p className="mt-1 text-sm text-neutral-500">
-              {docs.length} PDF{docs.length === 1 ? '' : 's'}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/settings"
-            aria-label="Configurações"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-          >
-            <SettingsIcon size={18} />
-          </Link>
-          {botaoAdicionar}
-        </div>
-      </header>
+      <CabecalhoCategoria
+        cat={categoria}
+        info={docs && docs.length > 0 ? `${docs.length} PDF${docs.length === 1 ? '' : 's'}` : undefined}
+        acoes={
+          <>
+            <Link
+              to="/settings"
+              aria-label="Configurações"
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
+            >
+              <SettingsIcon size={18} />
+            </Link>
+            {botaoAdicionar}
+          </>
+        }
+      />
 
       {aviso && (
         <div role="status" className="mb-4 flex items-start justify-between gap-3 rounded-lg bg-neutral-900 px-4 py-3 text-sm text-neutral-300">
@@ -157,7 +154,7 @@ export default function Pdfs() {
       )}
 
       {categorias.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Categorias">
+        <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Tipos">
           <button type="button" className={chip(filtro === null)} aria-pressed={filtro === null} onClick={() => setFiltro(null)}>
             Todas
           </button>
@@ -168,7 +165,7 @@ export default function Pdfs() {
           ))}
           {semCategoria && (
             <button type="button" className={chip(filtro === SEM_CATEGORIA)} aria-pressed={filtro === SEM_CATEGORIA} onClick={() => setFiltro(SEM_CATEGORIA)}>
-              Sem categoria
+              Sem tipo
             </button>
           )}
         </div>
@@ -197,16 +194,16 @@ export default function Pdfs() {
 
       {pedindoCategoria && (
         <DialogoCategoria
-          titulo="Em qual categoria?"
+          titulo="Que tipo de PDF?"
           categorias={categorias}
           inicial={filtro && filtro !== SEM_CATEGORIA ? filtro : ''}
           confirmar="Adicionar"
           onCancelar={() => setPedindoCategoria(null)}
-          onConfirmar={(categoria) => {
+          onConfirmar={(tipo) => {
             const alvo = pedindoCategoria;
             setPedindoCategoria(null);
             setAviso('Adicionando…');
-            adicionar.mutate({ ...alvo, categoria: categoria || null });
+            adicionar.mutate({ ...alvo, tipo: tipo || null, categoriaId: categoria === SEM ? null : categoria });
           }}
         />
       )}
@@ -271,7 +268,7 @@ function CartaoPdf({ d, onAcoes }: { d: Documento; onAcoes: () => void }) {
         ) : (
           ' '
         )}
-        {d.categoria && <span className="text-neutral-500"> · {d.categoria}</span>}
+        {d.tipo && <span className="text-neutral-500"> · {d.tipo}</span>}
       </div>
     </div>
   );
@@ -308,7 +305,7 @@ function DialogoCategoria({
         }}
       >
         <h2 className="font-medium text-neutral-100">{titulo}</h2>
-        <p className="mt-1 text-sm text-neutral-400">Livros, Questões, Apostilas… Vira um filtro da estante. Pode ficar em branco.</p>
+        <p className="mt-1 text-sm text-neutral-400">Livros, Questões, Apostilas… Vira um filtro da aba PDFs. Pode ficar em branco.</p>
         {categorias.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {categorias.map((c) => (
@@ -322,7 +319,7 @@ function DialogoCategoria({
           autoFocus
           value={valor}
           onChange={(e) => setValor(e.target.value)}
-          placeholder="Nova categoria"
+          placeholder="Novo tipo"
           maxLength={60}
           autoComplete="off"
           className={`${campo} mt-3`}
@@ -342,8 +339,9 @@ function DialogoCategoria({
 
 function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: string[]; onFechar: () => void }) {
   const qc = useQueryClient();
-  const [fluxo, setFluxo] = useState<'menu' | 'renomear' | 'categoria' | 'remover'>('menu');
+  const [fluxo, setFluxo] = useState<'menu' | 'renomear' | 'categoria' | 'mover' | 'remover'>('menu');
   const [titulo, setTitulo] = useState(d.titulo);
+  const { data: cats } = useCollections();
   const [erro, setErro] = useState<string | null>(null);
   const depois = () => {
     void qc.invalidateQueries({ queryKey: ['documentos'] });
@@ -369,12 +367,12 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
   if (fluxo === 'categoria') {
     return (
       <DialogoCategoria
-        titulo="Categoria"
+        titulo="Tipo"
         categorias={categorias}
-        inicial={d.categoria ?? ''}
+        inicial={d.tipo ?? ''}
         confirmar="Salvar"
         onCancelar={onFechar}
-        onConfirmar={(categoria) => editar.mutate({ categoria: categoria || null })}
+        onConfirmar={(tipo) => editar.mutate({ tipo: tipo || null })}
       />
     );
   }
@@ -396,7 +394,10 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
               Renomear…
             </button>
             <button type="button" className={itemMenu} onClick={() => setFluxo('categoria')}>
-              Categoria…
+              Tipo…
+            </button>
+            <button type="button" className={itemMenu} onClick={() => setFluxo('mover')}>
+              Mover para categoria…
             </button>
             <button type="button" className={itemMenu} onClick={() => editar.mutate({ lido: !d.lido })}>
               {d.lido ? 'Marcar como não lido' : 'Marcar como lido'}
@@ -428,6 +429,28 @@ function AcoesPdf({ d, categorias, onFechar }: { d: Documento; categorias: strin
               </button>
             </div>
           </form>
+        )}
+        {fluxo === 'mover' && (
+          <div className="max-h-72 overflow-y-auto">
+            {(cats ?? []).map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                className={`${itemMenu}${c.id === d.categoriaId ? ' text-blue-400' : ''}`}
+                onClick={() => editar.mutate({ categoriaId: c.id })}
+              >
+                {c.name}
+              </button>
+            ))}
+            {d.categoriaId && (
+              <button type="button" className={itemMenu} onClick={() => editar.mutate({ categoriaId: null })}>
+                Sem categoria
+              </button>
+            )}
+            <button type="button" className={`${itemMenu} text-neutral-400`} onClick={() => setFluxo('menu')}>
+              Voltar
+            </button>
+          </div>
         )}
         {fluxo === 'remover' && (
           <div className="p-2">

@@ -117,6 +117,6 @@ export function buildExport(db: Db, appVersion = 'dev'): LibraryExport {
     })),
     courseRoots,
     settings: { allowedRootsExtra: getAllowedRootsExtra(db) },
-    ...((gerais) => (gerais.length ? { flashcardsGerais: gerais } : {}))(cardsDe('f.course_id IS NULL')),
+    ...((gerais) => (gerais.length ? { flashcardsGerais: gerais } : {}))(cardsDe('f.course_id IS NULL AND f.documento_id IS NULL')),
   };
 }

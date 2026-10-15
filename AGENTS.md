@@ -7,7 +7,9 @@ Orientações para agentes de código (Claude Code, Codex e afins) trabalharem n
 **Learnflix** é um app local para assistir cursos em vídeo guardados em pastas do disco, com
 progresso confiável. Cada pasta escolhida vira um "curso"; o app escaneia, lista as aulas (com
 módulos, materiais, duração e capas), transmite o vídeo por HTTP Range e guarda posição e conclusão
-no SQLite. Cursos podem ser agrupados em **bibliotecas** (coleções).
+no SQLite. Tudo se organiza em **categorias** (a tabela `collections`, que antes eram as bibliotecas de
+cursos): o menu principal lista as categorias (a última aberta primeiro) e cada uma tem as abas
+Cursos, PDFs e Questões (flashcards do Anki).
 
 O Learnflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
@@ -161,7 +163,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Learnflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
-  dos campos e monta o baralho (`Learnflix::Cursos[::<curso>]`), `servicos` é o espelho local
+  dos campos e monta o baralho (`baralhoDe`: `Learnflix::<categoria>` para as gerais da categoria,
+  `…::Cursos::<curso>` e `…::PDFs::<PDF>` embaixo; sem categoria, `Learnflix::Sem categoria`; o
+  geral sem categoria, `Learnflix`). `flashcards.baralho` é onde o card está no Anki: o que
+  difere do baralho pedido (renomeou, mudou de categoria, ou veio da estrutura antiga
+  `Learnflix::Cursos`) é movido com `changeDeck`, e o baralho antigo que ficou vazio sai, `servicos` é o espelho local
   (tabela `flashcards`, v4) com a fila de pendentes: o Anki é a fonte da verdade, mas criar com ele
   fechado funciona e vai depois. Ao listar, relê as notas (edição lá vem para cá, nota apagada sai;
   se **nenhuma** for achada, assume outro perfil e não apaga nada). `routes/flashcards.ts` expõe a
@@ -242,9 +248,11 @@ re-apontar preserva o histórico.
 React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
 
 - `main.tsx`: providers (QueryClient, BrowserRouter).
-- `App.tsx`: as rotas `/` (Library), `/course/:id` (Course), `/lesson/:id` (Lesson),
+- `App.tsx`: as rotas `/` (Categorias, o menu principal), `/c/:cat` (Library, aba Cursos),
+  `/c/:cat/pdfs` (Pdfs), `/c/:cat/questoes` (Questoes), com `:cat` = id da categoria ou `sem`;
+  `CabecalhoCategoria` é o nome e as abas. Além delas, `/course/:id` (Course), `/lesson/:id` (Lesson),
   `/settings` (Settings), `/flashcards` (Flashcards, `?curso=<id>`), `/pdfs` (Pdfs) e `/pdf/:id`
-  (LeitorPdf). `AbasPrincipais` (Cursos | PDFs) é o menu principal das duas estantes.
+  (LeitorPdf).
 - `lib/pdf.ts`: carrega o pdf.js (`pdfjs-dist`, build legacy, por import dinâmico) só quando
   alguém abre um PDF ou falta uma capa, e gera as capas uma de cada vez.
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o

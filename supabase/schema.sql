@@ -133,6 +133,15 @@ create table if not exists public.documentos_por_maquina (
   primary key (documento_id, maquina_id)
 );
 
+-- Categorias (v2.1.26): o PDF ganhou categoria (a coleção) e o que era a
+-- categoria dele virou tipo; o flashcard pode ser de um PDF ou geral de uma
+-- categoria. `add column if not exists` deixa rodar de novo num projeto antigo.
+alter table public.documentos add column if not exists tipo text;
+alter table public.documentos add column if not exists colecao_id text;
+alter table public.flashcards add column if not exists documento_id text;
+alter table public.flashcards add column if not exists pagina integer;
+alter table public.flashcards add column if not exists colecao_id text;
+
 -- Progresso nunca anda para trás: assistir offline em duas máquinas e sincronizar
 -- depois não pode apagar o que uma delas assistiu (a regra do backup). Concluir ou
 -- desmarcar é uma escolha da pessoa: vale a mais recente.
