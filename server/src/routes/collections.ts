@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
-import type { Db } from '../db';
+import { transaction, type Db } from '../db';
 
 // Categorias (a tabela ainda se chama collections: eram as "bibliotecas" de cursos).
 // Cada uma junta cursos, PDFs e questões, e o menu principal as lista pela última
@@ -39,7 +39,7 @@ export async function collectionsRoutes(app: FastifyInstance, opts: { db: Db }):
   });
 
   app.post('/api/collections', async (req, reply) => {
-    const b = req.body as { name?: unknown; emoji?: unknown };
+    const b = req.body as { name?: unknown; emoji?: unknown; adotarSemCategoria?: unknown };
     if (typeof b?.name !== 'string' || b.name.trim() === '') {
       return reply.code(400).send({ error: 'invalid_name' });
     }
@@ -52,6 +52,15 @@ export async function collectionsRoutes(app: FastifyInstance, opts: { db: Db }):
       new Date().toISOString(),
       emoji ?? null,
     );
+    // "Sem categoria" ganhou nome: tudo o que estava sem vai para ela. As questões
+    // gerais sem categoria também (os cards de curso e PDF seguem o curso e o PDF).
+    if (b.adotarSemCategoria === true) {
+      transaction(db, () => {
+        db.prepare('UPDATE courses SET collection_id=? WHERE collection_id IS NULL').run(id);
+        db.prepare('UPDATE documentos SET collection_id=? WHERE collection_id IS NULL').run(id);
+        db.prepare('UPDATE flashcards SET collection_id=? WHERE collection_id IS NULL AND course_id IS NULL AND documento_id IS NULL').run(id);
+      });
+    }
     return reply.code(201).send({ id, name: b.name.trim(), emoji: emoji ?? null });
   });
 

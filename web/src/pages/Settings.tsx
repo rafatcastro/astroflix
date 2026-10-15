@@ -429,6 +429,14 @@ export default function Settings() {
   const [picking, setPicking] = useState(false);
   const [countdown, setCountdown] = useState<number>(() => getPref('player.countdownSeconds', 20));
   const [autoplay, setAutoplay] = useState<boolean>(() => getPref('player.autoplay', true));
+  // A mesma chave que a aba Cursos lê (libView).
+  const [visao, setVisao] = useState<'grid' | 'list'>(() => {
+    try {
+      return localStorage.getItem('libView') === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
   const [confirmReset, setConfirmReset] = useState<null | 'progress' | 'library'>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const arquivoRef = useRef<HTMLInputElement>(null);
@@ -541,6 +549,34 @@ export default function Settings() {
         >
           + Adicionar pasta-raiz
         </button>
+      </section>
+
+      <section className="mb-8">
+        <h2 className="mb-3 text-sm font-semibold text-neutral-300">Aparência</h2>
+        <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+          Cursos em
+          <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800" role="radiogroup" aria-label="Cursos em">
+            {(['grid', 'list'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={visao === v}
+                onClick={() => {
+                  setVisao(v);
+                  try {
+                    localStorage.setItem('libView', v);
+                  } catch {
+                    /* modo privado */
+                  }
+                }}
+                className={`min-h-[40px] px-3 ${visao === v ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+              >
+                {v === 'grid' ? 'Grade' : 'Lista'}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="mb-8">

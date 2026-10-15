@@ -337,8 +337,12 @@ export const api = {
   resetAllProgress: () => jsonFetch<{ deleted: number }>('/api/progress/reset', { method: 'POST' }),
   resetLibrary: () => jsonFetch<{ courses: number }>('/api/library/reset', { method: 'POST' }),
   listCollections: () => jsonFetch<Collection[]>('/api/collections'),
-  createCollection: (name: string, emoji?: string | null) =>
-    jsonFetch<{ id: string; name: string }>('/api/collections', { method: 'POST', body: JSON.stringify({ name, emoji: emoji ?? null }) }),
+  /** `adotarSemCategoria`: o que está sem categoria (cursos, PDFs, questões gerais) vai para a nova. */
+  createCollection: (name: string, emoji?: string | null, adotarSemCategoria = false) =>
+    jsonFetch<{ id: string; name: string }>('/api/collections', {
+      method: 'POST',
+      body: JSON.stringify({ name, emoji: emoji ?? null, adotarSemCategoria }),
+    }),
   editarCategoria: (id: string, body: { name?: string; emoji?: string | null }) =>
     jsonFetch<{ ok: true }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   renameCollection: (id: string, name: string) => jsonFetch<{ ok: true }>(`/api/collections/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
