@@ -78,26 +78,31 @@ export async function estudoRoutes(app: FastifyInstance, opts: { db: Db }): Prom
       mes: diaLocal(new Date(agora.getFullYear(), agora.getMonth(), 1)),
       total: '',
     };
-    const pom = db.prepare('SELECT COUNT(*) AS n FROM pomodoros WHERE dia >= ?');
-    const aula = db.prepare('SELECT COALESCE(SUM(segundos), 0) AS s FROM tempo_aula WHERE dia >= ?');
-    const periodo = (d: string) => ({
-      pomodoros: (pom.get(d) as { n: number }).n,
-      segundosAula: (aula.get(d) as { s: number }).s,
-    });
-    const porCategoria: Record<string, { pomodoros: number; segundosAula: number }> = {};
-    const chave = (id: string | null) => id ?? 'sem';
-    for (const r of db.prepare('SELECT collection_id AS c, COUNT(*) AS n FROM pomodoros WHERE dia = ? GROUP BY collection_id').all(desde.hoje) as any[]) {
-      (porCategoria[chave(r.c)] ??= { pomodoros: 0, segundosAula: 0 }).pomodoros = r.n;
-    }
-    for (const r of db.prepare('SELECT collection_id AS c, SUM(segundos) AS s FROM tempo_aula WHERE dia = ? GROUP BY collection_id').all(desde.hoje) as any[]) {
-      (porCategoria[chave(r.c)] ??= { pomodoros: 0, segundosAula: 0 }).segundosAula = r.s;
-    }
+    const pom = db.prepare('SELECT collection_id AS c, COUNT(*) AS n FROM pomodoros WHERE dia >= ? GROUP BY collection_id');
+    const aula = db.prepare('SELECT collection_id AS c, SUM(segundos) AS s FROM tempo_aula WHERE dia >= ? GROUP BY collection_id');
+    // Cada período leva a divisão por categoria: é ela que o gráfico de pizza desenha.
+    const periodo = (d: string) => {
+      const porCategoria: Record<string, { pomodoros: number; segundosAula: number }> = {};
+      const de = (id: string | null) => (porCategoria[id ?? 'sem'] ??= { pomodoros: 0, segundosAula: 0 });
+      let pomodoros = 0;
+      let segundosAula = 0;
+      for (const r of pom.all(d) as Array<{ c: string | null; n: number }>) {
+        de(r.c).pomodoros = r.n;
+        pomodoros += r.n;
+      }
+      for (const r of aula.all(d) as Array<{ c: string | null; s: number }>) {
+        de(r.c).segundosAula = r.s;
+        segundosAula += r.s;
+      }
+      return { pomodoros, segundosAula, porCategoria };
+    };
+    const hoje = periodo(desde.hoje);
     return {
-      hoje: periodo(desde.hoje),
+      hoje,
       semana: periodo(desde.semana),
       mes: periodo(desde.mes),
       total: periodo(desde.total),
-      porCategoria,
+      porCategoria: hoje.porCategoria,
     };
   });
 }

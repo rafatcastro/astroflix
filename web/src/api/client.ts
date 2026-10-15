@@ -281,14 +281,18 @@ async function telegramPost(url: string, link: string): Promise<RespostaTelegram
   return { tipo: 'erro', erro: corpo.error ?? 'telegram', esperaSeg: corpo.esperaSeg };
 }
 
-export interface PeriodoEstudo { pomodoros: number; segundosAula: number }
+export interface NumerosEstudo { pomodoros: number; segundosAula: number }
+export interface PeriodoEstudo extends NumerosEstudo {
+  /** Pelo id da categoria ('sem' = sem categoria). */
+  porCategoria: Record<string, NumerosEstudo>;
+}
 export interface ResumoEstudo {
   hoje: PeriodoEstudo;
   semana: PeriodoEstudo;
   mes: PeriodoEstudo;
   total: PeriodoEstudo;
-  /** De hoje, pelo id da categoria ('sem' = sem categoria). */
-  porCategoria: Record<string, PeriodoEstudo>;
+  /** O de hoje (o mesmo de hoje.porCategoria). */
+  porCategoria: Record<string, NumerosEstudo>;
 }
 
 export const api = {
