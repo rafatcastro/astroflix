@@ -508,7 +508,7 @@ export default function Settings() {
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
       <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-neutral-400 hover:text-neutral-200">
-        <ArrowLeft size={16} /> Biblioteca
+        <ArrowLeft size={16} /> Categorias
       </Link>
       <h1 className="mt-3 mb-6 text-2xl font-semibold tracking-tight">Configurações</h1>
 

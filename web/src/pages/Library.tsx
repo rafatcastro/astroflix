@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { cliqueFora, escolherPasta } from '../lib/desktop';
-import AbasPrincipais from '../components/AbasPrincipais';
+import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCollections, useCourseRoots, useCourses } from '../api/hooks';
@@ -14,7 +14,7 @@ import { api, type BatchImportResult, type Collection, type CourseRoot, type Cou
 import FfmpegBanner from '../components/FfmpegBanner';
 import Banner from '../components/Banner';
 import HelpLink from '../components/HelpLink';
-import { Cards, Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as SettingsIcon } from '../components/icons';
+import { Check, Download, HelpCircle, LayoutGrid, List, Play, Plus, Settings as SettingsIcon } from '../components/icons';
 
 // Parede de capas responsiva sem cliffs de breakpoint: as colunas se ajustam ao
 // espaço, mantendo o tamanho do card constante (auto-fill).
@@ -463,7 +463,8 @@ function CourseRootsSection({
   );
 }
 
-export default function Library() {
+// A aba Cursos de uma categoria (`categoria` = id ou 'sem').
+export default function Library({ categoria }: { categoria: string }) {
   const [tab, setTab] = useState<'active' | 'archived'>('active');
   // Grade (pôsteres) ou lista (linhas compactas). Preferência lembrada localmente.
   const [view, setView] = useState<'grid' | 'list'>(() => {
@@ -473,7 +474,11 @@ export default function Library() {
     setView(v);
     try { localStorage.setItem('libView', v); } catch { /* modo privado */ }
   };
-  const { data: courses, isLoading, isError } = useCourses(tab === 'archived');
+  const { data: todos, isLoading, isError } = useCourses(tab === 'archived');
+  const courses = useMemo(
+    () => todos?.filter((c) => (categoria === SEM ? !c.collectionId : c.collectionId === categoria)),
+    [todos, categoria],
+  );
   const { data: collections } = useCollections();
   const [picking, setPicking] = useState<null | 'drive' | 'telegram'>(null);
   // Pasta com vídeo só nas subpastas: um curso com módulos ou uma estante de cursos?
@@ -522,7 +527,7 @@ export default function Library() {
     }
     qc.invalidateQueries({ queryKey: ['courses'] });
     qc.invalidateQueries({ queryKey: ['collections'] });
-    setNotice(`${collectionId ? 'Adicionados à coleção' : 'Removidos da coleção'}: ${ok} curso${ok === 1 ? '' : 's'}${fail ? ` · ${fail} falhou` : ''}.`);
+    setNotice(`${collectionId ? 'Movidos para a categoria' : 'Tirados da categoria'}: ${ok} curso${ok === 1 ? '' : 's'}${fail ? ` · ${fail} falhou` : ''}.`);
     exitSelect();
   };
   const doBatchCreateAssign = async () => {
@@ -531,7 +536,7 @@ export default function Library() {
       const col = await api.createCollection(batchColName.trim());
       await doBatchAssign(col.id);
     } catch {
-      setNotice('Falha ao criar a coleção. Tente novamente.');
+      setNotice('Falha ao criar a categoria. Tente novamente.');
     }
   };
   const doBatchArchive = async () => {
@@ -567,7 +572,8 @@ export default function Library() {
   }, [courses, tab]);
   const hasActivity = tab === 'active' && !!ordered?.[0]?.lastActivityAt;
 
-  const hasCollections = tab === 'active' && (collections?.length ?? 0) > 0;
+  // Dentro de uma categoria não há agrupamento: as antigas coleções são as próprias categorias.
+  const hasCollections = false;
   const uncollected = useMemo(() => (ordered ?? []).filter((c) => !c.collectionId), [ordered]);
   const visible = useMemo(() => {
     const list = ordered ?? [];
@@ -583,7 +589,7 @@ export default function Library() {
       qc.invalidateQueries({ queryKey: ['collections'] });
       setNotice('Coleção criada. Use o menu ⋯ de um curso para adicioná-lo a ela.');
     } catch {
-      setNotice('Falha ao criar a coleção. Tente novamente.');
+      setNotice('Falha ao criar a categoria. Tente novamente.');
     }
     setCreatingCol(false);
   };
@@ -594,6 +600,8 @@ export default function Library() {
     setNotice('Adicionando curso…');
     try {
       const r = await api.createCourse(path);
+      // Adicionado dentro de uma categoria: entra nela.
+      if (categoria !== SEM && !r.existing) await api.patchCourse(r.id, { collectionId: categoria });
       refresh();
       setNotice(r.existing ? 'Essa pasta já era um curso — re-escaneei (arquivos novos incluídos, sem duplicar).' : 'Curso adicionado.');
     } catch {
@@ -606,6 +614,7 @@ export default function Library() {
     setNotice('Importando cursos…');
     try {
       const r = await api.batchImport(path);
+      if (categoria !== SEM) for (const c of r.courses) await api.patchCourse(c.id, { collectionId: categoria }).catch(() => undefined);
       setNotice(null);
       setBatchResult({ path, result: r });
       refresh();
@@ -729,17 +738,11 @@ export default function Library() {
 
   return (
     <div className={`mx-auto max-w-6xl px-6 py-8${selectMode ? ' pb-28' : ''}`}>
-      <header className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="sr-only">Meus cursos</h1>
-          <AbasPrincipais />
-          {courses && courses.length > 0 && (
-            <p className="mt-1 text-sm text-neutral-500">
-              {courses.length} curso{courses.length === 1 ? '' : 's'}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      <CabecalhoCategoria
+        cat={categoria}
+        info={courses && courses.length > 0 ? `${courses.length} curso${courses.length === 1 ? '' : 's'}` : undefined}
+        acoes={
+          <>
           <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800 text-sm">
             <button
               type="button"
@@ -800,14 +803,6 @@ export default function Library() {
             </a>
           )}
           <Link
-            to="/flashcards"
-            aria-label="Flashcards"
-            title="Flashcards"
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
-          >
-            <Cards size={18} />
-          </Link>
-          <Link
             to="/settings"
             aria-label="Configurações"
             className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800"
@@ -824,8 +819,9 @@ export default function Library() {
             </button>
           )}
           {tab === 'active' && courses && courses.length > 0 && addMenuButton}
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <FfmpegBanner />
       {notice && (
@@ -964,7 +960,7 @@ export default function Library() {
                 onClick={() => { setBatchColName(''); setBatchAssign(true); }}
                 className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
               >
-                Adicionar à coleção…
+                Mover para categoria…
               </button>
               <button
                 type="button"
@@ -986,10 +982,10 @@ export default function Library() {
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={() => setBatchAssign(false)}>
           <div className="w-full max-w-sm rounded-xl bg-neutral-900 p-5" onClick={(e) => e.stopPropagation()}>
             <div className="mb-3 font-medium">
-              Adicionar {selected.size} curso{selected.size === 1 ? '' : 's'} à coleção
+              Mover {selected.size} curso{selected.size === 1 ? '' : 's'} para a categoria
             </div>
             {(collections ?? []).length === 0 && (
-              <p className="mb-3 text-sm text-neutral-500">Nenhuma coleção ainda — crie a primeira abaixo.</p>
+              <p className="mb-3 text-sm text-neutral-500">Nenhuma categoria ainda — crie a primeira abaixo.</p>
             )}
             {(collections ?? []).length > 0 && (
               <div className="mb-3 max-h-56 space-y-1 overflow-y-auto">
@@ -1011,7 +1007,7 @@ export default function Library() {
                 onClick={() => void doBatchAssign(null)}
                 className="mb-3 min-h-[44px] w-full rounded-lg bg-neutral-800 px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-700"
               >
-                Remover da coleção
+                Tirar da categoria
               </button>
             )}
             <div className="flex gap-2">
@@ -1019,7 +1015,7 @@ export default function Library() {
                 value={batchColName}
                 onChange={(e) => setBatchColName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && doBatchCreateAssign()}
-                placeholder="Nova coleção"
+                placeholder="Nova categoria"
               />
               <button
                 type="button"
@@ -1034,8 +1030,8 @@ export default function Library() {
         </div>
       )}
 
-      {picking === 'drive' && <DriveLinkModal onClose={() => setPicking(null)} />}
-      {picking === 'telegram' && <TelegramLinkModal onClose={() => setPicking(null)} />}
+      {picking === 'drive' && <DriveLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
+      {picking === 'telegram' && <TelegramLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {ambigua && (
         <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={() => setAmbigua(null)}>
           <div role="dialog" aria-modal="true" aria-labelledby="ambigua-titulo" className="w-full max-w-sm rounded-xl bg-neutral-900 p-5" onClick={(e) => e.stopPropagation()}>

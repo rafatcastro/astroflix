@@ -18,8 +18,10 @@ const botaoSecundario =
  * login por QR aparece no meio do caminho e, ao concluir, o link é lido de novo
  * sozinho. `soLogin` usa o mesmo diálogo só para conectar (Configurações, player).
  */
-export default function TelegramLinkModal({ onClose, soLogin, onConectado }: {
+export default function TelegramLinkModal({ onClose, soLogin, onConectado, categoriaId }: {
   onClose: () => void;
+  /** Aberto dentro de uma categoria: o curso entra nela. */
+  categoriaId?: string;
   soLogin?: boolean;
   onConectado?: () => void;
 }) {
@@ -58,8 +60,13 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado }: {
 
   const tratar = (res: RespostaTelegram) => {
     if (res.tipo === 'criado') {
-      qc.invalidateQueries({ queryKey: ['courses'] });
-      navigate(`/course/${res.id}`);
+      const id = res.id;
+      const ir = () => {
+        qc.invalidateQueries({ queryKey: ['courses'] });
+        navigate(`/course/${id}`);
+      };
+      if (categoriaId) void api.patchCourse(id, { collectionId: categoriaId }).then(ir, ir);
+      else ir();
       onClose();
       return;
     }

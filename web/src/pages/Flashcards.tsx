@@ -1,4 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../api/client';
 import { useCourses, useFlashcards, useMudarFlashcards } from '../api/hooks';
 import { AvisoAnki, CartaoFlashcard, FormFlashcard } from '../components/Flashcards';
 import { ArrowLeft } from '../components/icons';
@@ -7,8 +9,7 @@ import { ArrowLeft } from '../components/icons';
 // de uma aula (geral, ou do curso todo); os de aula nascem no painel do player.
 // Os nomes dos baralhos aparecem por extenso porque é por eles que a pessoa vai
 // procurar os cards no Anki.
-const BARALHO_RAIZ = 'Learnflix::Cursos';
-const baralhoDoCurso = (titulo: string) => `${BARALHO_RAIZ}::${titulo.replace(/::/g, ':').replace(/\s+/g, ' ').trim()}`;
+const BARALHO_RAIZ = 'Learnflix';
 
 export default function Flashcards() {
   const [params, setParams] = useSearchParams();
@@ -17,6 +18,10 @@ export default function Flashcards() {
   const curso = cursos?.find((c) => c.id === cursoId) ?? null;
   const { data, isLoading } = useFlashcards(cursoId ? { courseId: cursoId } : { geral: true });
   const { criar } = useMudarFlashcards();
+  const { data: destino } = useQuery({
+    queryKey: ['baralho', 'curso', cursoId],
+    queryFn: () => api.baralho(cursoId ? { courseId: cursoId } : {}),
+  });
 
   const deCurso = data?.cards.filter((c) => c.lessonId == null) ?? [];
   const deAulas = data?.cards.filter((c) => c.lessonId != null) ?? [];
@@ -27,7 +32,7 @@ export default function Flashcards() {
         to={cursoId ? `/course/${cursoId}` : '/'}
         className="inline-flex items-center gap-1.5 rounded text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
       >
-        <ArrowLeft size={16} /> {cursoId ? 'Curso' : 'Biblioteca'}
+        <ArrowLeft size={16} /> {cursoId ? 'Curso' : 'Categorias'}
       </Link>
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">Flashcards</h1>
       <p className="mt-1 text-sm text-neutral-400">
@@ -54,7 +59,7 @@ export default function Flashcards() {
       <section className="mt-6 rounded-xl bg-neutral-900/60 p-4">
         <h2 className="text-sm font-semibold text-neutral-300">{curso ? 'Novo card do curso' : 'Novo card geral'}</h2>
         <p className="mb-3 mt-0.5 text-xs text-neutral-500">
-          Vai para <code>{curso ? baralhoDoCurso(curso.title) : BARALHO_RAIZ}</code>.
+          Vai para <code>{destino?.baralho ?? '…'}</code>.
           {curso ? ' Para prender o card a um momento do vídeo, crie pelo painel da aula (tecla C).' : ''}
         </p>
         <FormFlashcard

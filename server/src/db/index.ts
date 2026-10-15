@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 6;
+const ULTIMA_VERSAO = 7;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -276,6 +276,42 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
                 INSERT INTO nuvem_fila (tabela, chave) VALUES ('documento', OLD.id); END;
       `);
       pragma(db, 'user_version = 6');
+    });
+  }
+  if (version < 7 && ate >= 7) {
+    // Categorias: as bibliotecas (collections) viram o nível de cima de tudo, com
+    // cursos, PDFs e questões dentro. `acessado_em` ordena o menu principal (a
+    // última aberta primeiro) e é desta máquina, por isso fica fora dos gatilhos.
+    // A "categoria" que o PDF tinha (Livros, Questões…) passa a se chamar tipo.
+    // Flashcards ganham a origem PDF (documento + página) e a questão geral de uma
+    // categoria (collection_id). `baralho` é onde o card está no Anki agora: quando
+    // difere do que o curso/PDF/categoria pede (renomeou, mudou de categoria), o
+    // card é movido lá.
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE collections ADD COLUMN acessado_em TEXT;
+        ALTER TABLE documentos RENAME COLUMN categoria TO tipo;
+        ALTER TABLE documentos ADD COLUMN collection_id TEXT REFERENCES collections(id) ON DELETE SET NULL;
+        ALTER TABLE flashcards ADD COLUMN documento_id TEXT REFERENCES documentos(id) ON DELETE CASCADE;
+        ALTER TABLE flashcards ADD COLUMN pagina INTEGER;
+        ALTER TABLE flashcards ADD COLUMN collection_id TEXT REFERENCES collections(id) ON DELETE SET NULL;
+        ALTER TABLE flashcards ADD COLUMN baralho TEXT;
+        CREATE INDEX idx_flashcards_documento ON flashcards(documento_id);
+        DROP TRIGGER nuvem_documentos_upd;
+        CREATE TRIGGER nuvem_documentos_upd AFTER UPDATE OF titulo, tipo, collection_id, caminho, paginas, pagina, lido ON documentos
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'documento' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('documento', NEW.id); END;
+        DROP TRIGGER nuvem_flashcards_upd;
+        CREATE TRIGGER nuvem_flashcards_upd AFTER UPDATE OF frente, verso, lesson_id, course_id, minuto_sec, anki_note_id, pendente,
+            documento_id, pagina, collection_id ON flashcards
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN DELETE FROM nuvem_fila WHERE tabela = 'flashcard' AND chave = NEW.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('flashcard', NEW.id);
+                DELETE FROM nuvem_fila WHERE tabela = 'flashcard' AND chave = OLD.id;
+                INSERT INTO nuvem_fila (tabela, chave) VALUES ('flashcard', OLD.id); END;
+      `);
+      pragma(db, 'user_version = 7');
     });
   }
 }

@@ -36,12 +36,12 @@ function montar() {
 describe('documentos (PDFs)', () => {
   it('adiciona uma pasta: cada PDF dentro dela, subpastas inclusive, sem ocultos nem outros arquivos', async () => {
     const { post, listar } = montar();
-    const r = await post({ pasta: path.join(raiz, 'Livros'), categoria: '  Livros ' });
+    const r = await post({ pasta: path.join(raiz, 'Livros'), tipo: '  Livros ' });
     expect(r.statusCode).toBe(201);
     expect(r.json()).toMatchObject({ criados: 3, jaExistiam: 0 });
     const lista = await listar();
     expect(lista.map((d: any) => d.titulo)).toEqual(['Livro 2', 'Livro 10', 'questoes 2024']);
-    expect(lista[0]).toMatchObject({ categoria: 'Livros', pagina: 1, lido: false, disponivel: true, temCapa: false });
+    expect(lista[0]).toMatchObject({ tipo: 'Livros', categoriaId: null, pagina: 1, lido: false, disponivel: true, temCapa: false });
     // De novo: não duplica.
     expect((await post({ pasta: path.join(raiz, 'Livros') })).json()).toMatchObject({ criados: 0, jaExistiam: 3 });
   });
@@ -82,8 +82,8 @@ describe('documentos (PDFs)', () => {
     expect(d).toMatchObject({ pagina: 300, lido: true });
     d = (await patch({ lido: false })).json();
     expect(d).toMatchObject({ lido: false, lidoEm: null });
-    d = (await patch({ titulo: 'Cálculo I', categoria: 'Apostilas' })).json();
-    expect(d).toMatchObject({ titulo: 'Cálculo I', categoria: 'Apostilas', pagina: 300 });
+    d = (await patch({ titulo: 'Cálculo I', tipo: 'Apostilas' })).json();
+    expect(d).toMatchObject({ titulo: 'Cálculo I', tipo: 'Apostilas', pagina: 300 });
   });
 
   it('remover tira só do app (o arquivo fica) e leva a capa', async () => {
@@ -119,5 +119,19 @@ describe('documentos (PDFs)', () => {
     const { db, post } = montar();
     await post({ caminhos: [path.join(raiz, 'Livros', 'Livro 10.pdf')] });
     expect(db.prepare("SELECT COUNT(*) AS n FROM nuvem_fila WHERE tabela='documento'").get()).toEqual({ n: 1 });
+  });
+
+  it('categoria: adicionar dentro dela, filtrar por ela e mudar de categoria', async () => {
+    const { app, db, post } = montar();
+    db.prepare("INSERT INTO collections (id, name, created_at) VALUES ('k1', 'Pós', 'x')").run();
+    const [id] = (await post({ caminhos: [path.join(raiz, 'Livros', 'Livro 10.pdf')], categoriaId: 'k1' })).json().ids;
+    await post({ caminhos: [path.join(raiz, 'Livros', 'Livro 2.PDF')] });
+    const lista = async (q: string) => (await app.inject({ method: 'GET', url: `/api/documentos?categoria=${q}` })).json();
+    expect((await lista('k1')).map((d: any) => d.id)).toEqual([id]);
+    expect(await lista('sem')).toHaveLength(1);
+    await app.inject({ method: 'PATCH', url: `/api/documentos/${id}`, payload: { categoriaId: null } });
+    expect(await lista('sem')).toHaveLength(2);
+    const cols = (await app.inject({ method: 'GET', url: '/api/collections' })).json();
+    expect(cols[0]).toMatchObject({ name: 'Pós', pdfCount: 0, acessadoEm: null });
   });
 });
