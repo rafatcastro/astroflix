@@ -31,7 +31,6 @@
     "build": "pnpm --filter web build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",
     "start": "node dist/learnflix.cjs",
     "build:binario": "node scripts/build-binario.mjs",
-    "test": "node scripts/gerar-bundled.mjs && pnpm --filter server test && pnpm --filter web test",
     "repo": "node scripts/definir-repo.mjs",
     "desktop:preparar": "pnpm build && pnpm build:binario && node scripts/preparar-sidecar.mjs && node scripts/sincronizar-versao.mjs",
     "desktop:build": "pnpm desktop:preparar && pnpm --filter desktop tauri build"

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Db } from '../db';
 import type { CredenciaisGoogle, Fetch } from '../drive/tipos';
+import { ESCOPOS } from '../drive/auth';
 import { FalhaNuvem, type ClienteSupabase, type SessaoSupabase } from './cliente';
 
 // A conta do Astroflix: login com Google (o mesmo cliente OAuth e o mesmo PKCE
@@ -34,6 +35,8 @@ export function criarServicosConta(deps: {
   credenciaisGoogle: () => CredenciaisGoogle;
   /** Depois de entrar: a sincronização prepara o cache (troca de conta, primeira subida). */
   aoEntrar?: (s: SessaoSupabase) => void;
+  /** A pessoa deixou marcado o acesso ao Drive na tela do Google: vira a conexão do Drive. */
+  aoConcederDrive?: (t: { refreshToken: string; email: string | null; accessToken?: string; expiresIn?: number }) => void;
   agora?: () => number;
 }): ServicosConta {
   const { db, supabase } = deps;
@@ -57,7 +60,15 @@ export function criarServicosConta(deps: {
       .run(K_SESSAO, JSON.stringify(s));
   const apagar = () => db.prepare('DELETE FROM settings WHERE key=?').run(K_SESSAO);
 
-  async function trocarCode(code: string, pend: { verifier: string; redirectUri: string }): Promise<string | null> {
+  interface RespostaCode {
+    id_token?: string;
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+  }
+
+  async function trocarCode(code: string, pend: { verifier: string; redirectUri: string }): Promise<RespostaCode | null> {
     const c = deps.credenciaisGoogle();
     const form = new URLSearchParams({
       grant_type: 'authorization_code',
@@ -73,8 +84,8 @@ export function criarServicosConta(deps: {
       body: form.toString(),
       signal: AbortSignal.timeout(15_000),
     });
-    const j = (await res.json().catch(() => ({}))) as { id_token?: string };
-    return res.ok && j.id_token ? j.id_token : null;
+    const j = (await res.json().catch(() => ({}))) as RespostaCode;
+    return res.ok && j.id_token ? j : null;
   }
 
   async function concluir(p: { code?: string; state?: string; error?: string }): Promise<{ ok: true } | { ok: false; motivo: MotivoLogin }> {
@@ -85,20 +96,26 @@ export function criarServicosConta(deps: {
     if (!pend || pend.expira < agora()) return { ok: false, motivo: 'state-invalido' };
     if (p.error) return { ok: false, motivo: 'negado' };
     if (!p.code) return { ok: false, motivo: 'troca-falhou' };
-    let idToken: string | null;
+    let tokens: RespostaCode | null;
     try {
-      idToken = await trocarCode(p.code, pend);
+      tokens = await trocarCode(p.code, pend);
     } catch {
       return { ok: false, motivo: 'sem-conexao' };
     }
-    if (!idToken) return { ok: false, motivo: 'troca-falhou' };
+    if (!tokens?.id_token) return { ok: false, motivo: 'troca-falhou' };
     let s: SessaoSupabase;
     try {
-      s = await supabase.entrarComIdToken(idToken);
+      s = await supabase.entrarComIdToken(tokens.id_token);
     } catch (e) {
       return { ok: false, motivo: e instanceof FalhaNuvem && e.tipo === 'sem-conexao' ? 'sem-conexao' : 'nuvem-recusou' };
     }
     gravar(s);
+    // A tela do Google deixa desmarcar o Drive: só conecta se ele veio mesmo. Sem
+    // ele, a interface mostra "Conectar o Google Drive" no lugar de importar.
+    const drive = ESCOPOS[0];
+    if (tokens.refresh_token && (tokens.scope ?? '').split(' ').includes(drive)) {
+      deps.aoConcederDrive?.({ refreshToken: tokens.refresh_token, email: s.email ?? null, accessToken: tokens.access_token, expiresIn: tokens.expires_in });
+    }
     deps.aoEntrar?.(s);
     return { ok: true };
   }
@@ -120,13 +137,18 @@ export function criarServicosConta(deps: {
         client_id: c.clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: 'openid email profile',
+        // O Drive vem junto, logo na entrada, para a pessoa não ter de autorizar de novo
+        // na primeira importação. Offline: o Drive precisa do refresh token.
+        scope: `openid email profile ${ESCOPOS[0]}`,
+        access_type: 'offline',
+        include_granted_scopes: 'true',
         code_challenge: createHash('sha256').update(verifier).digest('base64url'),
         code_challenge_method: 'S256',
         state,
         // Escolher a conta sempre: no mesmo navegador pode haver várias, e entrar
         // na errada mostraria a biblioteca de outra pessoa.
-        prompt: 'select_account',
+        // consent: sem ele, quem já autorizou antes não recebe outro refresh token.
+        prompt: 'select_account consent',
       });
       return `${URL_AUTORIZAR}?${q.toString()}`;
     },

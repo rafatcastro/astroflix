@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { api, type FiltroFlashcards } from './client';
+import { autorizarNoGoogle } from './driveAuth';
 
 export const useCourses = (archived?: boolean) => useQuery({ queryKey: ['courses', { archived: !!archived }], queryFn: () => api.listCourses(archived) });
 // Enquanto a pasta do Drive é lida em segundo plano, pergunta de novo a cada
@@ -51,4 +53,27 @@ export function useSetComplete(courseId?: string) {
       qc.invalidateQueries({ queryKey: ['courses'] });
     },
   });
+}
+
+// O acesso ao Drive é pedido junto com o login da conta; quem desmarcou lá não vê
+// "Do Google Drive" nos menus, e sim "Conectar o Google Drive", que pede só ele.
+export function useConexaoDrive() {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['driveStatus'], queryFn: api.driveStatus });
+  const [conectando, setConectando] = useState(false);
+  async function conectar(): Promise<boolean> {
+    setConectando(true);
+    try {
+      const { url } = await api.driveIniciarAuth();
+      const ok = await autorizarNoGoogle(url);
+      await qc.invalidateQueries({ queryKey: ['driveStatus'] });
+      return ok;
+    } catch {
+      return false;
+    } finally {
+      setConectando(false);
+    }
+  }
+  // null enquanto não se sabe: os menus mantêm a opção de importar.
+  return { conectado: data ? data.conectado : null, email: data?.email ?? null, conectando, conectar };
 }

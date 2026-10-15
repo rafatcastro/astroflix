@@ -76,6 +76,7 @@ export function buildApp(
     fetch: opts?.fetch ?? globalThis.fetch,
     supabase,
     credenciaisGoogle: () => credenciaisGoogle(db),
+    aoConcederDrive: (t) => drive.auth.adotar(t),
     aoEntrar: (s) => {
       sinc?.aoEntrar(s.userId);
       if (opts?.exigirConta) sinc?.iniciar();

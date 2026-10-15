@@ -1,69 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { cliqueFora } from '../lib/desktop';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, type CredencialDrive, type ImportPlan } from '../api/client';
+import { cliqueFora } from '../lib/desktop';
+import { api, type Collection, type CredencialDrive } from '../api/client';
+import { useCollections, useConexaoDrive } from '../api/hooks';
 import { getPref, setPref } from '../lib/prefs';
-import DirPicker from '../components/DirPicker';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Banner from '../components/Banner';
-import { ArrowLeft, Download, Upload } from '../components/icons';
+import { ArrowLeft } from '../components/icons';
 
 const plural = (n: number) => (n === 1 ? '' : 's');
 
-// A prévia é o momento em que a pessoa decide. Lista item a item em vez de uma
-// frase corrida, e diz o que acontece com cada grupo — principalmente com os
-// cursos que já existem, que é onde mora o medo de perder progresso.
-function PreviaDoImport({ plan }: { plan: ImportPlan }) {
-  const nada = plan.created === 0 && plan.merged === 0 && plan.collectionsCreated === 0 && plan.newRoots.length === 0 &&
-    plan.driveAusentes.length === 0;
-  if (nada) return <>Este arquivo não traz nada que você já não tenha. Importar não mudaria nada.</>;
 
-  return (
-    <ul className="space-y-1.5">
-      {plan.created > 0 && (
-        <li>
-          <strong className="text-neutral-200">{plan.created}</strong> curso{plural(plan.created)} novo
-          {plural(plan.created)}
-        </li>
-      )}
-      {plan.merged > 0 && (
-        <li>
-          <strong className="text-neutral-200">{plan.merged}</strong> já existe{plan.merged === 1 ? '' : 'm'} aqui — fica
-          o progresso mais avançado dos dois, e aula concluída não volta atrás
-        </li>
-      )}
-      {plan.collectionsCreated > 0 && (
-        <li>
-          <strong className="text-neutral-200">{plan.collectionsCreated}</strong> biblioteca
-          {plural(plan.collectionsCreated)} nova{plural(plan.collectionsCreated)}
-        </li>
-      )}
-      {plan.missingFolder > 0 && (
-        <li>
-          <strong className="text-neutral-200">{plan.missingFolder}</strong> com a pasta não encontrada nesta máquina (
-          {plan.missingFolderTitles.slice(0, 3).join(', ')}
-          {plan.missingFolderTitles.length > 3 ? '…' : ''}) — entra{plan.missingFolder === 1 ? '' : 'm'} assim mesmo, com
-          o progresso; depois use “Re-apontar pasta…” no menu do curso
-        </li>
-      )}
-      {plan.driveAusentes.length > 0 && (
-        <li>
-          <strong className="text-neutral-200">{plan.driveAusentes.length}</strong> curso
-          {plural(plan.driveAusentes.length)} do Google Drive ou do Telegram — adicione o link e importe de novo para trazer o progresso
-        </li>
-      )}
-      {plan.newRoots.length > 0 && (
-        <li>
-          libera o app para ler {plan.newRoots.length === 1 ? 'a pasta' : 'as pastas'}{' '}
-          <strong className="text-neutral-200">{plan.newRoots.join(', ')}</strong> — só importe se este arquivo for seu
-        </li>
-      )}
-    </ul>
-  );
-}
 
 const CAMPOS_DRIVE: { chave: CredencialDrive; rotulo: string; segredo?: boolean }[] = [
   { chave: 'clientId', rotulo: 'ID do cliente OAuth' },
@@ -81,6 +31,7 @@ const ERRO_NUVEM: Record<string, string> = {
 };
 
 // Conta e nuvem: quem está usando, quando sincronizou e o que ainda falta subir.
+
 function SecaoConta() {
   const qc = useQueryClient();
   const { data: conta } = useQuery({ queryKey: ['conta'], queryFn: api.conta, refetchInterval: 15_000 });
@@ -207,6 +158,7 @@ function SecaoAnki() {
 function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const { data: status } = useQuery({ queryKey: ['driveStatus'], queryFn: api.driveStatus });
+  const conexao = useConexaoDrive();
   const [campos, setCampos] = useState<Record<CredencialDrive, string>>({ clientId: '', clientSecret: '', apiKey: '' });
   const [salvando, setSalvando] = useState(false);
 
@@ -269,7 +221,21 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
             </button>
           </>
         ) : (
-          <span className="py-2 text-neutral-400">{status ? 'Nenhuma conta conectada' : 'Carregando…'}</span>
+          <>
+            <span className="py-2 text-neutral-400">{status ? 'Não conectado' : 'Carregando…'}</span>
+            {status && (
+              <button
+                type="button"
+                disabled={conexao.conectando}
+                onClick={() =>
+                  void conexao.conectar().then((ok) => onNotice(ok ? 'Google Drive conectado.' : 'A autorização do Google não foi concluída.'))
+                }
+                className="min-h-[44px] shrink-0 rounded-lg bg-blue-600 px-3 text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+              >
+                {conexao.conectando ? 'Esperando o Google…' : 'Conectar o Google Drive'}
+              </button>
+            )}
+          </>
         )}
       </div>
       <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
@@ -424,9 +390,7 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
 
 export default function Settings() {
   const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings });
   const { data: info } = useQuery({ queryKey: ['info'], queryFn: api.getInfo });
-  const [picking, setPicking] = useState(false);
   const [countdown, setCountdown] = useState<number>(() => getPref('player.countdownSeconds', 20));
   const [autoplay, setAutoplay] = useState<boolean>(() => getPref('player.autoplay', true));
   // A mesma chave que a aba Cursos lê (libView).
@@ -437,80 +401,21 @@ export default function Settings() {
       return 'grid';
     }
   });
-  const [confirmReset, setConfirmReset] = useState<null | 'progress' | 'library'>(null);
+  const { data: categorias } = useCollections();
+  const [apagando, setApagando] = useState<Collection | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const arquivoRef = useRef<HTMLInputElement>(null);
-  // Guarda o arquivo junto com a prévia: confirmar precisa mandar exatamente o
-  // mesmo conteúdo que gerou aquelas contagens.
-  const [previa, setPrevia] = useState<{ plan: ImportPlan; data: unknown } | null>(null);
-  const [importando, setImportando] = useState(false);
 
-  const escolherArquivo = async (file: File) => {
-    setNotice(null);
-    let data: unknown;
+  const apagarCategoria = async () => {
+    const c = apagando;
+    setApagando(null);
+    if (!c) return;
     try {
-      data = JSON.parse(await file.text());
+      await api.deleteCollection(c.id);
+      void qc.invalidateQueries();
+      setNotice(`Categoria "${c.name}" apagada. O que estava nela foi para Sem categoria.`);
     } catch {
-      setNotice('Não deu para ler esse arquivo — ele não é um JSON válido.');
-      return;
+      setNotice('Não deu para apagar a categoria. Tente de novo.');
     }
-    try {
-      setPrevia({ plan: await api.importPreview(data), data });
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Não deu para ler esse arquivo.');
-    }
-  };
-
-  const doImport = async () => {
-    if (!previa) return;
-    const { data } = previa;
-    setPrevia(null);
-    setImportando(true);
-    try {
-      const r = await api.importLibrary(data);
-      qc.invalidateQueries();
-      const partes = [
-        r.created > 0 ? `${r.created} curso${plural(r.created)} novo${plural(r.created)}` : null,
-        r.merged > 0 ? `${r.merged} atualizado${plural(r.merged)}` : null,
-      ].filter(Boolean);
-      setNotice(
-        partes.length
-          ? `Importação concluída: ${partes.join(', ')}. Nada do que você já tinha foi perdido.`
-          : 'Importação concluída — esse arquivo não trazia nada de novo.',
-      );
-    } catch (e) {
-      setNotice(e instanceof Error ? e.message : 'Falha ao importar. Tente novamente.');
-    } finally {
-      setImportando(false);
-    }
-  };
-
-  const doResetProgress = async () => {
-    setConfirmReset(null);
-    try {
-      const r = await api.resetAllProgress();
-      qc.invalidateQueries({ queryKey: ['courses'] });
-      setNotice(`Progresso zerado em toda a biblioteca (${r.deleted} registro${r.deleted === 1 ? '' : 's'}).`);
-    } catch {
-      setNotice('Falha ao zerar o progresso. Tente novamente.');
-    }
-  };
-
-  const doResetLibrary = async () => {
-    setConfirmReset(null);
-    try {
-      const r = await api.resetLibrary();
-      qc.invalidateQueries();
-      setNotice(`Biblioteca zerada: ${r.courses} curso${r.courses === 1 ? '' : 's'} removido${r.courses === 1 ? '' : 's'}. Os vídeos no disco estão intactos.`);
-    } catch {
-      setNotice('Falha ao zerar a biblioteca. Tente novamente.');
-    }
-  };
-
-  const roots = data?.allowedRootsExtra ?? [];
-  const saveRoots = async (next: string[]) => {
-    await api.patchSettings({ allowedRootsExtra: next });
-    qc.invalidateQueries({ queryKey: ['settings'] });
   };
 
   return (
@@ -526,30 +431,7 @@ export default function Settings() {
         </div>
       )}
 
-      <section className="mb-8">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-300">Pastas-raiz permitidas</h2>
-        <p className="mb-3 text-sm text-neutral-500">Pastas onde o seletor pode navegar (além das definidas no servidor).</p>
-        <div className="space-y-1">
-          {roots.length === 0 && <div className="text-sm text-neutral-600">Nenhuma raiz extra.</div>}
-          {roots.map((r) => (
-            <div key={r} className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-              <span className="truncate">{r}</span>
-              <button
-                className="min-h-[44px] rounded px-3 text-neutral-400 hover:text-red-400"
-                onClick={() => void saveRoots(roots.filter((x) => x !== r))}
-              >
-                Remover
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          className="mt-3 min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500"
-          onClick={() => setPicking(true)}
-        >
-          + Adicionar pasta-raiz
-        </button>
-      </section>
+      <SecaoConta />
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold text-neutral-300">Aparência</h2>
@@ -605,112 +487,47 @@ export default function Settings() {
         </label>
       </section>
 
-      <SecaoConta />
       <SecaoDrive onNotice={setNotice} />
       <SecaoAnki />
       <SecaoTelegram onNotice={setNotice} />
 
       <section className="mb-8">
-        <h2 className="mb-1 text-sm font-semibold text-neutral-300">Backup e migração</h2>
+        <h2 className="mb-1 text-sm font-semibold text-red-400">Apagar categoria</h2>
         <p className="mb-3 text-sm text-neutral-500">
-          Um arquivo com seus cursos, bibliotecas e todo o progresso. Serve de backup e para levar tudo a outro
-          computador. Os vídeos não vão junto — só o que você construiu em cima deles.
+          Só a categoria some: os cursos, os PDFs e as questões dela vão para Sem categoria, com o progresso intacto.
         </p>
-        <div className="space-y-2">
-          <a
-            href={api.exportLibraryUrl}
-            onClick={(e) => cliqueFora(e, api.exportLibraryUrl)}
-            className="flex w-full items-center gap-3 rounded-lg bg-neutral-900 px-3 py-3 text-sm no-underline hover:bg-neutral-800"
-          >
-            <Download size={18} className="shrink-0 text-neutral-400" />
-            <span>
-              Exportar biblioteca
-              <span className="mt-0.5 block text-xs text-neutral-500">
-                Baixa um arquivo .json com a data de hoje. Guarde-o onde quiser.
-              </span>
-            </span>
-          </a>
-          <button
-            type="button"
-            disabled={importando}
-            onClick={() => arquivoRef.current?.click()}
-            className="flex w-full items-center gap-3 rounded-lg bg-neutral-900 px-3 py-3 text-left text-sm hover:bg-neutral-800 disabled:opacity-60"
-          >
-            <Upload size={18} className="shrink-0 text-neutral-400" />
-            <span>
-              {importando ? 'Importando…' : 'Importar arquivo…'}
-              <span className="mt-0.5 block text-xs text-neutral-500">
-                Mostra o que vai acontecer antes de confirmar. A importação só soma: nada do que está aqui é apagado.
-              </span>
-            </span>
-          </button>
-          <input
-            ref={arquivoRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              // Zera o valor: sem isso, escolher o MESMO arquivo de novo (depois
-              // de um erro, por exemplo) não dispara change nenhum.
-              e.target.value = '';
-              if (file) void escolherArquivo(file);
-            }}
-          />
-        </div>
+        {(categorias ?? []).length === 0 ? (
+          <div className="text-sm text-neutral-600">Nenhuma categoria.</div>
+        ) : (
+          <div className="space-y-1">
+            {(categorias ?? []).map((c) => (
+              <div key={c.id} className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-1 text-sm">
+                <span className="truncate">
+                  {c.emoji && <span className="mr-2" aria-hidden>{c.emoji}</span>}
+                  {c.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setApagando(c)}
+                  className="min-h-[44px] shrink-0 rounded px-3 text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  Apagar…
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
-      {/* Reset é decisão pesada: fica no fim, visualmente separado, sempre com confirmação. */}
-      <section className="mb-8">
-        <h2 className="mb-1 text-sm font-semibold text-red-400">Zona de perigo</h2>
-        <p className="mb-3 text-sm text-neutral-500">Ações irreversíveis — os vídeos no disco nunca são tocados.</p>
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setConfirmReset('progress')}
-            className="block w-full rounded-lg bg-neutral-900 px-3 py-3 text-left text-sm hover:bg-neutral-800"
-          >
-            Zerar progresso de todos os cursos
-            <span className="mt-0.5 block text-xs text-neutral-500">Posições e aulas concluídas voltam a zero; cursos e coleções permanecem.</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmReset('library')}
-            className="block w-full rounded-lg border border-red-900/60 bg-neutral-900 px-3 py-3 text-left text-sm text-red-400 hover:bg-red-950/40"
-          >
-            Apagar toda a biblioteca…
-            <span className="mt-0.5 block text-xs text-neutral-500">Remove todos os cursos, progresso e coleções — recomeço do zero.</span>
-          </button>
-        </div>
-      </section>
-
-      {previa && (
+      {apagando && (
         <ConfirmDialog
-          title="Importar esta biblioteca?"
-          message={<PreviaDoImport plan={previa.plan} />}
-          confirmLabel="Importar"
-          onConfirm={() => void doImport()}
-          onCancel={() => setPrevia(null)}
-        />
-      )}
-      {confirmReset === 'progress' && (
-        <ConfirmDialog
-          title="Zerar o progresso de todos os cursos?"
-          message="Posições de reprodução e aulas concluídas de TODA a biblioteca voltam a zero. Cursos, coleções e capas permanecem. Não dá para desfazer."
-          confirmLabel="Zerar progresso"
+          title={`Apagar a categoria "${apagando.name}"?`}
+          message="Os cursos, os PDFs e as questões dela vão para Sem categoria. Não dá para desfazer."
+          confirmLabel="Apagar categoria"
           danger
-          onConfirm={doResetProgress}
-          onCancel={() => setConfirmReset(null)}
-        />
-      )}
-      {confirmReset === 'library' && (
-        <ConfirmDialog
-          title="Apagar TODA a biblioteca?"
-          message="Remove todos os cursos, progresso, coleções e miniaturas do banco — recomeço do zero. Os arquivos de vídeo no disco não são tocados. Não dá para desfazer."
-          confirmLabel="Apagar tudo"
-          danger
-          onConfirm={doResetLibrary}
-          onCancel={() => setConfirmReset(null)}
+          digitar="confirmar"
+          onConfirm={() => void apagarCategoria()}
+          onCancel={() => setApagando(null)}
         />
       )}
 
@@ -719,12 +536,6 @@ export default function Settings() {
         Astroflix · versão {info?.version ?? '—'}
       </footer>
 
-      {picking && (
-        <DirPicker
-          onClose={() => setPicking(false)}
-          onPick={(p) => { void saveRoots([...roots, p]); setPicking(false); }}
-        />
-      )}
     </div>
   );
 }

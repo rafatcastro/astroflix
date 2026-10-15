@@ -26,6 +26,8 @@ export interface AuthDrive {
   /** Como terminou o login deste state; null enquanto o callback não veio (ou se o state não é nosso). */
   resultado(state: string): { ok: true } | { ok: false; motivo: MotivoFalha } | null;
   desconectar(opts?: { revogar?: boolean }): Promise<void>;
+  /** Usa o acesso ao Drive concedido junto com o login da conta (sem um segundo login). */
+  adotar(t: { refreshToken: string; email: string | null; accessToken?: string; expiresIn?: number }): void;
 }
 
 interface Pendente {
@@ -215,6 +217,14 @@ export function criarAuthDrive(deps: {
 
     status() {
       return { conectado: ler(K_REFRESH) !== null, email: ler(K_EMAIL) };
+    },
+
+    adotar(t) {
+      cache = null;
+      gravar(K_REFRESH, t.refreshToken);
+      if (t.email) gravar(K_EMAIL, t.email);
+      else apagar(K_EMAIL);
+      guardarAcesso({ access_token: t.accessToken, expires_in: t.expiresIn });
     },
 
     async desconectar(opts) {
