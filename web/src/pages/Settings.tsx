@@ -574,6 +574,7 @@ export default function Settings() {
       {/* Versão do build — para saber quando houve uma atualização de verdade. */}
       <footer className="mt-10 border-t border-neutral-900 pt-4 text-xs text-neutral-600">
         Astroflix · versão {info?.version ?? '—'}
+        {import.meta.env.VITE_CANAL === 'develop' && ' (develop)'}
       </footer>
 
     </div>

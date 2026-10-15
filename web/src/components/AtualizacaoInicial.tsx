@@ -16,10 +16,13 @@ const PARADO_MS = 30_000;
 export default function AtualizacaoInicial({ children }: { children: ReactNode }) {
   // No `pnpm dev` a versão é a do package.json (sempre atrás da release): instalar
   // trocaria o binário de dev pela release.
-  const [estado, setEstado] = useState<Estado>(import.meta.env.DEV ? { tipo: 'pronto' } : { tipo: 'procurando' });
+  // Build da develop (só para testar no Mac): a release estável é "mais nova" pelo
+  // número e substituiria o teste logo na abertura.
+  const semAtualizar = import.meta.env.DEV || import.meta.env.VITE_CANAL === 'develop';
+  const [estado, setEstado] = useState<Estado>(semAtualizar ? { tipo: 'pronto' } : { tipo: 'procurando' });
 
   useEffect(() => {
-    if (import.meta.env.DEV) return;
+    if (semAtualizar) return;
     let desistiu = false;
     let vigia: number | undefined;
     const seguir = () => {
@@ -76,6 +79,7 @@ export default function AtualizacaoInicial({ children }: { children: ReactNode }
       desistiu = true;
       window.clearTimeout(vigia);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (estado.tipo === 'pronto') return <>{children}</>;

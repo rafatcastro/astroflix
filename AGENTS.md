@@ -35,9 +35,11 @@ motivou a decisão), não o quê. Siga esse estilo.
 **Commits e Pull Requests:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:`
 são opcionais). **Não faça push direto na `main`**: cada push nela dispara uma release (~10 min, em
 fila), e vários pushes seguidos viravam uma fila de releases. Trabalhe numa branch, abra um Pull
-Request para a `main` (`gh pr create -R rafatcastro/astroflix`) e deixe o merge para a pessoa: o
-merge é o que gera a release, uma por vez. O PR roda `.github/workflows/verificar.yml` (`pnpm
-build`).
+Request e deixe o merge para a pessoa: o merge na `main` é o que gera a release, uma por vez. Para
+testar antes, há a **`develop`**: cada push nela gera só o app de Mac (Apple Silicon) em
+`.github/workflows/develop.yml`, com o `.dmg` nos artefatos da execução, sem publicar release. Esse
+build não procura atualização (`VITE_CANAL=develop`; as Configurações mostram "(develop)"). Os PRs
+para `main` e `develop` rodam `.github/workflows/verificar.yml` (`pnpm build`).
 
 ## Comandos
 

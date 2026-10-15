@@ -8,7 +8,7 @@ on:
   push:
     branches: [main]
     # Mudança só de documentação não muda o app: não vale uma release.
-    paths-ignore: ['**.md', 'docs/**', 'LICENSE', '.github/workflows/verificar.yml']
+    paths-ignore: ['**.md', 'docs/**', 'LICENSE', '.github/workflows/verificar.yml', '.github/workflows/develop.yml']
   # Manual: ensaia o build da matriz sem publicar nada, ou publica sem precisar
   # de um commit novo (por exemplo, para reexecutar uma release que falhou).
   workflow_dispatch:
@@ -93,8 +93,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22', cache: pnpm }
       - uses: dtolnay/rust-toolchain@stable
+      # shared-key por sistema: a develop (só macos-14) reaproveita o cache daqui.
       - uses: swatinem/rust-cache@v2
-        with: { workspaces: desktop/src-tauri }
+        with: { workspaces: desktop/src-tauri, shared-key: 'desktop-${{ matrix.os }}' }
 
       - name: Dependências do webkit (Linux)
         if: runner.os == 'Linux'
