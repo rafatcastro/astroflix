@@ -11,3 +11,10 @@ export function percent(done: number, total: number): number {
   if (total <= 0) return 0;
   return Math.round((done / total) * 100);
 }
+
+/** Tamanho de arquivo em pt-BR: "850 MB", "12,3 GB". */
+export function formatBytes(n: number): string {
+  if (n < 1024 ** 2) return `${Math.max(1, Math.round(n / 1024)).toLocaleString('pt-BR')} KB`;
+  if (n < 1024 ** 3) return `${Math.round(n / 1024 ** 2).toLocaleString('pt-BR')} MB`;
+  return `${(n / 1024 ** 3).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} GB`;
+}
