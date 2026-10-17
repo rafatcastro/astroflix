@@ -3,6 +3,9 @@ import type { Api as TiposApi, TelegramClient } from 'telegram';
 import type { Db } from '../db/index';
 import { APP_VERSION } from '../bundled';
 import { BLOCO } from './blocos';
+
+/** Blocos de 512 KB em andamento ao mesmo tempo num download do Telegram. */
+const PEDIDOS_SIMULTANEOS = 8;
 import type { ClienteTelegram, Convite, GrupoTelegram } from './cliente';
 import { credenciaisTelegram } from './credenciais';
 import type { EstadoLogin, ServicosTelegram } from './servicos';
@@ -205,17 +208,49 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
           fileReference: doc.fileReference,
           thumbSize: '',
         });
+        // Vários blocos pedidos de uma vez, entregues na ordem. O iterDownload do
+        // GramJS pede um, espera e só então pede o próximo: a velocidade ficava
+        // presa ao tempo de ida e volta de cada pedido, e um curso inteiro
+        // levava horas. O Telegram atende pedidos simultâneos na mesma conexão.
+        const tamanho = Number(doc.size);
+        let sender = await client.getSender(doc.dcId);
+        const pedir = async (pos: number): Promise<Buffer> => {
+          const req = new Api.upload.GetFile({ location: local, offset: bigInt(pos), limit: BLOCO, precise: false, cdnSupported: false });
+          for (let t = 0; ; t++) {
+            try {
+              const r = await client.invokeWithSender(req, sender);
+              if (!(r instanceof Api.upload.File)) throw new Error('CDN');
+              return Buffer.from(r.bytes);
+            } catch (e) {
+              const dc = (e as { newDc?: number }).newDc;
+              const timeout = (e as { errorMessage?: string }).errorMessage === 'TIMEOUT';
+              if (t < 2 && (dc || timeout)) {
+                if (dc) sender = await client.getSender(dc);
+                continue;
+              }
+              throw e;
+            }
+          }
+        };
+        const fila: Promise<Buffer>[] = [];
+        let proximo = offset + entregue;
+        const encher = () => {
+          while (fila.length < PEDIDOS_SIMULTANEOS && proximo < tamanho) {
+            const p = pedir(proximo);
+            p.catch(() => undefined); // quem não for esperado (cancelou, falhou antes) não vira rejeição solta
+            fila.push(p);
+            proximo += BLOCO;
+          }
+        };
         try {
-          for await (const bloco of client.iterDownload({
-            file: local,
-            offset: bigInt(offset + entregue),
-            requestSize: BLOCO,
-            dcId: doc.dcId,
-            fileSize: doc.size,
-          })) {
+          encher();
+          while (fila.length) {
+            const bloco = await fila.shift()!;
             if (signal.aborted) return;
             entregue += bloco.length;
-            yield bloco;
+            if (bloco.length) yield bloco;
+            if (bloco.length < BLOCO) return;
+            encher();
           }
           return;
         } catch (e) {
