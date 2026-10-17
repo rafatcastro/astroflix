@@ -157,7 +157,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   baixados). Ao abrir, o app só limpa as concluídas (`buildApp(..., { retomarDownloads })`, só no
   `index.ts`), sem baixar nada. Aula concluída tem a
   cópia apagada (menos a assistida por último) e não é rebaixada; o banco guarda os metadados.
-  O **"Baixar"** da página do curso é outra coisa: `drive/exportar.ts` copia o curso inteiro
+  O **"Baixar para Downloads"** do menu ⋯ do curso é outra coisa: `drive/exportar.ts` copia o curso inteiro
   (aulas e materiais, Drive ou Telegram) para a pasta Downloads do sistema (`downloads.ts`:
   registro no Windows, `xdg-user-dir` no Linux), com os nomes reais, numa fila própria; o que
   já está lá com o mesmo tamanho é pulado, e o app nunca mais mexe nessa pasta.
