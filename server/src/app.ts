@@ -149,7 +149,13 @@ export function buildApp(
   // [ROUTES]
 
   // Ao abrir o app, os cursos do Drive continuam de onde o download parou.
-  if (opts?.retomarDownloads) app.addHook('onReady', async () => drive.baixador.retomarTodos());
+  if (opts?.retomarDownloads) {
+    app.addHook('onReady', async () => {
+      drive.baixador.retomarTodos();
+      // Os "Baixar para Downloads" que o app fechou no meio continuam sozinhos.
+      drive.exportador.retomar();
+    });
+  }
   // Já entrou numa abertura anterior: sincroniza ao abrir e a cada minuto.
   if (opts?.exigirConta) app.addHook('onReady', async () => {
     if (conta.estado().entrou) sinc?.iniciar();

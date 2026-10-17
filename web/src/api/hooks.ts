@@ -14,13 +14,13 @@ export const useCourse = (id: string) =>
       q.state.data?.importacao?.carregando || q.state.data?.download?.ativo ? 1500 : false,
   });
 // Os "Baixar para Downloads" (painel global, botões do curso e da categoria).
-// Pergunta a cada segundo só enquanto algum está andando; quem começa um
+// Pergunta a cada segundo só enquanto algum está andando (ou vai tentar de novo); quem começa um
 // download invalida ['downloads'] para o painel aparecer na hora.
 export const useDownloads = () =>
   useQuery({
     queryKey: ['downloads'],
     queryFn: api.listarDownloads,
-    refetchInterval: (q) => (q.state.data?.itens.some((e) => e.ativo) ? 1000 : false),
+    refetchInterval: (q) => (q.state.data?.itens.some((e) => e.ativo || e.tentarEm) ? 1000 : false),
   });
 // Flashcards: cada lista pergunta ao Anki (o servidor envia os pendentes e relê
 // as notas), então não precisa refazer a cada foco de janela.
