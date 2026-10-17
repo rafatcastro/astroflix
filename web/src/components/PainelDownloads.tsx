@@ -36,6 +36,8 @@ function Item({ e }: { e: Exportacao }) {
   else if (e.ativo)
     linha = e.velocidade == null ? 'Começando…' : `${formatBytes(e.velocidade)}/s${restante != null ? ` · ${formatRestante(restante)}` : ''}`;
   else if (pronto) linha = 'Concluído';
+  else if (e.erro && e.tentarEm)
+    linha = `${e.origem === 'telegram' ? mensagemErroTelegram(e.erro) : mensagemErroDrive(e.erro)} Tentando de novo em ${Math.max(1, Math.round((e.tentarEm - Date.now()) / 1000))} s.`;
   else if (e.erro) linha = `Parou: ${e.origem === 'telegram' && e.erro !== 'sem-espaco' ? mensagemErroTelegram(e.erro) : mensagemErroDrive(e.erro)}`;
   else linha = 'Cancelado';
 

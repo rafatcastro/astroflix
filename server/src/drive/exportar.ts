@@ -33,6 +33,8 @@ export interface EstadoExportacao {
   bytesTotal: number;
   /** Motivo da parada (tipo de FalhaDrive/FalhaTelegram, 'sem-espaco'), ou null. */
   erro: string | null;
+  /** Parou por uma falha que passa sozinha: quando tenta de novo (ms desde 1970), ou null. */
+  tentarEm: number | null;
   /** A pasta do curso dentro de Downloads. */
   pasta: string;
 }
@@ -43,6 +45,8 @@ export interface Exportador {
   estado(courseId: string): EstadoExportacao | null;
   /** Todos os pedidos desde que o app abriu (menos os dispensados), na ordem em que foram feitos. */
   todos(): EstadoExportacao[];
+  /** Ao abrir o app: retoma os pedidos que não terminaram (app fechado, queda de energia). */
+  retomar(): void;
   /** Tira da lista um que já parou (o "×" do painel). */
   dispensar(courseId: string): void;
   /** A pasta Downloads onde as cópias ficam. */
@@ -59,6 +63,24 @@ interface Item {
 
 // Os nomes vêm do dono da pasta do Drive ou do grupo: nada de "..", separador ou
 // caractere que o Windows recusa, nem ponto ou espaço no fim.
+// Os cursos pedidos e ainda não terminados, na ordem do pedido. Ficam no banco
+// para o app retomar ao abrir: um curso de 100 GB leva o dia, e fechar o app (ou
+// o computador dormir e reiniciar) não pode exigir lembrar de clicar de novo.
+const CHAVE_PENDENTES = 'exportacoes.pendentes';
+
+// Falhas que passam sozinhas (rede, limite do Telegram, cota do Google): tenta de
+// novo depois de um tempo. As outras (sem espaço, sem acesso, sessão caiu)
+// esperam a pessoa resolver e clicar em Continuar.
+const ESPERA_POR_FALHA: Record<string, number> = {
+  'sem-conexao': 30_000,
+  telegram: 30_000,
+  google: 30_000,
+  flood: 60_000,
+  'cota-esgotada': 10 * 60_000,
+};
+/** Falhas seguidas sem nenhum arquivo novo até desistir e esperar a pessoa. */
+const MAX_TENTATIVAS = 5;
+
 const sanear = (nome: string): string =>
   nome
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
@@ -84,6 +106,27 @@ export function criarExportador(deps: {
   const JANELA_MS = 6000;
   let atual: { id: string; ac: AbortController } | null = null;
   let rodando = false;
+  const tentativas = new Map<string, number>();
+  const religar = new Map<string, NodeJS.Timeout>();
+
+  const lerPendentes = (): string[] => {
+    const r = db.prepare('SELECT value FROM settings WHERE key=?').get(CHAVE_PENDENTES) as { value: string } | undefined;
+    try {
+      const v = r ? (JSON.parse(r.value) as unknown) : [];
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  };
+  const gravarPendentes = (ids: string[]) =>
+    db
+      .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
+      .run(CHAVE_PENDENTES, JSON.stringify(ids));
+  const marcarPendente = (id: string) => {
+    const ids = lerPendentes();
+    if (!ids.includes(id)) gravarPendentes([...ids, id]);
+  };
+  const tirarPendente = (id: string) => gravarPendentes(lerPendentes().filter((x) => x !== id));
 
   function itensDo(courseId: string, pasta: string, telegram: boolean): Item[] {
     const aulas = db
@@ -202,9 +245,12 @@ export function criarExportador(deps: {
       const ac = new AbortController();
       atual = { id, ac };
       estado.naFila = false;
+      const feitosAntes = estado.feitos;
       try {
         await exportarCurso(id, estado, ac.signal);
         estado.erro = null;
+        // Terminou (ou o curso foi excluído no meio): sai da lista de retomar.
+        if (!ac.signal.aborted) tirarPendente(id);
       } catch (e) {
         if (ac.signal.aborted) estado.erro = null;
         else
@@ -220,14 +266,37 @@ export function criarExportador(deps: {
       estado.cancelado = ac.signal.aborted;
       estado.arquivo = null;
       estado.ativo = false;
+      // Caiu a rede no meio: tenta de novo sozinho, continuando do `.part`. Se
+      // andou alguma coisa desde a última falha, a contagem recomeça.
+      const espera = estado.erro ? ESPERA_POR_FALHA[estado.erro] : undefined;
+      if (espera) {
+        const n = estado.feitos > feitosAntes ? 1 : (tentativas.get(id) ?? 0) + 1;
+        tentativas.set(id, n);
+        if (n <= MAX_TENTATIVAS) {
+          estado.tentarEm = Date.now() + espera;
+          religar.set(
+            id,
+            setTimeout(() => {
+              religar.delete(id);
+              if (estados.get(id) === estado && !estado.ativo && !estado.cancelado) exportador.exportar(id);
+            }, espera),
+          );
+        }
+      } else {
+        tentativas.delete(id);
+      }
     }
     rodando = false;
   }
 
-  return {
+  const exportador: Exportador = {
     exportar(courseId) {
       const curso = db.prepare('SELECT title, source FROM courses WHERE id=?').get(courseId) as { title: string; source: string } | undefined;
-      if (!curso || estados.get(courseId)?.ativo) return;
+      if (!curso) return tirarPendente(courseId);
+      if (estados.get(courseId)?.ativo) return;
+      clearTimeout(religar.get(courseId));
+      religar.delete(courseId);
+      marcarPendente(courseId);
       const pasta = path.join(deps.pastaDownloads(), sanear(curso.title));
       // Na fila atrás de outros (o "Baixar" da categoria enfileira vários), o
       // total já conta: a barra da categoria soma todos desde o começo.
@@ -254,12 +323,22 @@ export function criarExportador(deps: {
         bytesFeitos: 0,
         bytesTotal: Number(t.b),
         erro: null,
+        tentarEm: null,
         pasta,
       });
       fila.push(courseId);
       void rodar();
     },
     cancelar(courseId) {
+      tirarPendente(courseId);
+      tentativas.delete(courseId);
+      clearTimeout(religar.get(courseId));
+      religar.delete(courseId);
+      const parado = estados.get(courseId);
+      if (parado && !parado.ativo) {
+        parado.cancelado = true;
+        parado.tentarEm = null;
+      }
       const i = fila.indexOf(courseId);
       if (i >= 0) fila.splice(i, 1);
       const e = estados.get(courseId);
@@ -277,8 +356,17 @@ export function criarExportador(deps: {
     },
     todos: () => [...estados.values()].map(foto),
     dispensar(courseId) {
-      if (!estados.get(courseId)?.ativo) estados.delete(courseId);
+      if (estados.get(courseId)?.ativo) return;
+      estados.delete(courseId);
+      // Tirar da lista é desistir: não volta ao abrir o app nem tenta de novo.
+      tirarPendente(courseId);
+      clearTimeout(religar.get(courseId));
+      religar.delete(courseId);
+    },
+    retomar() {
+      for (const id of lerPendentes()) exportador.exportar(id);
     },
     pasta: () => deps.pastaDownloads(),
   };
+  return exportador;
 }

@@ -57,6 +57,8 @@ export interface Exportacao {
   bytesFeitos: number;
   bytesTotal: number;
   erro: string | null;
+  /** Parou por uma falha que passa sozinha: quando tenta de novo (ms desde 1970), ou null. */
+  tentarEm: number | null;
   pasta: string;
 }
 // Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
