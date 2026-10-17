@@ -41,19 +41,17 @@ export interface CourseDetail {
   tamanhoRemoto: number | null;
 }
 export interface Exportacao {
+  courseId: string;
+  titulo: string;
+  origem: 'drive' | 'telegram';
   ativo: boolean;
-  feitos: number;
-  total: number;
-  bytesFeitos: number;
-  bytesTotal: number;
-  erro: string | null;
-  pasta: string;
-}
-/** O "Baixar" da categoria inteira: a soma dos cursos dela que estão sendo (ou foram) baixados. */
-export interface ExportacaoCategoria {
-  ativo: boolean;
-  cursos: number;
-  cursosProntos: number;
+  /** Pedido, esperando outro curso terminar. */
+  naFila: boolean;
+  cancelado: boolean;
+  /** O arquivo sendo baixado agora. */
+  arquivo: string | null;
+  /** Bytes por segundo nos últimos segundos; null antes de dar para medir. */
+  velocidade: number | null;
   feitos: number;
   total: number;
   bytesFeitos: number;
@@ -377,8 +375,9 @@ export const api = {
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
   exportarCurso: (id: string) => jsonFetch<Exportacao>(`/api/courses/${id}/exportar`, { method: 'POST' }),
   cancelarExportacao: (id: string) => jsonFetch<void>(`/api/courses/${id}/exportar`, { method: 'DELETE' }),
-  exportacaoCategoria: (cat: string) => jsonFetch<{ exportacao: ExportacaoCategoria | null }>(`/api/collections/${cat}/exportar`),
-  exportarCategoria: (cat: string) => jsonFetch<{ exportacao: ExportacaoCategoria | null }>(`/api/collections/${cat}/exportar`, { method: 'POST' }),
+  exportarCategoria: (cat: string) => jsonFetch<{ cursos: number }>(`/api/collections/${cat}/exportar`, { method: 'POST' }),
+  listarDownloads: () => jsonFetch<{ itens: Exportacao[]; pasta: string }>('/api/downloads'),
+  dispensarDownload: (id: string) => jsonFetch<void>(`/api/downloads/${id}`, { method: 'DELETE' }),
   cancelarExportacaoCategoria: (cat: string) => jsonFetch<void>(`/api/collections/${cat}/exportar`, { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),

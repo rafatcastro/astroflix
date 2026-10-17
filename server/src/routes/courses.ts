@@ -263,26 +263,12 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       )
       .all(...(cat === 'sem' ? [] : [cat])) as Array<{ id: string }>).map((r) => r.id);
 
-  const exportacaoDa = (cat: string) => {
-    const estados = cursosRemotosDa(cat).flatMap((id) => drive?.exportador.estado(id) ?? []);
-    if (!estados.length) return null;
-    const soma = (f: (e: (typeof estados)[number]) => number) => estados.reduce((s, e) => s + f(e), 0);
-    return {
-      ativo: estados.some((e) => e.ativo),
-      cursos: estados.length,
-      cursosProntos: estados.filter((e) => !e.ativo && !e.erro && e.feitos === e.total).length,
-      feitos: soma((e) => e.feitos),
-      total: soma((e) => e.total),
-      bytesFeitos: soma((e) => e.bytesFeitos),
-      bytesTotal: soma((e) => e.bytesTotal),
-      erro: estados.find((e) => e.erro)?.erro ?? null,
-      pasta: drive?.exportador.pasta() ?? '',
-    };
-  };
+  // O painel de downloads (em toda tela da interface): todos os pedidos de uma vez.
+  app.get('/api/downloads', async () => ({ itens: drive?.exportador.todos() ?? [], pasta: drive?.exportador.pasta() ?? '' }));
 
-  app.get('/api/collections/:cat/exportar', async (req) => {
-    const cat = (req.params as { cat: string }).cat;
-    return { exportacao: exportacaoDa(cat) };
+  app.delete('/api/downloads/:id', async (req, reply) => {
+    drive?.exportador.dispensar((req.params as { id: string }).id);
+    return reply.code(204).send();
   });
 
   app.post('/api/collections/:cat/exportar', async (req, reply) => {
@@ -291,7 +277,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     const ids = cursosRemotosDa(cat);
     if (!ids.length) return reply.code(400).send({ error: 'sem-cursos-remotos' });
     for (const id of ids) drive.exportador.exportar(id);
-    return reply.code(202).send({ exportacao: exportacaoDa(cat) });
+    return reply.code(202).send({ cursos: ids.length });
   });
 
   app.delete('/api/collections/:cat/exportar', async (req, reply) => {

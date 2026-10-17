@@ -1,11 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { useCollections, useCourses } from '../api/hooks';
-import { mensagemErroDrive } from '../api/driveAuth';
-import { formatBytes } from '../lib/format';
-import Banner from './Banner';
+import { useCollections, useCourses, useDownloads } from '../api/hooks';
 import ConfirmDialog from './ConfirmDialog';
 import DialogoCategoria from './DialogoCategoria';
 import { ArrowLeft, Download, Pencil } from './icons';
@@ -53,20 +50,13 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
   // Downloads, cada um na sua pasta (o mesmo "Baixar para Downloads" do curso).
   const { data: cursos } = useCourses();
   const remotos = (cursos ?? []).filter((c) => c.source !== 'local' && (c.collectionId ?? SEM) === cat);
-  const { data: exp } = useQuery({
-    queryKey: ['exportacao-categoria', cat],
-    queryFn: () => api.exportacaoCategoria(cat).then((r) => r.exportacao),
-    refetchInterval: (q) => (q.state.data?.ativo ? 1500 : false),
-  });
+  // O progresso fica no painel de downloads (em toda tela).
+  const { data: downloads } = useDownloads();
+  const baixando = remotos.some((c) => downloads?.itens.some((e) => e.courseId === c.id && e.ativo));
   const baixar = () => {
     setConfirmandoBaixar(false);
-    void api.exportarCategoria(cat).then(
-      (r) => qc.setQueryData(['exportacao-categoria', cat], r.exportacao),
-      () => undefined,
-    );
+    void api.exportarCategoria(cat).then(() => qc.invalidateQueries({ queryKey: ['downloads'] }), () => undefined);
   };
-  const cancelarBaixar = () =>
-    void api.cancelarExportacaoCategoria(cat).then(() => qc.invalidateQueries({ queryKey: ['exportacao-categoria', cat] }), () => undefined);
 
   // Editar "Sem categoria" a transforma numa categoria de verdade, levando tudo o
   // que estava sem (cursos, PDFs, questões gerais); a tela segue nela, na mesma aba.
@@ -136,47 +126,17 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
               <button
                 type="button"
                 onClick={() => setConfirmandoBaixar(true)}
-                disabled={!!exp?.ativo}
+                disabled={baixando}
                 title="Baixar os cursos do Drive e do Telegram desta categoria para a pasta Downloads"
                 className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg bg-neutral-900 px-3 text-sm text-neutral-300 hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-default disabled:text-neutral-500"
               >
-                <Download size={16} /> {exp?.ativo ? 'Baixando…' : 'Baixar'}
+                <Download size={16} /> {baixando ? 'Baixando…' : 'Baixar'}
               </button>
             )}
             {acoes}
           </div>
         )}
       </div>
-      {exp && (exp.ativo || exp.erro || exp.cursosProntos === exp.cursos) && (
-        <div className="mt-4" role="status">
-          {exp.ativo ? (
-            <Banner tone="info">
-              <span className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  Baixando {exp.cursos} curso{exp.cursos === 1 ? '' : 's'} para Downloads: {exp.feitos} de {exp.total} arquivos
-                  {exp.bytesTotal > 0 && ` (${formatBytes(exp.bytesFeitos)} de ${formatBytes(exp.bytesTotal)})`}.
-                </span>
-                <button
-                  type="button"
-                  onClick={cancelarBaixar}
-                  className="rounded px-2 py-1 text-neutral-200 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                >
-                  Cancelar
-                </button>
-              </span>
-            </Banner>
-          ) : exp.erro ? (
-            <Banner>
-              {exp.cursosProntos} de {exp.cursos} cursos baixados; o download parou: {mensagemErroDrive(exp.erro)} Clique em <b>Baixar</b>{' '}
-              para continuar de onde parou.
-            </Banner>
-          ) : (
-            <Banner tone="info">
-              {exp.cursos === 1 ? 'Curso salvo' : `${exp.cursos} cursos salvos`} em <span className="break-all text-neutral-100">{exp.pasta}</span>.
-            </Banner>
-          )}
-        </div>
-      )}
       <nav aria-label="Conteúdo da categoria" className="mt-4 flex gap-6 border-b border-neutral-800">
         <NavLink to={caminhoDaCategoria(cat)} end className={aba}>
           Cursos

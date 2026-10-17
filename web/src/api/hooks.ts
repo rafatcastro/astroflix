@@ -5,14 +5,22 @@ import { autorizarNoGoogle } from './driveAuth';
 
 export const useCourses = (archived?: boolean) => useQuery({ queryKey: ['courses', { archived: !!archived }], queryFn: () => api.listCourses(archived) });
 // Enquanto a pasta do Drive é lida em segundo plano, pergunta de novo a cada
-// pouco: é assim que as aulas aparecem na tela conforme vão sendo encontradas
-// (e o progresso do "Baixar" anda).
+// pouco: é assim que as aulas aparecem na tela conforme vão sendo encontradas.
 export const useCourse = (id: string) =>
   useQuery({
     queryKey: ['course', id],
     queryFn: () => api.getCourse(id),
     refetchInterval: (q) =>
-      q.state.data?.importacao?.carregando || q.state.data?.download?.ativo || q.state.data?.exportacao?.ativo ? 1500 : false,
+      q.state.data?.importacao?.carregando || q.state.data?.download?.ativo ? 1500 : false,
+  });
+// Os "Baixar para Downloads" (painel global, botões do curso e da categoria).
+// Pergunta a cada segundo só enquanto algum está andando; quem começa um
+// download invalida ['downloads'] para o painel aparecer na hora.
+export const useDownloads = () =>
+  useQuery({
+    queryKey: ['downloads'],
+    queryFn: api.listarDownloads,
+    refetchInterval: (q) => (q.state.data?.itens.some((e) => e.ativo) ? 1000 : false),
   });
 // Flashcards: cada lista pergunta ao Anki (o servidor envia os pendentes e relê
 // as notas), então não precisa refazer a cada foco de janela.
