@@ -49,6 +49,18 @@ export interface Exportacao {
   erro: string | null;
   pasta: string;
 }
+/** O "Baixar" da categoria inteira: a soma dos cursos dela que estão sendo (ou foram) baixados. */
+export interface ExportacaoCategoria {
+  ativo: boolean;
+  cursos: number;
+  cursosProntos: number;
+  feitos: number;
+  total: number;
+  bytesFeitos: number;
+  bytesTotal: number;
+  erro: string | null;
+  pasta: string;
+}
 // Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
 export interface Flashcard {
   id: string;
@@ -365,6 +377,9 @@ export const api = {
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
   exportarCurso: (id: string) => jsonFetch<Exportacao>(`/api/courses/${id}/exportar`, { method: 'POST' }),
   cancelarExportacao: (id: string) => jsonFetch<void>(`/api/courses/${id}/exportar`, { method: 'DELETE' }),
+  exportacaoCategoria: (cat: string) => jsonFetch<{ exportacao: ExportacaoCategoria | null }>(`/api/collections/${cat}/exportar`),
+  exportarCategoria: (cat: string) => jsonFetch<{ exportacao: ExportacaoCategoria | null }>(`/api/collections/${cat}/exportar`, { method: 'POST' }),
+  cancelarExportacaoCategoria: (cat: string) => jsonFetch<void>(`/api/collections/${cat}/exportar`, { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),

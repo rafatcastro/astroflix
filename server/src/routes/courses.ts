@@ -252,6 +252,53 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     return reply.code(204).send();
   });
 
+  // O "Baixar" da categoria: cada curso do Drive e do Telegram dela (os
+  // arquivados ficam de fora) entra na mesma fila, cada um na própria pasta em
+  // Downloads, como se a pessoa tivesse clicado curso a curso. `sem` = os sem categoria.
+  const cursosRemotosDa = (cat: string) =>
+    (db
+      .prepare(
+        `SELECT id FROM courses WHERE archived=0 AND source IN ('drive','telegram')
+           AND ${cat === 'sem' ? 'collection_id IS NULL' : 'collection_id=?'} ORDER BY title`,
+      )
+      .all(...(cat === 'sem' ? [] : [cat])) as Array<{ id: string }>).map((r) => r.id);
+
+  const exportacaoDa = (cat: string) => {
+    const estados = cursosRemotosDa(cat).flatMap((id) => drive?.exportador.estado(id) ?? []);
+    if (!estados.length) return null;
+    const soma = (f: (e: (typeof estados)[number]) => number) => estados.reduce((s, e) => s + f(e), 0);
+    return {
+      ativo: estados.some((e) => e.ativo),
+      cursos: estados.length,
+      cursosProntos: estados.filter((e) => !e.ativo && !e.erro && e.feitos === e.total).length,
+      feitos: soma((e) => e.feitos),
+      total: soma((e) => e.total),
+      bytesFeitos: soma((e) => e.bytesFeitos),
+      bytesTotal: soma((e) => e.bytesTotal),
+      erro: estados.find((e) => e.erro)?.erro ?? null,
+      pasta: drive?.exportador.pasta() ?? '',
+    };
+  };
+
+  app.get('/api/collections/:cat/exportar', async (req) => {
+    const cat = (req.params as { cat: string }).cat;
+    return { exportacao: exportacaoDa(cat) };
+  });
+
+  app.post('/api/collections/:cat/exportar', async (req, reply) => {
+    const cat = (req.params as { cat: string }).cat;
+    if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+    const ids = cursosRemotosDa(cat);
+    if (!ids.length) return reply.code(400).send({ error: 'sem-cursos-remotos' });
+    for (const id of ids) drive.exportador.exportar(id);
+    return reply.code(202).send({ exportacao: exportacaoDa(cat) });
+  });
+
+  app.delete('/api/collections/:cat/exportar', async (req, reply) => {
+    for (const id of cursosRemotosDa((req.params as { cat: string }).cat)) drive?.exportador.cancelar(id);
+    return reply.code(204).send();
+  });
+
   app.patch('/api/courses/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const b = req.body as { title?: string; archived?: boolean; collectionId?: string | null };

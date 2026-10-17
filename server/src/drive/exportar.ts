@@ -30,6 +30,8 @@ export interface Exportador {
   exportar(courseId: string): void;
   cancelar(courseId: string): void;
   estado(courseId: string): EstadoExportacao | null;
+  /** A pasta Downloads onde as cópias ficam. */
+  pasta(): string;
 }
 
 interface Item {
@@ -171,7 +173,16 @@ export function criarExportador(deps: {
       const curso = db.prepare('SELECT title FROM courses WHERE id=?').get(courseId) as { title: string } | undefined;
       if (!curso || estados.get(courseId)?.ativo) return;
       const pasta = path.join(deps.pastaDownloads(), sanear(curso.title));
-      estados.set(courseId, { ativo: true, feitos: 0, total: 0, bytesFeitos: 0, bytesTotal: 0, erro: null, pasta });
+      // Na fila atrás de outros (o "Baixar" da categoria enfileira vários), o
+      // total já conta: a barra da categoria soma todos desde o começo.
+      const t = db
+        .prepare(
+          `SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS b FROM (
+             SELECT size_bytes FROM lessons WHERE course_id=@id AND missing=0 AND remote_id IS NOT NULL
+             UNION ALL SELECT size_bytes FROM materials WHERE course_id=@id AND remote_id IS NOT NULL)`,
+        )
+        .get({ id: courseId }) as { n: number; b: number };
+      estados.set(courseId, { ativo: true, feitos: 0, total: Number(t.n), bytesFeitos: 0, bytesTotal: Number(t.b), erro: null, pasta });
       fila.push(courseId);
       void rodar();
     },
@@ -184,5 +195,6 @@ export function criarExportador(deps: {
       if (atual?.id === courseId) atual.ac.abort();
     },
     estado: (courseId) => estados.get(courseId) ?? null,
+    pasta: () => deps.pastaDownloads(),
   };
 }
