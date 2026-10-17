@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
-import { formatDuration, percent } from '../lib/format';
+import { formatBytes, formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { api } from '../api/client';
 import type { LessonDTO } from '../api/client';
@@ -10,11 +10,12 @@ import LessonGrid from '../components/LessonGrid';
 import MaterialsSection from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
-import { ArrowLeft, Play, Check, List, LayoutGrid, Cards } from '../components/icons';
+import { ArrowLeft, Play, Check, List, LayoutGrid, Cards, Download } from '../components/icons';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
   const notCompleted = lessons.filter((l) => !l.completed && !l.missing && l.playable);
@@ -40,6 +41,7 @@ export default function Course() {
   const qc = useQueryClient();
   const [rootIssue, setRootIssue] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmandoBaixar, setConfirmandoBaixar] = useState(false);
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
@@ -93,6 +95,16 @@ export default function Course() {
     setView(v);
     setPref('course.view', v);
   };
+  const exp = data.exportacao;
+  const erroDe = (e: string) => (data.source === 'telegram' && e !== 'sem-espaco' ? mensagemErroTelegram(e) : mensagemErroDrive(e));
+  const baixarCurso = () => {
+    setConfirmandoBaixar(false);
+    void api.exportarCurso(id).then(
+      () => qc.invalidateQueries({ queryKey: ['course', id] }),
+      () => setNotice('Não deu para começar o download. Tente de novo.'),
+    );
+  };
+  const cancelarBaixar = () => void api.cancelarExportacao(id).then(() => qc.invalidateQueries({ queryKey: ['course', id] }), () => undefined);
   const chooseSize = (n: number) => {
     setGridSize(n);
     setPref('course.gridSize', n);
@@ -128,6 +140,17 @@ export default function Course() {
           >
             <Cards size={16} /> Questões
           </Link>
+          {data.source !== 'local' && (
+            <button
+              type="button"
+              onClick={() => setConfirmandoBaixar(true)}
+              disabled={!!exp?.ativo}
+              title="Baixar o curso inteiro para a pasta Downloads"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-default disabled:text-neutral-600"
+            >
+              <Download size={16} /> {exp?.ativo ? 'Baixando…' : 'Baixar'}
+            </button>
+          )}
           <CourseMenu course={data} onEditCover={editCover} onNotice={(t) => setNotice(t)} />
         </div>
       </div>
@@ -182,6 +205,35 @@ export default function Course() {
           <Banner>
             {allLessons.filter((l) => l.missing).length} aula(s) não encontrada(s). Re-aponte a pasta pelo menu ⋯ para recuperar.
           </Banner>
+        </div>
+      )}
+      {exp && (exp.ativo || exp.erro || (exp.total > 0 && exp.feitos === exp.total)) && (
+        <div className="mt-4" role="status">
+          {exp.ativo ? (
+            <Banner tone="info">
+              <span className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  Baixando o curso para Downloads: {exp.feitos} de {exp.total || '…'} arquivos
+                  {exp.bytesTotal > 0 && ` (${formatBytes(exp.bytesFeitos)} de ${formatBytes(exp.bytesTotal)})`}.
+                </span>
+                <button
+                  type="button"
+                  onClick={cancelarBaixar}
+                  className="rounded px-2 py-1 text-neutral-200 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  Cancelar
+                </button>
+              </span>
+            </Banner>
+          ) : exp.erro ? (
+            <Banner>
+              O download do curso parou em {exp.feitos} de {exp.total} arquivos: {erroDe(exp.erro)} Clique em <b>Baixar</b> para continuar de onde parou.
+            </Banner>
+          ) : (
+            <Banner tone="info">
+              Curso salvo em <span className="break-all text-neutral-100">{exp.pasta}</span>.
+            </Banner>
+          )}
         </div>
       )}
       {notice && <div className="mt-4 rounded-lg bg-neutral-900 px-3 py-2 text-sm text-neutral-300">{notice}</div>}
@@ -325,6 +377,20 @@ export default function Course() {
 
       <MaterialsSection materials={data.materials} />
       </div>
+      {confirmandoBaixar && (
+        <ConfirmDialog
+          title="Baixar o curso inteiro"
+          message={
+            <>
+              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} vão para a pasta Downloads, em{' '}
+              <b className="text-neutral-200">{data.title}</b>, com os nomes originais. O que já estiver lá não é baixado de novo.
+            </>
+          }
+          confirmLabel="Baixar"
+          onConfirm={baixarCurso}
+          onCancel={() => setConfirmandoBaixar(false)}
+        />
+      )}
     </div>
   );
 }

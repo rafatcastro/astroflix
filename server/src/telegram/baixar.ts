@@ -15,7 +15,7 @@ import { FalhaTelegram, type PeerTelegram } from './tipos';
 
 export const baixarDoTelegram =
   (cliente: ClienteTelegram, peer: PeerTelegram): BaixarArquivo =>
-  async (remoteId, destino, tamanho) => {
+  async (remoteId, destino, tamanho, signal) => {
     fs.mkdirSync(path.dirname(destino), { recursive: true });
     const parcial = `${destino}.part`;
     const tinha = fs.existsSync(parcial) ? fs.statSync(parcial).size : 0;
@@ -23,12 +23,16 @@ export const baixarDoTelegram =
     if (tinha !== inicio) fs.truncateSync(parcial, inicio);
 
     const ac = new AbortController();
+    const parar = () => ac.abort();
+    signal?.addEventListener('abort', parar);
     const saida = fs.createWriteStream(parcial, { flags: inicio ? 'a' : 'w' });
     try {
       for await (const bloco of cliente.baixar(peer, Number(remoteId), inicio, ac.signal)) {
+        if (signal?.aborted) throw signal.reason;
         if (!saida.write(bloco)) await new Promise<void>((r) => saida.once('drain', () => r()));
       }
     } finally {
+      signal?.removeEventListener('abort', parar);
       ac.abort();
       await new Promise<void>((resolve, reject) => saida.end((e?: Error | null) => (e ? reject(e) : resolve())));
     }

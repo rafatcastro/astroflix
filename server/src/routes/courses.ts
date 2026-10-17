@@ -224,7 +224,32 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
       download: course.source === 'drive' || course.source === 'telegram' ? downloadDe(course.id) : null,
+      exportacao: drive?.exportador.estado(course.id) ?? null,
+      // O tamanho do curso inteiro, para o "Baixar" dizer quanto vai ocupar.
+      tamanhoRemoto:
+        course.source === 'drive' || course.source === 'telegram'
+          ? Number((db.prepare(
+              `SELECT (SELECT COALESCE(SUM(size_bytes), 0) FROM lessons WHERE course_id=@id AND missing=0 AND remote_id IS NOT NULL)
+                    + (SELECT COALESCE(SUM(size_bytes), 0) FROM materials WHERE course_id=@id AND remote_id IS NOT NULL) AS t`,
+            ).get({ id: course.id }) as { t: number }).t)
+          : null,
     };
+  });
+
+  // O curso inteiro para Downloads, com os nomes reais (drive/exportar.ts).
+  app.post('/api/courses/:id/exportar', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const c = db.prepare('SELECT source FROM courses WHERE id=?').get(id) as { source: string } | undefined;
+    if (!c) return reply.code(404).send({ error: 'not_found' });
+    if (c.source !== 'drive' && c.source !== 'telegram') return reply.code(400).send({ error: 'curso-local' });
+    if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+    drive.exportador.exportar(id);
+    return reply.code(202).send(drive.exportador.estado(id));
+  });
+
+  app.delete('/api/courses/:id/exportar', async (req, reply) => {
+    drive?.exportador.cancelar((req.params as { id: string }).id);
+    return reply.code(204).send();
   });
 
   app.patch('/api/courses/:id', async (req, reply) => {
@@ -250,6 +275,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     const id = (req.params as { id: string }).id;
     if (!db.prepare('SELECT 1 FROM courses WHERE id=?').get(id)) return reply.code(404).send({ error: 'not_found' });
     const lessonIds = (db.prepare('SELECT id FROM lessons WHERE course_id=?').all(id) as any[]).map((r) => r.id);
+    // O que já foi para Downloads é da pessoa e fica; só para de baixar.
+    drive?.exportador.cancelar(id);
     db.prepare('DELETE FROM courses WHERE id=?').run(id); // cascata remove lessons/progress/materials
     // Cópias do Drive e convertidos: sem o curso, só ocupariam disco.
     if (config.downloadsDir) fs.rmSync(pastaBaixadaDoCurso(config, id), { recursive: true, force: true });

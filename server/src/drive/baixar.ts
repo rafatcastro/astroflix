@@ -63,16 +63,19 @@ export function salvarCapacidades(db: Db, cap: Capacidades): void {
   );
 }
 
-/** Baixa um arquivo da origem para `destino`, retomando um `destino.part` que já exista. */
-export type BaixarArquivo = (remoteId: string, destino: string, tamanho: number) => Promise<void>;
+/**
+ * Baixa um arquivo da origem para `destino`, retomando um `destino.part` que já exista.
+ * `signal` interrompe no meio (cancelar a cópia de um curso inteiro para Downloads).
+ */
+export type BaixarArquivo = (remoteId: string, destino: string, tamanho: number, signal?: AbortSignal) => Promise<void>;
 
-export const baixarDoDrive = (cliente: ClienteDrive): BaixarArquivo => async (remoteId, destino, tamanho) => {
+export const baixarDoDrive = (cliente: ClienteDrive): BaixarArquivo => async (remoteId, destino, tamanho, signal) => {
   fs.mkdirSync(path.dirname(destino), { recursive: true });
   const parcial = `${destino}.part`;
   // Retoma de onde parou: vídeo de aula tem centenas de MB, e cair a rede no
   // meio não pode custar o download inteiro.
   let inicio = fs.existsSync(parcial) ? fs.statSync(parcial).size : 0;
-  let res = await cliente.baixar(remoteId, inicio ? `bytes=${inicio}-` : undefined);
+  let res = await cliente.baixar(remoteId, inicio ? `bytes=${inicio}-` : undefined, signal);
   if (inicio && res.status === 416) {
     // O pedaço já estava completo; só faltou renomear.
     await res.body?.cancel();
@@ -80,12 +83,13 @@ export const baixarDoDrive = (cliente: ClienteDrive): BaixarArquivo => async (re
     if (inicio && res.status !== 206) {
       await res.body?.cancel();
       inicio = 0;
-      res = await cliente.baixar(remoteId, undefined);
+      res = await cliente.baixar(remoteId, undefined, signal);
     }
     if (!res.ok || !res.body) throw new FalhaDrive('sem-conexao');
     await pipeline(
       Readable.fromWeb(res.body as import('node:stream/web').ReadableStream),
       fs.createWriteStream(parcial, { flags: inicio ? 'a' : 'w' }),
+      { signal },
     );
   }
   // Arquivo truncado tocaria até o meio e pararia: confere com o tamanho do Drive.

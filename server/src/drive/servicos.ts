@@ -7,12 +7,15 @@ import type { DepsIngestao } from '../scan/scan-drive';
 import type { Fetch } from './tipos';
 import { baixarDoDrive, criarBaixador, type BaixarArquivo, type Baixador } from './baixar';
 import { resourceKeyDoCurso } from './status';
+import { criarExportador, type Exportador } from './exportar';
+import { pastaDeDownloads } from '../downloads';
 
 export interface ServicosDrive {
   auth: AuthDrive;
   cliente(resourceKeys?: string | null): ClienteDrive;
   ingestao(resourceKeys?: string | null): DepsIngestao;
   baixador: Baixador;
+  exportador: Exportador;
 }
 
 // Um ponto só monta auth + cliente + deps a partir de db e fetch, para as rotas
@@ -35,22 +38,21 @@ export function criarServicosDrive(
       token: auth.token,
       resourceKeys,
     });
-  const baixador = criarBaixador({
-    db,
-    config,
-    fonte: async (courseId) => {
-      const c = db.prepare('SELECT source, drive_folder_id, drive_resource_key FROM courses WHERE id=?').get(courseId) as
-        | { source: string; drive_folder_id: string | null; drive_resource_key: string | null }
-        | undefined;
-      if (c?.source === 'drive') return baixarDoDrive(cliente(resourceKeyDoCurso(c.drive_folder_id, c.drive_resource_key)));
-      if (c?.source === 'telegram') return (await fonteTelegram?.(courseId)) ?? null;
-      return null;
-    },
-  });
+  const fonte = async (courseId: string): Promise<BaixarArquivo | null> => {
+    const c = db.prepare('SELECT source, drive_folder_id, drive_resource_key FROM courses WHERE id=?').get(courseId) as
+      | { source: string; drive_folder_id: string | null; drive_resource_key: string | null }
+      | undefined;
+    if (c?.source === 'drive') return baixarDoDrive(cliente(resourceKeyDoCurso(c.drive_folder_id, c.drive_resource_key)));
+    if (c?.source === 'telegram') return (await fonteTelegram?.(courseId)) ?? null;
+    return null;
+  };
+  const baixador = criarBaixador({ db, config, fonte });
+  const exportador = criarExportador({ db, config, fonte, pastaDownloads: pastaDeDownloads });
   return {
     auth,
     cliente,
     baixador,
+    exportador,
     // Terminou de ler a pasta (curso novo ou re-escaneado): baixa o que faltar.
     ingestao: (resourceKeys) => ({
       cliente: cliente(resourceKeys),

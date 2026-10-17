@@ -35,6 +35,19 @@ export interface CourseDetail {
   importacao: { carregando: boolean; erro: string | null } | null;
   // Cópia local do curso do Drive: aulas no disco e se o download continua.
   download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
+  /** O "Baixar" do curso inteiro para Downloads (só Drive e Telegram); null = nunca pedido. */
+  exportacao: Exportacao | null;
+  /** Bytes do curso inteiro (aulas e materiais), para o diálogo do "Baixar". */
+  tamanhoRemoto: number | null;
+}
+export interface Exportacao {
+  ativo: boolean;
+  feitos: number;
+  total: number;
+  bytesFeitos: number;
+  bytesTotal: number;
+  erro: string | null;
+  pasta: string;
 }
 // Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
 export interface Flashcard {
@@ -350,6 +363,8 @@ export const api = {
   patchCourse: (id: string, body: { title?: string; archived?: boolean; collectionId?: string | null }) =>
     jsonFetch<{ ok: true }>(`/api/courses/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
+  exportarCurso: (id: string) => jsonFetch<Exportacao>(`/api/courses/${id}/exportar`, { method: 'POST' }),
+  cancelarExportacao: (id: string) => jsonFetch<void>(`/api/courses/${id}/exportar`, { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),
