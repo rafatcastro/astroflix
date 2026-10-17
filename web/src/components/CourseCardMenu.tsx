@@ -5,7 +5,7 @@ import { useCollections } from '../api/hooks';
 import ConfirmDialog from './ConfirmDialog';
 import TextField from './TextField';
 
-type Flow = null | 'sheet' | 'rename' | 'collection' | 'confirmReset' | 'confirmDelete';
+type Flow = null | 'sheet' | 'rename' | 'collection' | 'confirmBaixar' | 'confirmReset' | 'confirmDelete';
 
 // Ações do curso direto do card da Biblioteca, sem entrar no curso. Abre como
 // action-sheet centrado (não como dropdown): o card é overflow-hidden e um
@@ -87,6 +87,20 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
     }
   };
 
+  // O curso inteiro para Downloads (drive/exportar.ts); o progresso aparece no
+  // cabeçalho da categoria e na página do curso.
+  const doBaixar = async () => {
+    close();
+    try {
+      await api.exportarCurso(course.id);
+      qc.invalidateQueries({ queryKey: ['exportacao-categoria'] });
+      qc.invalidateQueries({ queryKey: ['course', course.id] });
+      onNotice(`Baixando "${course.title}" para a pasta Downloads.`);
+    } catch {
+      onNotice('Não deu para começar o download. Tente de novo.');
+    }
+  };
+
   const doArchiveToggle = async () => {
     close();
     try {
@@ -133,6 +147,9 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
           <div className="w-full max-w-xs rounded-xl bg-neutral-900 p-2" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
             <div className="truncate px-3 pb-2 pt-2 text-sm font-medium text-neutral-200">{course.title}</div>
             <button type="button" className={sheetItem} onClick={() => setFlow('rename')}>Renomear…</button>
+            {course.source !== 'local' && (
+              <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar para Downloads…</button>
+            )}
             <button type="button" className={sheetItem} onClick={doRescan}>Re-escanear</button>
             <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button type="button" className={sheetItem} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>
@@ -222,6 +239,16 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
             </div>
           </div>
         </div>
+      )}
+
+      {flow === 'confirmBaixar' && (
+        <ConfirmDialog
+          title={`Baixar "${course.title}"`}
+          message="Todas as aulas e materiais vão para a pasta Downloads, numa pasta com o nome do curso e os nomes originais. O que já estiver lá não é baixado de novo."
+          confirmLabel="Baixar"
+          onConfirm={() => void doBaixar()}
+          onCancel={close}
+        />
       )}
 
       {flow === 'confirmReset' && (
