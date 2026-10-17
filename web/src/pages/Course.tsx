@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCourse, useSetComplete } from '../api/hooks';
+import { useCourse, useDownloads, useSetComplete } from '../api/hooks';
 import { formatBytes, formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { api } from '../api/client';
@@ -42,6 +42,7 @@ export default function Course() {
   const [rootIssue, setRootIssue] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmandoBaixar, setConfirmandoBaixar] = useState(false);
+  const { data: downloads } = useDownloads();
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
@@ -95,16 +96,14 @@ export default function Course() {
     setView(v);
     setPref('course.view', v);
   };
-  const exp = data.exportacao;
-  const erroDe = (e: string) => (data.source === 'telegram' && e !== 'sem-espaco' ? mensagemErroTelegram(e) : mensagemErroDrive(e));
+  // O progresso fica no painel de downloads (em toda tela).
   const baixarCurso = () => {
     setConfirmandoBaixar(false);
     void api.exportarCurso(id).then(
-      () => qc.invalidateQueries({ queryKey: ['course', id] }),
+      () => qc.invalidateQueries({ queryKey: ['downloads'] }),
       () => setNotice('Não deu para começar o download. Tente de novo.'),
     );
   };
-  const cancelarBaixar = () => void api.cancelarExportacao(id).then(() => qc.invalidateQueries({ queryKey: ['course', id] }), () => undefined);
   const chooseSize = (n: number) => {
     setGridSize(n);
     setPref('course.gridSize', n);
@@ -145,6 +144,7 @@ export default function Course() {
             onEditCover={editCover}
             onNotice={(t) => setNotice(t)}
             onBaixar={data.source !== 'local' ? () => setConfirmandoBaixar(true) : undefined}
+            baixando={!!downloads?.itens.some((e) => e.courseId === id && e.ativo)}
           />
         </div>
       </div>
@@ -199,35 +199,6 @@ export default function Course() {
           <Banner>
             {allLessons.filter((l) => l.missing).length} aula(s) não encontrada(s). Re-aponte a pasta pelo menu ⋯ para recuperar.
           </Banner>
-        </div>
-      )}
-      {exp && (exp.ativo || exp.erro || (exp.total > 0 && exp.feitos === exp.total)) && (
-        <div className="mt-4" role="status">
-          {exp.ativo ? (
-            <Banner tone="info">
-              <span className="flex flex-wrap items-center justify-between gap-2">
-                <span>
-                  Baixando o curso para Downloads: {exp.feitos} de {exp.total || '…'} arquivos
-                  {exp.bytesTotal > 0 && ` (${formatBytes(exp.bytesFeitos)} de ${formatBytes(exp.bytesTotal)})`}.
-                </span>
-                <button
-                  type="button"
-                  onClick={cancelarBaixar}
-                  className="rounded px-2 py-1 text-neutral-200 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                >
-                  Cancelar
-                </button>
-              </span>
-            </Banner>
-          ) : exp.erro ? (
-            <Banner>
-              O download do curso parou em {exp.feitos} de {exp.total} arquivos: {erroDe(exp.erro)} Use <b>Baixar para Downloads</b> no menu ⋯ para continuar de onde parou.
-            </Banner>
-          ) : (
-            <Banner tone="info">
-              Curso salvo em <span className="break-all text-neutral-100">{exp.pasta}</span>.
-            </Banner>
-          )}
         </div>
       )}
       {notice && <div className="mt-4 rounded-lg bg-neutral-900 px-3 py-2 text-sm text-neutral-300">{notice}</div>}

@@ -16,12 +16,15 @@ export default function CourseMenu({
   onEditCover,
   onNotice,
   onBaixar,
+  baixando,
 }: {
   course: CourseDetail;
   onEditCover: () => void;
   onNotice: (text: string) => void;
   /** Baixar o curso inteiro para Downloads; só vem para cursos do Drive e do Telegram. */
   onBaixar?: () => void;
+  /** Este curso está sendo baixado agora (o painel de downloads mostra o progresso). */
+  baixando?: boolean;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -179,8 +182,8 @@ export default function CourseMenu({
             {course.source === 'local' && <button className={item} onClick={() => { close(); onEditCover(); }}>Editar capa</button>}
             {course.source === 'local' && <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
             {onBaixar && (
-              <button className={`${item} disabled:text-neutral-500`} disabled={!!course.exportacao?.ativo} onClick={() => { close(); onBaixar(); }}>
-                {course.exportacao?.ativo ? 'Baixando para Downloads…' : 'Baixar para Downloads…'}
+              <button className={`${item} disabled:text-neutral-500`} disabled={baixando} onClick={() => { close(); onBaixar(); }}>
+                {baixando ? 'Baixando para Downloads…' : 'Baixar para Downloads…'}
               </button>
             )}
             <button className={item} onClick={doRescan}>Re-escanear agora</button>

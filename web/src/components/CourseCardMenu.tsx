@@ -88,14 +88,12 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
   };
 
   // O curso inteiro para Downloads (drive/exportar.ts); o progresso aparece no
-  // cabeçalho da categoria e na página do curso.
+  // painel de downloads.
   const doBaixar = async () => {
     close();
     try {
       await api.exportarCurso(course.id);
-      qc.invalidateQueries({ queryKey: ['exportacao-categoria'] });
-      qc.invalidateQueries({ queryKey: ['course', course.id] });
-      onNotice(`Baixando "${course.title}" para a pasta Downloads.`);
+      qc.invalidateQueries({ queryKey: ['downloads'] });
     } catch {
       onNotice('Não deu para começar o download. Tente de novo.');
     }

@@ -15,7 +15,18 @@ import { FalhaTelegram } from '../telegram/tipos';
 // baixador de só baixar sob demanda.
 
 export interface EstadoExportacao {
+  courseId: string;
+  titulo: string;
+  origem: 'drive' | 'telegram';
   ativo: boolean;
+  /** Pedido, mas esperando outro curso terminar. */
+  naFila: boolean;
+  /** Parou porque a pessoa cancelou. */
+  cancelado: boolean;
+  /** O arquivo sendo baixado agora (nome, sem a pasta). */
+  arquivo: string | null;
+  /** Bytes por segundo nos últimos segundos; null antes de dar para medir. */
+  velocidade: number | null;
   feitos: number;
   total: number;
   bytesFeitos: number;
@@ -30,6 +41,10 @@ export interface Exportador {
   exportar(courseId: string): void;
   cancelar(courseId: string): void;
   estado(courseId: string): EstadoExportacao | null;
+  /** Todos os pedidos desde que o app abriu (menos os dispensados), na ordem em que foram feitos. */
+  todos(): EstadoExportacao[];
+  /** Tira da lista um que já parou (o "×" do painel). */
+  dispensar(courseId: string): void;
   /** A pasta Downloads onde as cópias ficam. */
   pasta(): string;
 }
@@ -60,6 +75,13 @@ export function criarExportador(deps: {
   const { db, config } = deps;
   const fila: string[] = [];
   const estados = new Map<string, EstadoExportacao>();
+  // O `.part` do arquivo em andamento: o tamanho dele é o progresso dentro do
+  // arquivo (um vídeo de 1 GB deixaria a barra parada por minutos).
+  const parciais = new Map<string, string>();
+  // Amostras (hora, bytes) para a velocidade: a média dos últimos segundos, e não
+  // a do arquivo inteiro, para refletir a rede de agora.
+  const amostras = new Map<string, Array<{ t: number; b: number }>>();
+  const JANELA_MS = 6000;
   let atual: { id: string; ac: AbortController } | null = null;
   let rodando = false;
 
@@ -129,6 +151,8 @@ export function criarExportador(deps: {
     for (const it of faltam) {
       if (signal.aborted) return;
       fs.mkdirSync(path.dirname(it.destino), { recursive: true });
+      estado.arquivo = path.basename(it.destino);
+      parciais.set(courseId, `${it.destino}.part`);
       if (it.local) {
         await fs.promises.copyFile(it.local, it.destino);
       } else {
@@ -136,9 +160,37 @@ export function criarExportador(deps: {
         if (!baixar) throw new FalhaDrive('sem-conexao');
         await baixar(it.remoteId, it.destino, it.tamanho, signal);
       }
+      parciais.delete(courseId);
       estado.feitos++;
       estado.bytesFeitos += Math.max(it.tamanho, 0);
     }
+    estado.arquivo = null;
+  }
+
+  // Uma foto do estado com o progresso dentro do arquivo atual e a velocidade.
+  function foto(e: EstadoExportacao): EstadoExportacao {
+    let parcial = 0;
+    const p = parciais.get(e.courseId);
+    if (e.ativo && p) {
+      try {
+        parcial = fs.statSync(p).size;
+      } catch {
+        /* ainda não criado, ou acabou de virar o arquivo final */
+      }
+    }
+    const bytesFeitos = Math.min(e.bytesFeitos + parcial, e.bytesTotal || Infinity);
+    let velocidade: number | null = null;
+    if (e.ativo && !e.naFila) {
+      const agora = Date.now();
+      const lista = (amostras.get(e.courseId) ?? []).filter((a) => agora - a.t <= JANELA_MS);
+      lista.push({ t: agora, b: bytesFeitos });
+      amostras.set(e.courseId, lista);
+      const [a, z] = [lista[0], lista[lista.length - 1]];
+      if (z.t - a.t >= 1000) velocidade = Math.max(0, ((z.b - a.b) * 1000) / (z.t - a.t));
+    } else {
+      amostras.delete(e.courseId);
+    }
+    return { ...e, bytesFeitos, velocidade };
   }
 
   async function rodar(): Promise<void> {
@@ -149,6 +201,7 @@ export function criarExportador(deps: {
       const estado = estados.get(id)!;
       const ac = new AbortController();
       atual = { id, ac };
+      estado.naFila = false;
       try {
         await exportarCurso(id, estado, ac.signal);
         estado.erro = null;
@@ -163,6 +216,9 @@ export function criarExportador(deps: {
                 : 'sem-conexao';
       }
       atual = null;
+      parciais.delete(id);
+      estado.cancelado = ac.signal.aborted;
+      estado.arquivo = null;
       estado.ativo = false;
     }
     rodando = false;
@@ -170,7 +226,7 @@ export function criarExportador(deps: {
 
   return {
     exportar(courseId) {
-      const curso = db.prepare('SELECT title FROM courses WHERE id=?').get(courseId) as { title: string } | undefined;
+      const curso = db.prepare('SELECT title, source FROM courses WHERE id=?').get(courseId) as { title: string; source: string } | undefined;
       if (!curso || estados.get(courseId)?.ativo) return;
       const pasta = path.join(deps.pastaDownloads(), sanear(curso.title));
       // Na fila atrás de outros (o "Baixar" da categoria enfileira vários), o
@@ -182,7 +238,24 @@ export function criarExportador(deps: {
              UNION ALL SELECT size_bytes FROM materials WHERE course_id=@id AND remote_id IS NOT NULL)`,
         )
         .get({ id: courseId }) as { n: number; b: number };
-      estados.set(courseId, { ativo: true, feitos: 0, total: Number(t.n), bytesFeitos: 0, bytesTotal: Number(t.b), erro: null, pasta });
+      // Pedir de novo põe no fim da lista do painel, como um pedido novo.
+      estados.delete(courseId);
+      estados.set(courseId, {
+        courseId,
+        titulo: curso.title,
+        origem: curso.source === 'telegram' ? 'telegram' : 'drive',
+        ativo: true,
+        naFila: true,
+        cancelado: false,
+        arquivo: null,
+        velocidade: null,
+        feitos: 0,
+        total: Number(t.n),
+        bytesFeitos: 0,
+        bytesTotal: Number(t.b),
+        erro: null,
+        pasta,
+      });
       fila.push(courseId);
       void rodar();
     },
@@ -190,11 +263,22 @@ export function criarExportador(deps: {
       const i = fila.indexOf(courseId);
       if (i >= 0) fila.splice(i, 1);
       const e = estados.get(courseId);
-      if (e && i >= 0) e.ativo = false;
+      if (e && i >= 0) {
+        e.ativo = false;
+        e.naFila = false;
+        e.cancelado = true;
+      }
       // O `.part` fica: rodar de novo continua dele.
       if (atual?.id === courseId) atual.ac.abort();
     },
-    estado: (courseId) => estados.get(courseId) ?? null,
+    estado: (courseId) => {
+      const e = estados.get(courseId);
+      return e ? foto(e) : null;
+    },
+    todos: () => [...estados.values()].map(foto),
+    dispensar(courseId) {
+      if (!estados.get(courseId)?.ativo) estados.delete(courseId);
+    },
     pasta: () => deps.pastaDownloads(),
   };
 }
