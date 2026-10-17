@@ -15,7 +15,7 @@ import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
-import { ArrowLeft, Play, Check, List, LayoutGrid, Cards, Download } from '../components/icons';
+import { ArrowLeft, Play, Check, List, LayoutGrid, Cards } from '../components/icons';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
   const notCompleted = lessons.filter((l) => !l.completed && !l.missing && l.playable);
@@ -140,18 +140,12 @@ export default function Course() {
           >
             <Cards size={16} /> Questões
           </Link>
-          {data.source !== 'local' && (
-            <button
-              type="button"
-              onClick={() => setConfirmandoBaixar(true)}
-              disabled={!!exp?.ativo}
-              title="Baixar o curso inteiro para a pasta Downloads"
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg px-3 text-sm text-neutral-400 transition-colors hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-default disabled:text-neutral-600"
-            >
-              <Download size={16} /> {exp?.ativo ? 'Baixando…' : 'Baixar'}
-            </button>
-          )}
-          <CourseMenu course={data} onEditCover={editCover} onNotice={(t) => setNotice(t)} />
+          <CourseMenu
+            course={data}
+            onEditCover={editCover}
+            onNotice={(t) => setNotice(t)}
+            onBaixar={data.source !== 'local' ? () => setConfirmandoBaixar(true) : undefined}
+          />
         </div>
       </div>
 
@@ -227,7 +221,7 @@ export default function Course() {
             </Banner>
           ) : exp.erro ? (
             <Banner>
-              O download do curso parou em {exp.feitos} de {exp.total} arquivos: {erroDe(exp.erro)} Clique em <b>Baixar</b> para continuar de onde parou.
+              O download do curso parou em {exp.feitos} de {exp.total} arquivos: {erroDe(exp.erro)} Use <b>Baixar para Downloads</b> no menu ⋯ para continuar de onde parou.
             </Banner>
           ) : (
             <Banner tone="info">
