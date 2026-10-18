@@ -87,12 +87,12 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
     }
   };
 
-  // O curso inteiro para Downloads (drive/exportar.ts); o progresso aparece no
-  // painel de downloads.
+  // O curso inteiro para a pasta de armazenamento (drive/baixar.ts); o progresso
+  // aparece no painel de downloads.
   const doBaixar = async () => {
     close();
     try {
-      await api.exportarCurso(course.id);
+      await api.baixarCurso(course.id);
       qc.invalidateQueries({ queryKey: ['downloads'] });
     } catch {
       onNotice('Não deu para começar o download. Tente de novo.');
@@ -146,7 +146,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
             <div className="truncate px-3 pb-2 pt-2 text-sm font-medium text-neutral-200">{course.title}</div>
             <button type="button" className={sheetItem} onClick={() => setFlow('rename')}>Renomear…</button>
             {course.source !== 'local' && (
-              <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar para Downloads…</button>
+              <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar curso inteiro…</button>
             )}
             <button type="button" className={sheetItem} onClick={doRescan}>Re-escanear</button>
             <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
@@ -242,7 +242,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       {flow === 'confirmBaixar' && (
         <ConfirmDialog
           title={`Baixar "${course.title}"`}
-          message="Todas as aulas e materiais vão para a pasta Downloads, numa pasta com o nome do curso e os nomes originais. O que já estiver lá não é baixado de novo."
+          message="Todas as aulas e materiais são baixados para a pasta do app (Configurações → Armazenamento), numa pasta com o nome do curso e os nomes originais, para tocarem sem internet. O que já foi baixado não é baixado de novo."
           confirmLabel="Baixar"
           onConfirm={() => void doBaixar()}
           onCancel={close}

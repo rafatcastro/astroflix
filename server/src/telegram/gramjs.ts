@@ -168,8 +168,50 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
       chamar(async (): Promise<Convite> => {
         const r = await client.invoke(new Api.messages.CheckChatInvite({ hash }));
         if (r instanceof Api.ChatInviteAlready) return { tipo: 'ja-membro', grupo: peerDe(Api, r.chat) };
-        if (r instanceof Api.ChatInvitePeek) return { tipo: 'convite', titulo: (r.chat as { title?: string }).title ?? '' };
-        return { tipo: 'convite', titulo: r.title };
+        if (r instanceof Api.ChatInvitePeek) {
+          const chat = r.chat as { title?: string; broadcast?: boolean; participantsCount?: number };
+          return { tipo: 'convite', titulo: chat.title ?? '', canal: !!chat.broadcast, membros: chat.participantsCount ?? null, foto: null };
+        }
+        // A foto é enfeite: se não baixar, a prévia mostra a inicial do nome.
+        const foto =
+          r.photo instanceof Api.Photo
+            ? await client.downloadMedia(new Api.MessageMediaPhoto({ photo: r.photo }), {}).catch(() => null)
+            : null;
+        return {
+          tipo: 'convite',
+          titulo: r.title,
+          canal: !!r.broadcast,
+          membros: r.participantsCount ?? null,
+          foto: Buffer.isBuffer(foto) && foto.length ? foto : null,
+        };
+      }),
+
+    previa: (peer) =>
+      chamar(async () => {
+        const alvo = inputPeer(Api, peer);
+        // limit 1 com filtro: o Telegram devolve o total da busca sem mandar o
+        // histórico, então a prévia sai rápida mesmo num grupo com milhares de vídeos.
+        const contar = async (filter: TiposApi.TypeMessagesFilter) => (await client.getMessages(alvo, { limit: 1, filter })).total ?? 0;
+        const videos = await contar(new Api.InputMessagesFilterVideo());
+        const arquivos = await contar(new Api.InputMessagesFilterDocument());
+
+        const e = await client.getEntity(alvo).catch(() => null);
+        let membros = (e as { participantsCount?: number } | null)?.participantsCount ?? null;
+        // Canal costuma vir sem a contagem na entidade; ela só está no "full".
+        if (membros === null && peer.tipo === 'canal') {
+          const full = await client
+            .invoke(new Api.channels.GetFullChannel({ channel: new Api.InputChannel({ channelId: bigInt(peer.id), accessHash: bigInt(peer.accessHash ?? '0') }) }))
+            .catch(() => null);
+          membros = (full?.fullChat as { participantsCount?: number } | undefined)?.participantsCount ?? null;
+        }
+        const foto = e ? await client.downloadProfilePhoto(e, { isBig: false }).catch(() => null) : null;
+        return {
+          canal: e instanceof Api.Channel && !!e.broadcast,
+          membros,
+          foto: Buffer.isBuffer(foto) && foto.length ? foto : null,
+          videos,
+          arquivos,
+        };
       }),
 
     entrarPorConvite: (hash) =>

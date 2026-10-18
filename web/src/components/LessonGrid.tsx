@@ -16,8 +16,9 @@ export default function LessonGrid({
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${size}px, 45vw), 1fr))` }}>
       {lessons.map((l) => (
         <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative">
-          <Link to={`/lesson/${l.id}`}>
-            <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : ''}`}>
+          <Link to={`/lesson/${l.id}`} title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}>
+            {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
+            <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : l.baixada === false ? 'opacity-40 grayscale' : ''}`}>
               <img
                 src={api.lessonThumbUrl(l.id)}
                 alt=""
@@ -28,7 +29,7 @@ export default function LessonGrid({
               {l.missing && <span className="absolute left-1 top-1 rounded bg-amber-900/80 px-1 text-[10px] text-amber-200">não encontrada</span>}
             </div>
             <div className="p-2">
-              <div className="text-sm truncate">{l.title}</div>
+              <div className={`text-sm truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{l.title}</div>
               <div className="text-xs text-neutral-500 flex justify-between">
                 <span>{formatDuration(l.durationSec)}</span>
                 <span>{l.completed ? '✓' : l.position > 0 ? '▓' : '○'}</span>

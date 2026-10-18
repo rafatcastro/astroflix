@@ -11,7 +11,7 @@ import { repassarDoTelegram } from '../telegram/stream';
 import type { PeerTelegram } from '../telegram/tipos';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
-import { arquivoBaixadoDoMaterial } from '../drive/local';
+import { arquivoBaixado } from '../armazenamento';
 import { resourceKeyDoCurso } from '../drive/status';
 
 // Content-types dos materiais adicionais. PDF/imagem servem INLINE (para o leitor
@@ -72,9 +72,8 @@ export async function materialsRoutes(
       if (ext === 'svg') reply.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
     };
 
-    // Material do Drive já baixado sai do disco; senão, direto do Drive.
-    const baixado = row.source === 'drive' && config.downloadsDir ? arquivoBaixadoDoMaterial(config, row.course_id, id, row.rel_path) : null;
-    const local = baixado && fs.existsSync(baixado) ? baixado : null;
+    // Material do Drive ou do Telegram já baixado (curso inteiro) sai do disco; senão, da origem.
+    const local = row.source === 'drive' || row.source === 'telegram' ? (arquivoBaixado(db, config, 'material', id)?.arquivo ?? null) : null;
 
     if (row.source === 'drive' && !local) {
       if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
@@ -84,7 +83,7 @@ export async function materialsRoutes(
       return repassarDoDrive(req, reply, cliente, row.remote_id, { contentType: type, disposition }, drive);
     }
 
-    if (row.source === 'telegram') {
+    if (row.source === 'telegram' && !local) {
       if (!telegram) return reply.code(503).send({ error: 'sem-conexao' });
       if (!row.remote_id || !row.telegram_peer) return reply.code(404).send({ error: 'file_missing' });
       protegido();

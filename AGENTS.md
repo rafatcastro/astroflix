@@ -83,7 +83,7 @@ Lidas em `server/src/config.ts`:
 - `PORT`: padrão 7777. Se estiver ocupada, o app anda para a próxima (ver `listen.ts`).
 - `BIND`: padrão 127.0.0.1.
 - `DATA_DIR`: padrão `~/.learnflix`, ou `%LOCALAPPDATA%\Astroflix` no Windows. Guarda `app.db`,
-  `thumbs/`, `converted/` e `downloads/` (cópias dos cursos do Drive).
+  `thumbs/`, `converted/` e `downloads/` (pasta de armazenamento padrão dos cursos do Drive e do Telegram).
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
@@ -93,10 +93,11 @@ Lidas em `server/src/config.ts`:
   por desenho; quem protege os dados é a RLS de `supabase/schema.sql`). Sem as duas, o app roda sem
   conta.
 - `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`: opcionais, só para cursos do Telegram. Mesma
-  precedência e mesma regra de segredo das `GOOGLE_*`: `telegram.credenciais` → env →
-  `TELEGRAM_PADRAO` (de `.telegram.local.json`, ignorado pelo git; no CI, dos secrets).
+  precedência e mesma regra de segredo das `GOOGLE_*`: env → `TELEGRAM_PADRAO` (o "app próprio" saiu
+  das Configurações; o `telegram.credenciais` salvo é apagado ao abrir, encerrando a sessão feita com ele) (de `.telegram.local.json`, ignorado pelo git; no CI, dos secrets).
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_API_KEY`: opcionais, só para cursos do Google
-  Drive. Precedência, campo a campo: Configurações (`drive.credenciais`) → env → `GOOGLE_PADRAO`, embutido no
+  Drive. Precedência, campo a campo: env → `GOOGLE_PADRAO` (não há mais "app próprio" nas Configurações; o que
+  estava salvo em `drive.credenciais` é apagado ao abrir), embutido no
   `bundled.ts` por `scripts/gerar-bundled.mjs` a partir dessas mesmas envs ou de
   `.google-oauth.local.json`. Esse arquivo é ignorado pelo git e **nunca** é commitado (o repositório
   é público e o push protection do GitHub barra segredos do Google). No CI vêm dos secrets.
@@ -148,19 +149,20 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local. Colar o link cria o curso assim que a raiz responde; a listagem continua em segundo plano
-  (`importacaoDrive`). **Abrir uma aula** (`GET /api/lessons/:id` → `baixador.pedirAula`) baixa
-  ela e as `JANELA` (2) seguintes não concluídas (`baixar.ts`, uma fila, retomando `.part` com
-  Range), nunca o curso inteiro: a primeira versão baixava tudo e um curso passou de 40 GB. Vai
-  para `DATA_DIR/downloads/<curso>/<id da aula>` (`local.ts`)
-  e convertida se não tocar (`media/preparar.ts`, mesma fila de recodificação do player). Stream e
-  materiais preferem o arquivo local; o que ainda não chegou vem do Drive (materiais não são
-  baixados). Ao abrir, o app só limpa as concluídas (`buildApp(..., { retomarDownloads })`, só no
-  `index.ts`), sem baixar nada. Aula concluída tem a
-  cópia apagada (menos a assistida por último) e não é rebaixada; o banco guarda os metadados.
-  O **"Baixar para Downloads"** do menu ⋯ do curso é outra coisa: `drive/exportar.ts` copia o curso inteiro
-  (aulas e materiais, Drive ou Telegram) para a pasta Downloads do sistema (`downloads.ts`:
-  registro no Windows, `xdg-user-dir` no Linux), com os nomes reais, numa fila própria; o que
-  já está lá com o mesmo tamanho é pulado, e o app nunca mais mexe nessa pasta.
+  (`importacaoDrive`). **Downloads** (`drive/baixar.ts`, Drive e Telegram, uma fila só): todo
+  arquivo vai para a **pasta de armazenamento** (`armazenamento.ts`; padrão `DATA_DIR/downloads`,
+  configurável em Configurações → Armazenamento) com o nome real, `<raiz>/<curso>/<rel_path>`,
+  registrado na tabela `baixados` (v11, só local, sem nuvem). Dois pedidos: **abrir uma aula**
+  (`GET /api/lessons/:id` → `baixador.pedirAula`) baixa ela e as `JANELA` (2) seguintes não
+  concluídas e passa na frente (interrompe o arquivo atual, o `.part` fica); **"Baixar curso
+  inteiro"** (menu ⋯ do curso, do cartão e da categoria) traz aulas e materiais, com o painel de
+  downloads, retomada ao abrir o app e novas tentativas. Retoma `.part` com Range; aula que não toca
+  é convertida (`media/preparar.ts`) e o `.mp4` toma o lugar do original. **Nada é apagado
+  sozinho**: só "Remover download" (curso), "Limpar tudo" (Configurações) ou excluir o curso. A
+  pessoa pode tirar arquivos da pasta: a aula volta a aparecer cinza (`baixada: false`) e toca pela
+  rede. Trocar a raiz começa vazio (a antiga fica intacta). Stream e materiais preferem o arquivo
+  baixado; o que não está lá vem da origem. Ao abrir (`buildApp(..., { retomarDownloads })`, só no
+  `index.ts`), `migrarCacheAntigo` converte uma vez o cache antigo (nomes por id) para a pasta nova.
 - `telegram/`: cursos do Telegram, com a **conta da pessoa** (MTProto, GramJS). Tudo do GramJS
   fica em `gramjs.ts` (importado sob demanda: nada conecta até alguém colar um link); o resto do
   app só conhece `ClienteTelegram` e `ServicosTelegram`, e os testes injetam falsos
@@ -236,7 +238,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
   erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
   sair. Cada subida tem uma geração: eventos de um processo antigo não mexem mais na janela.
-- Segundo plano: enquanto há "Baixar para Downloads" em andamento, o servidor escreve
+- Segundo plano: enquanto há "Baixar curso inteiro" em andamento, o servidor escreve
   `LEARNFLIX_BAIXANDO=1` (e `=0` no fim). O `lib.rs` segura o sistema acordado (no macOS uma
   atividade `UserInitiated`, que também tira o App Nap; no Windows `SetThreadExecutionState`) e
   fechar a janela só a esconde (no macOS; nos outros, minimiza). O Dock a traz de volta; acabou o

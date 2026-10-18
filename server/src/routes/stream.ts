@@ -7,7 +7,7 @@ import { allowedRootsFor } from './settings';
 import { arquivoDoCurso, isWithinRoots } from './fs';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
-import { arquivoLocalDaAula } from '../drive/local';
+import { arquivoBaixado } from '../armazenamento';
 import { resourceKeyDoCurso } from '../drive/status';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { repassarDoTelegram } from '../telegram/stream';
@@ -55,7 +55,7 @@ export async function streamRoutes(
 
     // Aula do Drive ou do Telegram já baixada (ou convertida) toca do disco, como um curso local.
     const remota = row.source === 'drive' || row.source === 'telegram';
-    const baixada = remota ? arquivoLocalDaAula(config, row.course_id, id, row.rel_path) : null;
+    const baixada = remota ? arquivoBaixado(db, config, 'aula', id) : null;
     if (baixada) {
       return servirArquivo(req, reply, baixada.arquivo, baixada.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
     }

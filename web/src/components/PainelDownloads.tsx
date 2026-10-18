@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, type Exportacao } from '../api/client';
+import { api, type DownloadCurso } from '../api/client';
 import { useDownloads } from '../api/hooks';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
@@ -8,12 +8,12 @@ import { formatBytes, formatRestante, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { Download, X } from './icons';
 
-// Os "Baixar para Downloads" em andamento, em qualquer tela: o download de um
+// Os "Baixar curso inteiro" em andamento, em qualquer tela: o download de um
 // curso leva horas, e a pessoa continua usando o app enquanto isso. Fica no canto
 // esquerdo (o direito é do pomodoro), recolhido numa pílula ou aberto com cada
 // curso. Some quando não há nada na lista.
 
-const fracao = (e: Exportacao) => (e.bytesTotal > 0 ? e.bytesFeitos / e.bytesTotal : e.total > 0 ? e.feitos / e.total : 0);
+const fracao = (e: DownloadCurso) => (e.bytesTotal > 0 ? e.bytesFeitos / e.bytesTotal : e.total > 0 ? e.feitos / e.total : 0);
 
 function Barra({ valor, tom = 'azul' }: { valor: number; tom?: 'azul' | 'verde' | 'ambar' }) {
   const cor = tom === 'verde' ? 'bg-emerald-500' : tom === 'ambar' ? 'bg-amber-500' : 'bg-blue-500';
@@ -24,7 +24,7 @@ function Barra({ valor, tom = 'azul' }: { valor: number; tom?: 'azul' | 'verde' 
   );
 }
 
-function Item({ e }: { e: Exportacao }) {
+function Item({ e }: { e: DownloadCurso }) {
   const qc = useQueryClient();
   const atualizar = () => qc.invalidateQueries({ queryKey: ['downloads'] });
   const pronto = !e.ativo && !e.erro && !e.cancelado && e.feitos === e.total;
@@ -58,13 +58,13 @@ function Item({ e }: { e: Exportacao }) {
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {e.ativo ? (
-            <button type="button" className={botao} onClick={() => void api.cancelarExportacao(e.courseId).then(atualizar, () => undefined)}>
+            <button type="button" className={botao} onClick={() => void api.cancelarDownloadCurso(e.courseId).then(atualizar, () => undefined)}>
               Cancelar
             </button>
           ) : (
             <>
               {parado && (
-                <button type="button" className={botao} onClick={() => void api.exportarCurso(e.courseId).then(atualizar, () => undefined)}>
+                <button type="button" className={botao} onClick={() => void api.baixarCurso(e.courseId).then(atualizar, () => undefined)}>
                   Continuar
                 </button>
               )}
@@ -88,9 +88,14 @@ function Item({ e }: { e: Exportacao }) {
         </span>
       </div>
       {pronto && (
-        <div className="truncate text-xs text-neutral-500" title={e.pasta}>
-          {e.pasta}
-        </div>
+        <button
+          type="button"
+          title={e.pasta}
+          className="max-w-full truncate rounded text-left text-xs text-neutral-400 underline-offset-2 hover:text-neutral-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          onClick={() => void api.abrirArmazenamento(e.courseId).catch(() => undefined)}
+        >
+          Abrir a pasta
+        </button>
       )}
     </li>
   );

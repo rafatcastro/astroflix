@@ -6,7 +6,7 @@ import type { AppConfig } from '../config';
 import { arquivoDoCurso } from './fs';
 import { classifyPlayback, hasFfmpeg, probeDurationSec, probeFormat, remuxToMp4, transcodeToMp4, type Capacidades } from '../media/ffmpeg';
 import { converterPara as gerarConvertido, naFilaDeRecodificacao } from '../media/preparar';
-import { arquivoLocalDaAula } from '../drive/local';
+import { adotarConvertido, arquivoBaixado } from '../armazenamento';
 import { salvarCapacidades } from '../drive/baixar';
 
 // Verificação e conversão de reprodução. A extensão .mp4 mente no acervo real
@@ -27,15 +27,15 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
   const { db, config } = opts;
 
   // A aula do Drive ou do Telegram já baixada tem arquivo local como qualquer
-  // outra: o que vale para ela é a cópia em downloads/.
-  const lessonPath = (id: string): { file: string; courseId: string } | null => {
+  // outra: o que vale para ela é a cópia na pasta de armazenamento.
+  const lessonPath = (id: string): { file: string; courseId: string; remota?: boolean } | null => {
     const row = db
       .prepare('SELECT l.rel_path, l.course_id, c.root_path, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?')
       .get(id) as any;
     if (!row) return null;
     if (row.source === 'drive' || row.source === 'telegram') {
-      const local = arquivoLocalDaAula(config, row.course_id, id, row.rel_path);
-      return local && !local.convertido ? { file: local.arquivo, courseId: row.course_id } : null;
+      const local = arquivoBaixado(db, config, 'aula', id);
+      return local && !local.convertido ? { file: local.arquivo, courseId: row.course_id, remota: true } : null;
     }
     const file = arquivoDoCurso(row.root_path, row.rel_path);
     return file ? { file, courseId: row.course_id } : null;
@@ -48,15 +48,29 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
       .prepare("SELECT l.playable, l.rel_path, l.course_id, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source IN ('drive','telegram')")
       .get(id) as { playable: number; rel_path: string; course_id: string; source: string } | undefined;
     if (!r) return null;
-    if (arquivoLocalDaAula(config, r.course_id, id, r.rel_path)) return null;
+    if (arquivoBaixado(db, config, 'aula', id)) return null;
     return { playable: !!r.playable };
   };
 
   const setPlayable = db.prepare('UPDATE lessons SET playable=? WHERE id=?');
   const conversoes = new Map<string, Conversao>();
 
-  const converterPara = async (id: string, gerar: (tmp: string) => Promise<void>, original: string, cap: Capacidades) => {
-    await gerarConvertido(original, path.join(config.convertedDir, `${id}.mp4`), gerar, cap);
+  // Aula baixada do Drive ou do Telegram: o convertido toma o lugar do original na
+  // pasta de armazenamento (a pessoa vê um arquivo só). Curso local: o acervo
+  // nunca é tocado, e o convertido fica em DATA_DIR/converted.
+  const converterPara = async (
+    id: string,
+    gerar: (tmp: string) => Promise<void>,
+    loc: { file: string; courseId: string; remota?: boolean },
+    cap: Capacidades,
+  ) => {
+    if (loc.remota) {
+      const out = loc.file.slice(0, loc.file.length - path.extname(loc.file).length) + '.convertendo.mp4';
+      await gerarConvertido(loc.file, out, gerar, cap);
+      adotarConvertido(db, { tipo: 'aula', id, courseId: loc.courseId }, loc.file, out);
+      return;
+    }
+    await gerarConvertido(loc.file, path.join(config.convertedDir, `${id}.mp4`), gerar, cap);
     setPlayable.run(1, id);
   };
 
@@ -77,7 +91,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     if (noDrive) return { playable: noDrive.playable, reason: noDrive.playable ? null : 'formato', remuxable: false, semArquivo: true };
     const id = (req.params as { id: string }).id;
     // Já convertido: o stream serve a cópia, então a aula toca (o original continua igual).
-    if (fs.existsSync(path.join(config.convertedDir, `${id}.mp4`))) {
+    if (fs.existsSync(path.join(config.convertedDir, `${id}.mp4`)) || arquivoBaixado(db, config, 'aula', id)?.convertido) {
       setPlayable.run(1, id);
       return { playable: true };
     }
@@ -107,7 +121,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     const hevc = fmt.videoCodec === 'hevc' || fmt.videoCodec === 'h265';
     if (play.remuxable) {
       try {
-        await converterPara(id, (tmp) => remuxToMp4(loc.file, tmp, { hevc }), loc.file, cap);
+        await converterPara(id, (tmp) => remuxToMp4(loc.file, tmp, { hevc }), loc, cap);
       } catch {
         return reply.code(500).send({ error: 'convert_failed' });
       }
@@ -124,7 +138,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
           await converterPara(
             id,
             (tmp) => transcodeToMp4(loc.file, tmp, duracao, (f) => { estado.progresso = f; }),
-            loc.file,
+            loc,
             cap,
           );
           estado.progresso = 1;

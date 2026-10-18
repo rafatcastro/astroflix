@@ -3,12 +3,14 @@ import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { transaction, type Db } from '../db';
 import type { AppConfig } from '../config';
+import type { ServicosDrive } from '../drive/servicos';
+import { apagarBaixados } from '../armazenamento';
 
 // Reset de progresso e da biblioteca. Progresso é o bem mais valioso do app,
 // então cada alcance tem sua rota explícita (nada de DELETE genérico) e a UI
 // sempre confirma antes. Nenhuma rota aqui toca nos vídeos do acervo.
-export async function resetRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
-  const { db, config } = opts;
+export async function resetRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
 
   // Zera o progresso de UM curso (posições, concluídas). Aulas e curso ficam.
   app.post('/api/courses/:id/progress/reset', async (req, reply) => {
@@ -29,6 +31,9 @@ export async function resetRoutes(app: FastifyInstance, opts: { db: Db; config: 
   // que os nomeiam morrem junto). settings sobrevive; o acervo nunca é tocado.
   app.post('/api/library/reset', async () => {
     const before = (db.prepare('SELECT COUNT(*) c FROM courses').get() as { c: number }).c;
+    // O que foi baixado sai junto: sem os cursos, ninguém acharia esses arquivos pelo app.
+    await drive?.baixador.pararTudo(true);
+    apagarBaixados(db, config);
     transaction(db, () => {
       db.prepare('DELETE FROM courses').run();
       db.prepare('DELETE FROM collections').run();

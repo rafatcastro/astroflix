@@ -16,6 +16,8 @@ export interface LessonDTO {
   playable: boolean; missing: boolean;
   position: number; furthest: number; completed: boolean;
   progressUpdatedAt: string | null;
+  /** Está na pasta de armazenamento (curso local: sempre). Fora dela, a aula toca pela rede. */
+  baixada?: boolean;
 }
 export interface LessonFull extends LessonDTO {
   courseId: string; courseTitle: string; courseSource: 'local' | 'drive' | 'telegram';
@@ -33,14 +35,14 @@ export interface CourseDetail {
   source: 'local' | 'drive' | 'telegram';
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
   importacao: { carregando: boolean; erro: string | null } | null;
-  // Cópia local do curso do Drive: aulas no disco e se o download continua.
+  // Curso do Drive ou do Telegram: aulas na pasta de armazenamento e se a aula aberta e as próximas estão baixando.
   download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
-  /** O "Baixar" do curso inteiro para Downloads (só Drive e Telegram); null = nunca pedido. */
-  exportacao: Exportacao | null;
+  /** O "Baixar curso inteiro" (só Drive e Telegram); null = não pedido desde que o app abriu. */
+  downloadCurso: DownloadCurso | null;
   /** Bytes do curso inteiro (aulas e materiais), para o diálogo do "Baixar". */
   tamanhoRemoto: number | null;
 }
-export interface Exportacao {
+export interface DownloadCurso {
   courseId: string;
   titulo: string;
   origem: 'drive' | 'telegram';
@@ -60,6 +62,16 @@ export interface Exportacao {
   /** Parou por uma falha que passa sozinha: quando tenta de novo (ms desde 1970), ou null. */
   tentarEm: number | null;
   pasta: string;
+}
+/** A pasta onde ficam as aulas e materiais baixados (Configurações → Armazenamento). */
+export interface Armazenamento {
+  pasta: string;
+  /** É a pasta padrão do app (DATA_DIR/downloads). */
+  padrao: boolean;
+  bytes: number;
+  /** Espaço livre no disco da pasta; null se não deu para medir. */
+  livre: number | null;
+  cursos: Array<{ courseId: string; titulo: string; bytes: number; arquivos: number; pasta: string | null }>;
 }
 // Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
 export interface Flashcard {
@@ -285,24 +297,62 @@ export type RespostaTelegram =
   | { tipo: 'convite'; titulo: string }
   | { tipo: 'erro'; erro: string; esperaSeg?: number };
 
+/** O grupo antes de virar curso. Convite de grupo em que a pessoa não está: sem contagem (null). */
+export interface PreviaTelegram {
+  titulo: string;
+  canal: boolean;
+  membros: number | null;
+  /** data: URL da miniatura, ou null (a interface mostra a inicial). */
+  foto: string | null;
+  videos: number | null;
+  arquivos: number | null;
+  convite: boolean;
+  /** O grupo já é um curso da biblioteca. */
+  cursoId: string | null;
+}
+export type RespostaPrevia =
+  | { tipo: 'previa'; previa: PreviaTelegram }
+  | { tipo: 'conectar' }
+  | { tipo: 'erro'; erro: string; esperaSeg?: number };
+
+type CorpoTelegram = {
+  id?: string; existente?: boolean; precisaConectar?: boolean; convite?: boolean; titulo?: string; error?: string; esperaSeg?: number;
+};
+
 // Como no Drive: falhas esperadas (sem conta, convite, sem acesso…) voltam como valor, para a
 // interface explicar em vez de mostrar um erro genérico.
-async function telegramPost(url: string, link: string): Promise<RespostaTelegram> {
+async function postarLink(url: string, link: string, signal?: AbortSignal): Promise<{ res: Response; corpo: CorpoTelegram } | null> {
   let res: Response;
   try {
-    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link }) });
+    res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link }), signal });
   } catch {
-    return { tipo: 'erro', erro: 'sem-conexao' };
+    return null;
   }
-  let corpo: { id?: string; existente?: boolean; precisaConectar?: boolean; convite?: boolean; titulo?: string; error?: string; esperaSeg?: number } = {};
+  let corpo: CorpoTelegram = {};
   try {
-    corpo = (await res.json()) as typeof corpo;
+    corpo = (await res.json()) as CorpoTelegram;
   } catch {
-    // corpo ilegível: cai no erro genérico abaixo
+    // corpo ilegível: cai no erro genérico de quem chamou
   }
+  return { res, corpo };
+}
+
+async function telegramPost(url: string, link: string): Promise<RespostaTelegram> {
+  const r = await postarLink(url, link);
+  if (!r) return { tipo: 'erro', erro: 'sem-conexao' };
+  const { res, corpo } = r;
   if (res.ok && corpo.id) return { tipo: 'criado', id: corpo.id, existente: !!corpo.existente };
   if (res.status === 401 && corpo.precisaConectar) return { tipo: 'conectar' };
   if (res.status === 409 && corpo.convite) return { tipo: 'convite', titulo: corpo.titulo ?? '' };
+  return { tipo: 'erro', erro: corpo.error ?? 'telegram', esperaSeg: corpo.esperaSeg };
+}
+
+async function telegramPrevia(link: string, signal?: AbortSignal): Promise<RespostaPrevia> {
+  const r = await postarLink('/api/telegram/previa', link, signal);
+  if (!r) return { tipo: 'erro', erro: 'sem-conexao' };
+  const { res, corpo } = r;
+  if (res.ok) return { tipo: 'previa', previa: corpo as unknown as PreviaTelegram };
+  if (res.status === 401 && corpo.precisaConectar) return { tipo: 'conectar' };
   return { tipo: 'erro', erro: corpo.error ?? 'telegram', esperaSeg: corpo.esperaSeg };
 }
 
@@ -375,12 +425,19 @@ export const api = {
   patchCourse: (id: string, body: { title?: string; archived?: boolean; collectionId?: string | null }) =>
     jsonFetch<{ ok: true }>(`/api/courses/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
-  exportarCurso: (id: string) => jsonFetch<Exportacao>(`/api/courses/${id}/exportar`, { method: 'POST' }),
-  cancelarExportacao: (id: string) => jsonFetch<void>(`/api/courses/${id}/exportar`, { method: 'DELETE' }),
-  exportarCategoria: (cat: string) => jsonFetch<{ cursos: number }>(`/api/collections/${cat}/exportar`, { method: 'POST' }),
-  listarDownloads: () => jsonFetch<{ itens: Exportacao[]; pasta: string }>('/api/downloads'),
+  baixarCurso: (id: string) => jsonFetch<DownloadCurso>(`/api/courses/${id}/baixar`, { method: 'POST' }),
+  cancelarDownloadCurso: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixar`, { method: 'DELETE' }),
+  removerBaixados: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixados`, { method: 'DELETE' }),
+  baixarCategoria: (cat: string) => jsonFetch<{ cursos: number }>(`/api/collections/${cat}/baixar`, { method: 'POST' }),
+  listarDownloads: () => jsonFetch<{ itens: DownloadCurso[] }>('/api/downloads'),
   dispensarDownload: (id: string) => jsonFetch<void>(`/api/downloads/${id}`, { method: 'DELETE' }),
-  cancelarExportacaoCategoria: (cat: string) => jsonFetch<void>(`/api/collections/${cat}/exportar`, { method: 'DELETE' }),
+  cancelarDownloadCategoria: (cat: string) => jsonFetch<void>(`/api/collections/${cat}/baixar`, { method: 'DELETE' }),
+  armazenamento: () => jsonFetch<Armazenamento>('/api/armazenamento'),
+  /** null = volta à pasta padrão. */
+  trocarArmazenamento: (pasta: string | null) => jsonFetch<Armazenamento>('/api/armazenamento', { method: 'PUT', body: JSON.stringify({ pasta }) }),
+  abrirArmazenamento: (courseId?: string) =>
+    jsonFetch<void>('/api/armazenamento/abrir', { method: 'POST', body: JSON.stringify(courseId ? { courseId } : {}) }),
+  limparArmazenamento: () => jsonFetch<Armazenamento>('/api/armazenamento', { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),
@@ -431,10 +488,9 @@ export const api = {
   driveNavegar,
   driveStatus: () => jsonFetch<DriveStatus>('/api/drive/status'),
   driveDesconectar: () => jsonFetch<void>('/api/drive/auth', { method: 'DELETE' }),
-  driveSalvarCredenciais: (c: Partial<Record<CredencialDrive, string>>) =>
-    jsonFetch<void>('/api/drive/credenciais', { method: 'PUT', body: JSON.stringify(c) }),
   telegramCriarCurso: (link: string) => telegramPost('/api/telegram/courses', link),
   telegramEntrarConvite: (link: string) => telegramPost('/api/telegram/convite', link),
+  telegramPrevia,
   telegramStatus: () => jsonFetch<TelegramStatus>('/api/telegram/status'),
   telegramIniciarLogin: () => jsonFetch<EstadoLoginTelegram>('/api/telegram/login', { method: 'POST' }),
   telegramEstadoLogin: () => jsonFetch<EstadoLoginTelegram>('/api/telegram/login'),
@@ -442,8 +498,6 @@ export const api = {
     jsonFetch<EstadoLoginTelegram>('/api/telegram/login/senha', { method: 'POST', body: JSON.stringify({ senha }) }),
   telegramCancelarLogin: () => jsonFetch<void>('/api/telegram/login', { method: 'DELETE' }),
   telegramDesconectar: () => jsonFetch<void>('/api/telegram/auth', { method: 'DELETE' }),
-  telegramSalvarCredenciais: (c: { apiId?: string; apiHash?: string }) =>
-    jsonFetch<TelegramStatus>('/api/telegram/credenciais', { method: 'PUT', body: JSON.stringify(c) }),
   driveIniciarAuth: () => jsonFetch<{ url: string }>('/api/drive/auth/iniciar', { method: 'POST' }),
   importLibrary: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import', { method: 'POST', body: JSON.stringify(data) }),

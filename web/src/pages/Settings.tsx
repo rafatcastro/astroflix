@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { cliqueFora } from '../lib/desktop';
-import { api, type Collection, type CredencialDrive } from '../api/client';
+import { cliqueFora, escolherPasta } from '../lib/desktop';
+import { api, type Collection } from '../api/client';
 import { useCollections, useConexaoDrive } from '../api/hooks';
 import { CONFIG_PADRAO, lerConfig, salvarConfig, type ConfigPomodoro } from '../lib/pomodoro';
 import { getPref, setPref } from '../lib/prefs';
+import { formatBytes } from '../lib/format';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -15,12 +16,6 @@ import { ArrowLeft } from '../components/icons';
 const plural = (n: number) => (n === 1 ? '' : 's');
 
 
-
-const CAMPOS_DRIVE: { chave: CredencialDrive; rotulo: string; segredo?: boolean }[] = [
-  { chave: 'clientId', rotulo: 'ID do cliente OAuth' },
-  { chave: 'clientSecret', rotulo: 'Segredo do cliente OAuth', segredo: true },
-  { chave: 'apiKey', rotulo: 'Chave de API', segredo: true },
-];
 
 // O Anki só é tocado aqui quando a seção aparece, e só na própria máquina
 // (AnkiConnect escuta em localhost). Os flashcards funcionam sem ele: o card fica
@@ -198,8 +193,6 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const { data: status } = useQuery({ queryKey: ['driveStatus'], queryFn: api.driveStatus });
   const conexao = useConexaoDrive();
-  const [campos, setCampos] = useState<Record<CredencialDrive, string>>({ clientId: '', clientSecret: '', apiKey: '' });
-  const [salvando, setSalvando] = useState(false);
 
   const desconectar = async () => {
     try {
@@ -209,39 +202,6 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
     } catch {
       onNotice('Falha ao desconectar. Tente novamente.');
     }
-  };
-
-  const salvar = async () => {
-    // Campo vazio na API APAGA o valor; como os campos nascem vazios (o segredo nunca volta do
-    // servidor), mandamos só o que a pessoa digitou para não apagar o resto sem querer.
-    const preenchidos = Object.fromEntries(
-      Object.entries(campos).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, v.trim()]),
-    );
-    if (Object.keys(preenchidos).length === 0) return;
-    setSalvando(true);
-    try {
-      await api.driveSalvarCredenciais(preenchidos);
-      setCampos({ clientId: '', clientSecret: '', apiKey: '' });
-      qc.invalidateQueries({ queryKey: ['driveStatus'] });
-      onNotice('Credenciais do Google salvas.');
-    } catch {
-      onNotice('Falha ao salvar as credenciais. Tente novamente.');
-    }
-    setSalvando(false);
-  };
-
-  // Único jeito de apagar o que foi salvo: '' nos três campos devolve tudo à env/padrão do app.
-  const restaurar = async () => {
-    setSalvando(true);
-    try {
-      await api.driveSalvarCredenciais({ clientId: '', clientSecret: '', apiKey: '' });
-      setCampos({ clientId: '', clientSecret: '', apiKey: '' });
-      qc.invalidateQueries({ queryKey: ['driveStatus'] });
-      onNotice('Credenciais padrão restauradas.');
-    } catch {
-      onNotice('Falha ao restaurar as credenciais. Tente novamente.');
-    }
-    setSalvando(false);
   };
 
   return (
@@ -277,41 +237,6 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
           </>
         )}
       </div>
-      <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-        <summary className="min-h-[44px] cursor-pointer py-2 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
-          Usar um app próprio do Google Cloud
-        </summary>
-        <div className="space-y-3 pb-2 pt-1">
-          {CAMPOS_DRIVE.map((c) => (
-            <label key={c.chave} className="block">
-              <span className="mb-1 block text-neutral-400">{c.rotulo}</span>
-              <TextField
-                type={c.segredo ? 'password' : 'text'}
-                autoComplete="off"
-                value={campos[c.chave]}
-                placeholder={status?.credenciais[c.chave] ? 'configurado' : ''}
-                onChange={(e) => setCampos((prev) => ({ ...prev, [c.chave]: e.target.value }))}
-              />
-            </label>
-          ))}
-          <button
-            type="button"
-            onClick={() => void salvar()}
-            disabled={salvando}
-            className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
-          >
-            Salvar
-          </button>
-          <button
-            type="button"
-            onClick={() => void restaurar()}
-            disabled={salvando}
-            className="ml-2 min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
-          >
-            Restaurar padrão
-          </button>
-        </div>
-      </details>
     </section>
   );
 }
@@ -320,9 +245,6 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const { data: status } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
   const [conectando, setConectando] = useState(false);
-  const [apiId, setApiId] = useState('');
-  const [apiHash, setApiHash] = useState('');
-  const [salvando, setSalvando] = useState(false);
   const atualizar = () => qc.invalidateQueries({ queryKey: ['telegramStatus'] });
 
   const desconectar = async () => {
@@ -333,25 +255,6 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
     } catch {
       onNotice('Falha ao desconectar. Tente novamente.');
     }
-  };
-
-  // Mesma regra do Google: manda só o que foi digitado, porque campo vazio APAGA o valor salvo.
-  const salvar = async (restaurar = false) => {
-    const c = restaurar ? { apiId: '', apiHash: '' } : Object.fromEntries(
-      Object.entries({ apiId: apiId.trim(), apiHash: apiHash.trim() }).filter(([, v]) => v !== ''),
-    );
-    if (Object.keys(c).length === 0) return;
-    setSalvando(true);
-    try {
-      await api.telegramSalvarCredenciais(c);
-      setApiId('');
-      setApiHash('');
-      atualizar();
-      onNotice(restaurar ? 'App padrão do Telegram restaurado.' : 'App do Telegram salvo. Conecte a conta de novo.');
-    } catch {
-      onNotice('Falha ao salvar. Tente novamente.');
-    }
-    setSalvando(false);
   };
 
   return (
@@ -384,43 +287,186 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
           </>
         )}
       </div>
-      <details className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
-        <summary className="min-h-[44px] cursor-pointer py-2 text-neutral-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
-          Usar um app próprio do Telegram
-        </summary>
-        <div className="space-y-3 pb-2 pt-1">
-          <p className="text-neutral-500">Crie em my.telegram.org → API development tools. Trocar o app desconecta a conta.</p>
-          <label className="block">
-            <span className="mb-1 block text-neutral-400">api_id</span>
-            <TextField inputMode="numeric" autoComplete="off" value={apiId} placeholder={status?.credenciais.apiId ? 'configurado' : ''} onChange={(e) => setApiId(e.target.value)} />
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-neutral-400">api_hash</span>
-            <TextField type="password" autoComplete="off" value={apiHash} placeholder={status?.credenciais.apiHash ? 'configurado' : ''} onChange={(e) => setApiHash(e.target.value)} />
-          </label>
-          <button
-            type="button"
-            onClick={() => void salvar()}
-            disabled={salvando}
-            className="min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
-          >
-            Salvar
-          </button>
-          <button
-            type="button"
-            onClick={() => void salvar(true)}
-            disabled={salvando}
-            className="ml-2 min-h-[44px] rounded-lg px-3 py-2 text-sm text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
-          >
-            Restaurar padrão
-          </button>
-        </div>
-      </details>
       {conectando && (
         <TelegramLinkModal
           soLogin
           onClose={() => setConectando(false)}
           onConectado={() => onNotice('Telegram conectado.')}
+        />
+      )}
+    </section>
+  );
+}
+
+// Onde ficam as aulas e os materiais baixados do Drive e do Telegram, quanto
+// ocupam e o que fazer com eles. O app nunca apaga nada sozinho: é aqui (ou no
+// menu do curso) que a pessoa libera espaço.
+function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ['armazenamento'], queryFn: api.armazenamento });
+  const [trocando, setTrocando] = useState<string | null | undefined>(undefined);
+  const [limpando, setLimpando] = useState(false);
+  const [removendo, setRemovendo] = useState<{ courseId: string; titulo: string } | null>(null);
+
+  const depois = () => {
+    qc.invalidateQueries({ queryKey: ['armazenamento'] });
+    qc.invalidateQueries({ queryKey: ['course'] });
+    qc.invalidateQueries({ queryKey: ['downloads'] });
+  };
+  const ERROS: Record<string, string> = {
+    forbidden: 'Essa pasta fica fora das pastas que o app pode usar.',
+    'sem-permissao': 'O app não consegue gravar nessa pasta.',
+  };
+
+  const escolher = async () => {
+    const p = await escolherPasta('Escolha onde guardar as aulas baixadas');
+    if (p && p !== data?.pasta) setTrocando(p);
+  };
+  const trocar = async () => {
+    const pasta = trocando;
+    setTrocando(undefined);
+    if (pasta === undefined) return;
+    try {
+      await api.trocarArmazenamento(pasta);
+      depois();
+      onNotice('Pasta de downloads trocada. Os próximos downloads vão para ela.');
+    } catch (e) {
+      onNotice(ERROS[(e as Error).message] ?? 'Não deu para trocar a pasta. Tente de novo.');
+    }
+  };
+  const limpar = async () => {
+    setLimpando(false);
+    try {
+      await api.limparArmazenamento();
+      depois();
+      onNotice('Downloads apagados. As aulas continuam tocando pela internet.');
+    } catch {
+      onNotice('Não deu para limpar. Tente de novo.');
+    }
+  };
+  const remover = async () => {
+    const r = removendo;
+    setRemovendo(null);
+    if (!r) return;
+    try {
+      await api.removerBaixados(r.courseId);
+      depois();
+      onNotice(`Download de "${r.titulo}" removido.`);
+    } catch {
+      onNotice('Não deu para remover. Tente de novo.');
+    }
+  };
+
+  const botao =
+    'min-h-[44px] shrink-0 rounded-lg bg-neutral-800 px-3 text-neutral-200 hover:bg-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40';
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">Armazenamento</h2>
+      <p className="mb-3 text-sm text-neutral-500">
+        As aulas do Drive e do Telegram são baixadas para esta pasta, com os nomes originais. Pode abrir e levar os arquivos para onde
+        quiser: o que sair dela volta a tocar pela internet.
+      </p>
+      <div className="rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="truncate text-neutral-200" title={data?.pasta}>
+              {data?.pasta ?? 'Carregando…'}
+            </div>
+            {data && (
+              <div className="text-xs tabular-nums text-neutral-500">
+                {formatBytes(data.bytes)} baixados{data.livre != null ? ` · ${formatBytes(data.livre)} livres no disco` : ''}
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={botao} onClick={() => void api.abrirArmazenamento().catch(() => onNotice('Não deu para abrir a pasta.'))}>
+              Abrir pasta
+            </button>
+            <button type="button" className={botao} onClick={() => void escolher()}>
+              Trocar…
+            </button>
+            {data && !data.padrao && (
+              <button type="button" className={botao} onClick={() => setTrocando(null)}>
+                Usar a padrão
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {data && data.cursos.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {data.cursos.map((c) => (
+            <div key={c.courseId} className="flex items-center justify-between gap-2 rounded-lg bg-neutral-900 px-3 py-1 text-sm">
+              <Link to={`/course/${c.courseId}`} className="min-w-0 truncate hover:underline">
+                {c.titulo}
+              </Link>
+              <div className="flex shrink-0 items-center gap-1">
+                <span className="text-xs tabular-nums text-neutral-500">
+                  {c.arquivos} arquivo{plural(c.arquivos)} · {formatBytes(c.bytes)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void api.abrirArmazenamento(c.courseId).catch(() => onNotice('Não deu para abrir a pasta.'))}
+                  className="min-h-[44px] rounded px-2 text-neutral-400 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  Abrir
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRemovendo({ courseId: c.courseId, titulo: c.titulo })}
+                  className="min-h-[44px] rounded px-2 text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  Remover…
+                </button>
+              </div>
+            </div>
+          ))}
+          <div className="flex justify-end pt-1">
+            <button
+              type="button"
+              onClick={() => setLimpando(true)}
+              className="min-h-[44px] rounded px-3 text-sm text-neutral-400 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              Limpar tudo…
+            </button>
+          </div>
+        </div>
+      )}
+
+      {trocando !== undefined && (
+        <ConfirmDialog
+          title="Trocar a pasta de downloads?"
+          message={
+            <>
+              Os próximos downloads vão para <b className="text-neutral-200">{trocando ?? 'a pasta padrão do app'}</b>. O que já foi baixado
+              fica onde está (pode mover ou apagar), e essas aulas passam a aparecer como não baixadas.
+            </>
+          }
+          confirmLabel="Trocar"
+          onConfirm={() => void trocar()}
+          onCancel={() => setTrocando(undefined)}
+        />
+      )}
+      {limpando && (
+        <ConfirmDialog
+          title="Apagar todos os downloads?"
+          message={`Para os downloads em andamento e apaga ${data ? formatBytes(data.bytes) : 'tudo'} baixados nesta pasta. Os cursos e o progresso ficam; as aulas voltam a tocar pela internet.`}
+          confirmLabel="Apagar"
+          danger
+          onConfirm={() => void limpar()}
+          onCancel={() => setLimpando(false)}
+        />
+      )}
+      {removendo && (
+        <ConfirmDialog
+          title={`Remover o download de "${removendo.titulo}"?`}
+          message="Apaga as aulas e os materiais baixados deste curso. O curso e o progresso ficam."
+          confirmLabel="Remover"
+          danger
+          onConfirm={() => void remover()}
+          onCancel={() => setRemovendo(null)}
         />
       )}
     </section>
@@ -527,6 +573,7 @@ export default function Settings() {
         </label>
       </section>
 
+      <SecaoArmazenamento onNotice={setNotice} />
       <SecaoDrive onNotice={setNotice} />
       <SecaoAnki />
       <SecaoTelegram onNotice={setNotice} />

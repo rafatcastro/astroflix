@@ -4,10 +4,9 @@ import type { ServicosDrive } from '../drive/servicos';
 import { FalhaDrive } from '../drive/tipos';
 import { parseLinkDrive } from '../drive/link';
 import { statusDaFalha } from '../drive/status';
-import { credenciaisGoogle, salvarCredenciais } from '../drive/credenciais';
+import { credenciaisGoogle } from '../drive/credenciais';
 import { createCourseFromDrive } from '../scan/scan-drive';
 
-const CAMPOS = ['clientId', 'clientSecret', 'apiKey'] as const;
 const PASTA = 'application/vnd.google-apps.folder';
 const PDF = 'application/pdf';
 const ATALHO = 'application/vnd.google-apps.shortcut';
@@ -138,25 +137,6 @@ export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: S
 
   app.delete('/api/drive/auth', async (_req, reply) => {
     await drive.auth.desconectar();
-    return reply.code(204).send();
-  });
-
-  app.put('/api/drive/credenciais', async (req, reply) => {
-    const b = req.body;
-    if (!b || typeof b !== 'object' || Array.isArray(b)) return reply.code(400).send({ error: 'corpo-invalido' });
-    const parcial: Partial<Record<(typeof CAMPOS)[number], string>> = {};
-    for (const c of CAMPOS) {
-      const v = (b as Record<string, unknown>)[c];
-      if (typeof v === 'string') parcial[c] = v.trim();
-    }
-    const antes = credenciaisGoogle(db);
-    salvarCredenciais(db, parcial);
-    const depois = credenciaisGoogle(db);
-    // O refresh token pertence ao client OAuth que o emitiu: com outro client ele
-    // só falharia com invalid_grant, e o e-mail mostrado seria de uma conta velha.
-    if (antes.clientId !== depois.clientId || antes.clientSecret !== depois.clientSecret) {
-      await drive.auth.desconectar({ revogar: false });
-    }
     return reply.code(204).send();
   });
 }

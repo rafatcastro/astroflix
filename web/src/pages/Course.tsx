@@ -99,7 +99,7 @@ export default function Course() {
   // O progresso fica no painel de downloads (em toda tela).
   const baixarCurso = () => {
     setConfirmandoBaixar(false);
-    void api.exportarCurso(id).then(
+    void api.baixarCurso(id).then(
       () => qc.invalidateQueries({ queryKey: ['downloads'] }),
       () => setNotice('Não deu para começar o download. Tente de novo.'),
     );
@@ -174,7 +174,7 @@ export default function Course() {
             </Banner>
           ) : (
             <Banner tone="info">
-              Baixando a aula aberta e as próximas para tocarem sem internet. O resto do curso só é baixado quando você chegar lá.
+              Baixando a aula aberta e as próximas para tocarem sem internet. Para ter o curso todo, use <b>Baixar curso inteiro</b> no menu ⋯.
             </Banner>
           )}
         </div>
@@ -289,7 +289,11 @@ export default function Course() {
             ) : (
               <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
                 {m.lessons.map((l) => (
-                  <div key={l.id} className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}>
+                  <div
+                    key={l.id}
+                    className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
+                    title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}
+                  >
                     <Link
                       to={`/lesson/${l.id}`}
                       className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
@@ -297,12 +301,13 @@ export default function Course() {
                       <img
                         src={api.lessonThumbUrl(l.id)}
                         alt=""
-                        className="aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover"
+                        className={`aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover ${l.baixada === false ? 'opacity-40 grayscale' : ''}`}
                         loading="lazy"
                         onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
                       />
                       <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
-                      <span className="flex-1 truncate">{l.title}</span>
+                      {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
+                      <span className={`flex-1 truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{l.title}</span>
                       <span className="shrink-0 text-xs text-neutral-500">{formatDuration(l.durationSec)}</span>
                       <span className="w-auto shrink-0 text-right text-xs sm:w-28">
                         {l.missing ? (
@@ -347,8 +352,9 @@ export default function Course() {
           title="Baixar o curso inteiro"
           message={
             <>
-              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} vão para a pasta Downloads, em{' '}
-              <b className="text-neutral-200">{data.title}</b>, com os nomes originais. O que já estiver lá não é baixado de novo.
+              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} são baixados para a pasta do
+              app, em <b className="text-neutral-200">{data.title}</b>, com os nomes originais, para tocarem sem internet. O que já foi
+              baixado não é baixado de novo. A pasta fica em Configurações → Armazenamento.
             </>
           }
           confirmLabel="Baixar"

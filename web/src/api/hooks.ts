@@ -13,7 +13,7 @@ export const useCourse = (id: string) =>
     refetchInterval: (q) =>
       q.state.data?.importacao?.carregando || q.state.data?.download?.ativo ? 1500 : false,
   });
-// Os "Baixar para Downloads" (painel global, botões do curso e da categoria).
+// Os "Baixar curso inteiro" (painel global, botões do curso e da categoria).
 // Pergunta a cada segundo só enquanto algum está andando (ou vai tentar de novo); quem começa um
 // download invalida ['downloads'] para o painel aparecer na hora.
 export const useDownloads = () =>

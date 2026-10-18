@@ -25,7 +25,7 @@ struct Sidecar {
     geracao: AtomicU64,
 }
 
-/// "Baixar para Downloads" em andamento (o servidor avisa com LEARNFLIX_BAIXANDO=).
+/// "Baixar curso inteiro" em andamento (o servidor avisa com LEARNFLIX_BAIXANDO=).
 /// Um curso do Telegram leva horas: fechar a janela não pode parar o download,
 /// e o sistema não pode dormir nem pôr o app em App Nap no meio dele.
 #[derive(Default)]
@@ -60,7 +60,7 @@ mod energia {
             let mut atividade = atividade.borrow_mut();
             let info = NSProcessInfo::processInfo();
             if ligar && atividade.is_none() {
-                let motivo = NSString::from_str("Baixando cursos para a pasta Downloads");
+                let motivo = NSString::from_str("Baixando cursos para assistir sem internet");
                 *atividade = Some(info.beginActivityWithOptions_reason(NSActivityOptions::UserInitiated, &motivo));
             } else if !ligar {
                 if let Some(a) = atividade.take() {

@@ -9,7 +9,7 @@ import RepointModal from './RepointModal';
 import ConfirmDialog from './ConfirmDialog';
 import TextField from './TextField';
 
-type Flow = null | 'menu' | 'pickRepoint' | 'preview' | 'rename' | 'collection' | 'confirmArchive' | 'confirmReset' | 'confirmDelete';
+type Flow = null | 'menu' | 'pickRepoint' | 'preview' | 'rename' | 'collection' | 'confirmArchive' | 'confirmReset' | 'confirmDelete' | 'confirmRemoverBaixados';
 
 export default function CourseMenu({
   course,
@@ -21,7 +21,7 @@ export default function CourseMenu({
   course: CourseDetail;
   onEditCover: () => void;
   onNotice: (text: string) => void;
-  /** Baixar o curso inteiro para Downloads; só vem para cursos do Drive e do Telegram. */
+  /** Baixar o curso inteiro para a pasta de armazenamento; só vem para cursos do Drive e do Telegram. */
   onBaixar?: () => void;
   /** Este curso está sendo baixado agora (o painel de downloads mostra o progresso). */
   baixando?: boolean;
@@ -161,6 +161,21 @@ export default function CourseMenu({
     }
   };
 
+  // Apaga só o que foi baixado: o curso e o progresso ficam, e as aulas voltam a tocar pela rede.
+  const doRemoverBaixados = async () => {
+    close();
+    try {
+      await api.removerBaixados(course.id);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['downloads'] });
+      qc.invalidateQueries({ queryKey: ['armazenamento'] });
+      onNotice('Download removido. As aulas continuam tocando pela internet.');
+    } catch {
+      onNotice('Não deu para remover o download. Tente de novo.');
+    }
+  };
+
+  const temBaixadas = (course.download?.baixadas ?? 0) > 0;
   const item = 'block w-full px-3 py-2 text-left text-sm hover:bg-neutral-800';
 
   return (
@@ -183,9 +198,15 @@ export default function CourseMenu({
             {course.source === 'local' && <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
             {onBaixar && (
               <button className={`${item} disabled:text-neutral-500`} disabled={baixando} onClick={() => { close(); onBaixar(); }}>
-                {baixando ? 'Baixando para Downloads…' : 'Baixar para Downloads…'}
+                {baixando ? 'Baixando o curso…' : 'Baixar curso inteiro…'}
               </button>
             )}
+            {temBaixadas && (
+              <button className={item} onClick={() => { close(); void api.abrirArmazenamento(course.id).catch(() => onNotice('Não deu para abrir a pasta.')); }}>
+                Abrir pasta baixada
+              </button>
+            )}
+            {temBaixadas && <button className={item} onClick={() => setFlow('confirmRemoverBaixados')}>Remover download…</button>}
             <button className={item} onClick={doRescan}>Re-escanear agora</button>
             <button className={item} onClick={() => { setTitle(course.title); setFlow('rename'); }}>Renomear…</button>
             <button className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
@@ -301,10 +322,27 @@ export default function CourseMenu({
       {flow === 'confirmDelete' && (
         <ConfirmDialog
           title={`Excluir "${course.title}"?`}
-          message="Remove o curso e todo o progresso definitivamente. Os arquivos de vídeo no disco não são tocados."
+          message={
+            course.source === 'local'
+              ? 'Remove o curso e todo o progresso definitivamente. Os arquivos de vídeo no disco não são tocados.'
+              : 'Remove o curso e todo o progresso definitivamente, e apaga o que foi baixado dele. O original no ' +
+                (course.source === 'drive' ? 'Drive' : 'Telegram') +
+                ' não é tocado.'
+          }
           confirmLabel="Excluir"
           danger
           onConfirm={doDelete}
+          onCancel={close}
+        />
+      )}
+
+      {flow === 'confirmRemoverBaixados' && (
+        <ConfirmDialog
+          title="Remover o download?"
+          message={`Apaga as ${course.download?.baixadas ?? 0} aula(s) e os materiais baixados deste curso. O curso e o progresso ficam, e as aulas voltam a tocar pela internet (e a ser baixadas quando você abrir).`}
+          confirmLabel="Remover"
+          danger
+          onConfirm={() => void doRemoverBaixados()}
           onCancel={close}
         />
       )}

@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 10;
+const ULTIMA_VERSAO = 11;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -386,6 +386,34 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
                 INSERT INTO nuvem_fila (tabela, chave) VALUES ('tempo_aula', NEW.id); END;
       `);
       pragma(db, 'user_version = 10');
+    });
+  }
+  if (version < 11 && ate >= 11) {
+    // Onde cada aula e material do Drive ou do Telegram foi baixado, com o nome
+    // real, na pasta de armazenamento (armazenamento.ts). Só desta máquina: não
+    // tem gatilho da nuvem, porque o caminho não vale em outro computador. O
+    // `item_id` não tem chave estrangeira (aponta para aula ou material, conforme
+    // o tipo); a do curso leva tudo junto quando ele é excluído.
+    // `pastas_baixadas` guarda a pasta de cada curso dentro da raiz: o nome sai
+    // do título no primeiro download e não muda se o curso for renomeado.
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE baixados (
+          tipo TEXT NOT NULL CHECK (tipo IN ('aula','material')),
+          item_id TEXT NOT NULL,
+          course_id TEXT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+          arquivo TEXT NOT NULL,
+          convertido INTEGER NOT NULL DEFAULT 0,
+          PRIMARY KEY (tipo, item_id)
+        );
+        CREATE INDEX idx_baixados_curso ON baixados(course_id);
+        CREATE TABLE pastas_baixadas (
+          course_id TEXT PRIMARY KEY REFERENCES courses(id) ON DELETE CASCADE,
+          raiz TEXT NOT NULL,
+          pasta TEXT NOT NULL
+        );
+      `);
+      pragma(db, 'user_version = 11');
     });
   }
 }

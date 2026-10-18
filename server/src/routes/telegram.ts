@@ -5,7 +5,6 @@ import { parseLinkTelegram } from '../telegram/link';
 import type { ServicosTelegram } from '../telegram/servicos';
 import type { ClienteTelegram, GrupoTelegram } from '../telegram/cliente';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
-import { credenciaisTelegram, salvarCredenciaisTelegram } from '../telegram/credenciais';
 import { createCourseFromTelegram } from '../scan/scan-telegram';
 
 export async function telegramRoutes(
@@ -36,6 +35,47 @@ export async function telegramRoutes(
       }
       const r = await criar(cliente, grupo, (texto as string).trim());
       return reply.code(r.existente ? 200 : 201).send(r);
+    } catch (e) {
+      const r = respostaDeFalhaTelegram(e);
+      if (r.corpo.error === 'nao-autorizado') return reply.code(401).send({ precisaConectar: true });
+      return reply.code(r.status).send(r.corpo);
+    }
+  });
+
+  // A prévia antes de adicionar: só lê. Não cria curso nem entra em grupo; de um
+  // convite em que a pessoa ainda não está, o Telegram mostra nome, foto e
+  // membros, mas não deixa contar os vídeos.
+  app.post('/api/telegram/previa', async (req, reply) => {
+    const texto = (req.body as { link?: unknown } | undefined)?.link;
+    const link = typeof texto === 'string' ? parseLinkTelegram(texto) : null;
+    if (!link) return reply.code(400).send({ error: 'link-invalido' });
+    const dataUrl = (b: Buffer | null) => (b ? `data:image/jpeg;base64,${b.toString('base64')}` : null);
+    try {
+      const cliente = await telegram.cliente();
+      let grupo: GrupoTelegram;
+      if (link.tipo === 'convite') {
+        const c = await cliente.verConvite(link.hash);
+        if (c.tipo === 'convite') {
+          return { titulo: c.titulo, canal: c.canal, membros: c.membros, foto: dataUrl(c.foto), videos: null, arquivos: null, convite: true, cursoId: null };
+        }
+        grupo = c.grupo;
+      } else {
+        grupo = await cliente.resolver(link);
+      }
+      const p = await cliente.previa(grupo.peer);
+      const ja = db
+        .prepare("SELECT id FROM courses WHERE source='telegram' AND json_extract(telegram_peer, '$.id')=?")
+        .get(grupo.peer.id) as { id: string } | undefined;
+      return {
+        titulo: grupo.titulo,
+        canal: p.canal,
+        membros: p.membros,
+        foto: dataUrl(p.foto),
+        videos: p.videos,
+        arquivos: p.arquivos,
+        convite: false,
+        cursoId: ja?.id ?? null,
+      };
     } catch (e) {
       const r = respostaDeFalhaTelegram(e);
       if (r.corpo.error === 'nao-autorizado') return reply.code(401).send({ precisaConectar: true });
@@ -82,42 +122,5 @@ export async function telegramRoutes(
   app.delete('/api/telegram/auth', async (_req, reply) => {
     await telegram.desconectar();
     return reply.code(204).send();
-  });
-
-  // Trocar o app do Telegram invalida a sessão: ela foi criada com o api_id
-  // antigo. A sessão é encerrada com a credencial VELHA (enquanto ela ainda
-  // serve para falar com o Telegram), e só se o valor efetivo mudar de verdade.
-  app.put('/api/telegram/credenciais', async (req, reply) => {
-    const b = (req.body ?? {}) as { apiId?: unknown; apiHash?: unknown };
-    const parcial: { apiId?: string | number | null; apiHash?: string | null } = {};
-    if ('apiId' in b) {
-      if (b.apiId !== null && typeof b.apiId !== 'string' && typeof b.apiId !== 'number') return reply.code(400).send({ error: 'invalido' });
-      const v = typeof b.apiId === 'string' ? b.apiId.trim() : b.apiId;
-      // Vazio restaura o padrão; qualquer outra coisa tem de ser um inteiro positivo.
-      if (v !== null && v !== '' && !(Number.isInteger(Number(v)) && Number(v) > 0)) return reply.code(400).send({ error: 'api-id-invalido' });
-      parcial.apiId = v as string | number | null;
-    }
-    if ('apiHash' in b) {
-      if (b.apiHash !== null && typeof b.apiHash !== 'string') return reply.code(400).send({ error: 'invalido' });
-      parcial.apiHash = (b.apiHash as string | null)?.trim() || null;
-    }
-
-    const lerSalvo = () => (db.prepare("SELECT value FROM settings WHERE key='telegram.credenciais'").get() as { value: string } | undefined)?.value;
-    const salvoAntes = lerSalvo();
-    const antes = credenciaisTelegram(db);
-    salvarCredenciaisTelegram(db, parcial);
-    const depois = credenciaisTelegram(db);
-    const mudou = antes.apiId !== depois.apiId || antes.apiHash !== depois.apiHash;
-    if (mudou && telegram.status().conectado) {
-      const salvoDepois = lerSalvo();
-      const gravar = (v: string | undefined) =>
-        v === undefined
-          ? db.prepare("DELETE FROM settings WHERE key='telegram.credenciais'").run()
-          : db.prepare("INSERT INTO settings (key, value) VALUES ('telegram.credenciais', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(v);
-      gravar(salvoAntes);
-      await telegram.aoTrocarCredenciais();
-      gravar(salvoDepois);
-    }
-    return telegram.status();
   });
 }

@@ -36,7 +36,10 @@ import { estudoRoutes } from './routes/estudo';
 import { criarSincronizador, type Sincronizador } from './nuvem/sincronizar';
 import { contaRoutes } from './routes/conta';
 import { documentosRoutes } from './routes/documentos';
-import { credenciaisGoogle } from './drive/credenciais';
+import { credenciaisGoogle, descartarCredenciaisSalvas } from './drive/credenciais';
+import { migrarCacheAntigo } from './armazenamento';
+import { descartarCredenciaisTelegram } from './telegram/credenciais';
+import { armazenamentoRoutes } from './routes/armazenamento';
 
 // `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
 // um Google, um Telegram e um Anki falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
@@ -53,7 +56,7 @@ export function buildApp(
     supabase?: ClienteSupabase | null;
     /** Só o app de verdade (index.ts): sem conta, nenhuma rota de dados responde; e sincroniza a cada minuto. */
     exigirConta?: boolean;
-    /** Só o app de verdade: avisa a casca desktop quando um "Baixar para Downloads" começa ou termina. */
+    /** Só o app de verdade: avisa a casca desktop quando um "Baixar curso inteiro" começa ou termina. */
     aoBaixar?: (baixando: boolean) => void;
   },
 ): FastifyInstance {
@@ -138,7 +141,7 @@ export function buildApp(
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
   app.register(convertRoutes, { db, config });
-  app.register(resetRoutes, { db, config });
+  app.register(resetRoutes, { db, config, drive });
   app.register(materialsRoutes, { db, config, drive, telegram });
   app.register(swRoutes);
   app.register(backupRoutes, { db, config });
@@ -148,14 +151,19 @@ export function buildApp(
   app.register(contaRoutes, { conta, sinc });
   app.register(documentosRoutes, { db, config, drive });
   app.register(estudoRoutes, { db });
+  app.register(armazenamentoRoutes, { db, config, drive });
   // [ROUTES]
 
-  // Ao abrir o app, os cursos do Drive continuam de onde o download parou.
   if (opts?.retomarDownloads) {
     app.addHook('onReady', async () => {
-      drive.baixador.retomarTodos();
-      // Os "Baixar para Downloads" que o app fechou no meio continuam sozinhos.
-      drive.exportador.retomar();
+      // O cache antigo (nomes por id) vira a pasta de armazenamento antes de a fila começar.
+      migrarCacheAntigo(db, config);
+      // O app próprio do Google Cloud saiu das Configurações: a conexão feita com ele não vale mais.
+      if (descartarCredenciaisSalvas(db)) await drive.auth.desconectar({ revogar: false });
+      // O mesmo com o app próprio do Telegram; sem esperar, porque encerrar a sessão vai à rede.
+      void descartarCredenciaisTelegram(db, () => telegram.aoTrocarCredenciais());
+      // Os "Baixar curso inteiro" que o app fechou no meio continuam sozinhos.
+      drive.baixador.retomar();
     });
   }
   // A casca do desktop impede o sistema de dormir (e o macOS de pôr o app em
@@ -164,7 +172,7 @@ export function buildApp(
     const avisar = opts.aoBaixar;
     let baixando = false;
     const conferir = setInterval(() => {
-      const agora = drive.exportador.ocupado();
+      const agora = drive.baixador.ocupado();
       if (agora !== baixando) avisar((baixando = agora));
     }, 2000);
     conferir.unref();

@@ -21,7 +21,7 @@ const idValido = (v: unknown): number | null => {
   return Number.isInteger(n) && n > 0 ? n : null;
 };
 
-/** Precedência campo a campo, como no Google: Configurações → env → padrão do build. */
+/** Precedência campo a campo: o que estava salvo (só até `descartarCredenciaisTelegram` apagar) → env → padrão do build. */
 export function credenciaisTelegram(
   db: Db,
   env: NodeJS.ProcessEnv = process.env,
@@ -34,19 +34,23 @@ export function credenciaisTelegram(
   };
 }
 
-/** Valor vazio apaga o campo, devolvendo-o à env ou ao padrão. */
-export function salvarCredenciaisTelegram(db: Db, parcial: { apiId?: number | string | null; apiHash?: string | null }): void {
-  const atual = lerSalvas(db);
-  if ('apiId' in parcial) {
-    const id = idValido(parcial.apiId);
-    if (id) atual.apiId = id;
-    else delete atual.apiId;
+/**
+ * O "app próprio do Telegram" saiu das Configurações: quem usa o app só clica em
+ * Conectar. Ao abrir, apaga o api_id/api_hash que alguém tenha salvo; se eram
+ * outros que não os efetivos sem eles, a sessão foi criada com o app antigo e
+ * não vale mais: `encerrar` roda antes de apagar (ainda com a credencial velha,
+ * que é a que consegue falar com o Telegram).
+ */
+export async function descartarCredenciaisTelegram(db: Db, encerrar: () => Promise<void>): Promise<void> {
+  if (!db.prepare('SELECT 1 FROM settings WHERE key=?').get(CHAVE)) return;
+  const com = credenciaisTelegram(db);
+  const salvas = lerSalvas(db);
+  const sem = { apiId: idValido(process.env.TELEGRAM_API_ID) ?? TELEGRAM_PADRAO.apiId ?? null, apiHash: process.env.TELEGRAM_API_HASH || TELEGRAM_PADRAO.apiHash || null };
+  try {
+    if ((salvas.apiId || salvas.apiHash) && (com.apiId !== sem.apiId || com.apiHash !== sem.apiHash)) await encerrar();
+  } catch {
+    // Sem rede: a sessão local some igual quando a pessoa conectar de novo.
+  } finally {
+    db.prepare('DELETE FROM settings WHERE key=?').run(CHAVE);
   }
-  if ('apiHash' in parcial) {
-    if (parcial.apiHash) atual.apiHash = parcial.apiHash;
-    else delete atual.apiHash;
-  }
-  db.prepare(
-    'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-  ).run(CHAVE, JSON.stringify(atual));
 }
