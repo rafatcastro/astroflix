@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager, RunEvent, Url};
+use tauri::{AppHandle, Manager, RunEvent, Url, WindowEvent};
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
 
@@ -23,6 +23,88 @@ const ESPERA_MAXIMA: Duration = Duration::from_secs(20);
 struct Sidecar {
     filho: Mutex<Option<CommandChild>>,
     geracao: AtomicU64,
+}
+
+/// "Baixar para Downloads" em andamento (o servidor avisa com LEARNFLIX_BAIXANDO=).
+/// Um curso do Telegram leva horas: fechar a janela não pode parar o download,
+/// e o sistema não pode dormir nem pôr o app em App Nap no meio dele.
+#[derive(Default)]
+struct Segundoplano {
+    baixando: AtomicBool,
+    /// A pessoa fechou a janela durante o download: o app sai quando ele acabar.
+    janela_fechada: AtomicBool,
+}
+
+/// Segura (ou solta) o sistema acordado. Roda na thread principal: a atividade
+/// do macOS e o estado de energia do Windows pertencem à thread que os pediu.
+fn manter_acordado(app: &AppHandle, ligar: bool) {
+    let _ = app.run_on_main_thread(move || energia::manter_acordado(ligar));
+}
+
+#[cfg(target_os = "macos")]
+mod energia {
+    use std::cell::RefCell;
+
+    use objc2::rc::Retained;
+    use objc2::runtime::ProtocolObject;
+    use objc2_foundation::{NSActivityOptions, NSObjectProtocol, NSProcessInfo, NSString};
+
+    thread_local! {
+        static ATIVIDADE: RefCell<Option<Retained<ProtocolObject<dyn NSObjectProtocol>>>> = const { RefCell::new(None) };
+    }
+
+    // UserInitiated: sem App Nap (que atrasa os timers e a rede do app escondido)
+    // e sem o descanso automático do sistema. A tela ainda pode apagar.
+    pub fn manter_acordado(ligar: bool) {
+        ATIVIDADE.with(|atividade| {
+            let mut atividade = atividade.borrow_mut();
+            let info = NSProcessInfo::processInfo();
+            if ligar && atividade.is_none() {
+                let motivo = NSString::from_str("Baixando cursos para a pasta Downloads");
+                *atividade = Some(info.beginActivityWithOptions_reason(NSActivityOptions::UserInitiated, &motivo));
+            } else if !ligar {
+                if let Some(a) = atividade.take() {
+                    unsafe { info.endActivity(&a) };
+                }
+            }
+        });
+    }
+}
+
+#[cfg(windows)]
+mod energia {
+    use windows_sys::Win32::System::Power::{SetThreadExecutionState, ES_CONTINUOUS, ES_SYSTEM_REQUIRED};
+
+    pub fn manter_acordado(ligar: bool) {
+        let estado = if ligar { ES_CONTINUOUS | ES_SYSTEM_REQUIRED } else { ES_CONTINUOUS };
+        unsafe { SetThreadExecutionState(estado) };
+    }
+}
+
+#[cfg(not(any(target_os = "macos", windows)))]
+mod energia {
+    pub fn manter_acordado(_ligar: bool) {}
+}
+
+fn mudou_download(app: &AppHandle, baixando: bool) {
+    let estado = app.state::<Segundoplano>();
+    if estado.baixando.swap(baixando, Ordering::SeqCst) == baixando {
+        return;
+    }
+    manter_acordado(app, baixando);
+    // A janela foi fechada só para esperar o download: acabou, o app sai.
+    if !baixando && estado.janela_fechada.load(Ordering::SeqCst) {
+        app.exit(0);
+    }
+}
+
+fn mostrar_janela(app: &AppHandle) {
+    app.state::<Segundoplano>().janela_fechada.store(false, Ordering::SeqCst);
+    if let Some(janela) = app.get_webview_window("main") {
+        let _ = janela.unminimize();
+        let _ = janela.show();
+        let _ = janela.set_focus();
+    }
 }
 
 fn atual(app: &AppHandle, geracao: u64) -> bool {
@@ -112,6 +194,8 @@ fn subir_servidor(app: &AppHandle) {
                                 pronto.store(true, Ordering::SeqCst);
                                 navegar(&app, url);
                             }
+                        } else if let Some(valor) = linha.trim().strip_prefix("LEARNFLIX_BAIXANDO=") {
+                            mudou_download(&app, valor == "1");
                         }
                     }
                 }
@@ -126,6 +210,7 @@ fn subir_servidor(app: &AppHandle) {
                 }
                 CommandEvent::Terminated(fim) => {
                     pronto.store(true, Ordering::SeqCst);
+                    mudou_download(&app, false);
                     let detalhe = if ultimas.is_empty() {
                         format!("o servidor parou (código {:?})", fim.code)
                     } else {
@@ -187,19 +272,32 @@ pub fn run() {
     }
     tauri::Builder::default()
         // Primeiro: uma segunda abertura só traz a janela existente para a frente.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(janela) = app.get_webview_window("main") {
-                let _ = janela.unminimize();
-                let _ = janela.show();
-                let _ = janela.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| mostrar_janela(app)))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(Sidecar::default())
+        .manage(Segundoplano::default())
+        .on_window_event(|janela, evento| {
+            // Fechar a janela no meio de um download só a esconde (no macOS; nos
+            // outros, minimiza: sem ícone na bandeja, escondida ninguém a acharia).
+            // Cmd+Q / sair do menu continua encerrando: o download retoma ao abrir.
+            if let WindowEvent::CloseRequested { api, .. } = evento {
+                let app = janela.app_handle();
+                let estado = app.state::<Segundoplano>();
+                if estado.baixando.load(Ordering::SeqCst) {
+                    api.prevent_close();
+                    estado.janela_fechada.store(true, Ordering::SeqCst);
+                    if cfg!(target_os = "macos") {
+                        let _ = janela.hide();
+                    } else {
+                        let _ = janela.minimize();
+                    }
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![reiniciar, parar_servidor_para_atualizar])
         .setup(|app| {
             if !tauri::is_dev() {
@@ -211,8 +309,15 @@ pub fn run() {
         .expect("falha ao montar o app")
         .run(|app, evento| {
             // Fechar o app não pode deixar o servidor rodando sozinho.
-            if let RunEvent::Exit = evento {
-                parar_servidor(app);
+            match evento {
+                RunEvent::Exit => {
+                    manter_acordado(app, false);
+                    parar_servidor(app);
+                }
+                // Clique no ícone do Dock com a janela escondida pelo download.
+                #[cfg(target_os = "macos")]
+                RunEvent::Reopen { .. } => mostrar_janela(app),
+                _ => {}
             }
         });
 }

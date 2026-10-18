@@ -51,6 +51,8 @@ export interface Exportador {
   dispensar(courseId: string): void;
   /** A pasta Downloads onde as cópias ficam. */
   pasta(): string;
+  /** Baixando, na fila ou esperando para tentar de novo. */
+  ocupado(): boolean;
 }
 
 interface Item {
@@ -367,6 +369,7 @@ export function criarExportador(deps: {
       for (const id of lerPendentes()) exportador.exportar(id);
     },
     pasta: () => deps.pastaDownloads(),
+    ocupado: () => [...estados.values()].some((e) => e.ativo || e.tentarEm != null),
   };
   return exportador;
 }

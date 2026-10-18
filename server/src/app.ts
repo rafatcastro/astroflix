@@ -53,6 +53,8 @@ export function buildApp(
     supabase?: ClienteSupabase | null;
     /** Só o app de verdade (index.ts): sem conta, nenhuma rota de dados responde; e sincroniza a cada minuto. */
     exigirConta?: boolean;
+    /** Só o app de verdade: avisa a casca desktop quando um "Baixar para Downloads" começa ou termina. */
+    aoBaixar?: (baixando: boolean) => void;
   },
 ): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -155,6 +157,18 @@ export function buildApp(
       // Os "Baixar para Downloads" que o app fechou no meio continuam sozinhos.
       drive.exportador.retomar();
     });
+  }
+  // A casca do desktop impede o sistema de dormir (e o macOS de pôr o app em
+  // App Nap) enquanto baixa, e deixa a janela fechar sem matar o download.
+  if (opts?.aoBaixar) {
+    const avisar = opts.aoBaixar;
+    let baixando = false;
+    const conferir = setInterval(() => {
+      const agora = drive.exportador.ocupado();
+      if (agora !== baixando) avisar((baixando = agora));
+    }, 2000);
+    conferir.unref();
+    app.addHook('onClose', async () => clearInterval(conferir));
   }
   // Já entrou numa abertura anterior: sincroniza ao abrir e a cada minuto.
   if (opts?.exigirConta) app.addHook('onReady', async () => {

@@ -13,6 +13,14 @@ export function linhaDaUrl(url: string): string {
 }
 
 /**
+ * Linha de máquina para a casca: há download do curso inteiro em andamento ou
+ * não. Com 1, ela segura o sistema acordado e deixa fechar a janela sem parar.
+ */
+export function linhaDeDownload(baixando: boolean): string {
+  return `LEARNFLIX_BAIXANDO=${baixando ? 1 : 0}`;
+}
+
+/**
  * Um app aberto pelo Dock ou pelo menu Iniciar não herda o PATH do terminal:
  * no macOS ele vem só com /usr/bin:/bin, e o ffmpeg do Homebrew some — junto
  * com capas e duração. Acrescenta os lugares onde ele costuma estar, só os que
