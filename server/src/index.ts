@@ -9,7 +9,7 @@ import { buildApp } from './app';
 import { escutarComFallback } from './listen';
 import { mensagemDeBoot } from './banner';
 import { hasFfmpeg } from './media/ffmpeg';
-import { linhaDaUrl, pathComExtras } from './desktop';
+import { linhaDaUrl, linhaDeDownload, pathComExtras } from './desktop';
 
 const config = loadConfig();
 
@@ -27,7 +27,11 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config
 }
 
 const db = openDb(config.dbPath);
-const app = buildApp(config, db, { retomarDownloads: true, exigirConta: true });
+const app = buildApp(config, db, {
+  retomarDownloads: true,
+  exigirConta: true,
+  aoBaixar: (baixando) => console.log(linhaDeDownload(baixando)),
+});
 
 const shutdown = () => {
   app.close().finally(() => process.exit(0));

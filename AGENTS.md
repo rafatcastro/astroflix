@@ -236,6 +236,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
   erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
   sair. Cada subida tem uma geração: eventos de um processo antigo não mexem mais na janela.
+- Segundo plano: enquanto há "Baixar para Downloads" em andamento, o servidor escreve
+  `LEARNFLIX_BAIXANDO=1` (e `=0` no fim). O `lib.rs` segura o sistema acordado (no macOS uma
+  atividade `UserInitiated`, que também tira o App Nap; no Windows `SetThreadExecutionState`) e
+  fechar a janela só a esconde (no macOS; nos outros, minimiza). O Dock a traz de volta; acabou o
+  download com a janela fechada, o app sai.
 - `capabilities/interface.json` libera opener, updater e process para a origem `http://localhost:*`
   (a interface vem do servidor, não do bundle).
 - Na interface, `web/src/lib/desktop.ts` (`abrirFora`, `cliqueFora`) leva para fora da webview:

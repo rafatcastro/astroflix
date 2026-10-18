@@ -134,6 +134,10 @@ export default function PainelDownloads() {
           {itens.map((e) => (
             <Item key={e.courseId} e={e} />
           ))}
+          {/* A casca do desktop esconde a janela em vez de fechar (desktop/src-tauri/src/lib.rs). */}
+          {ativos.length > 0 && (
+            <li className="pt-3 text-xs text-neutral-500">Pode fechar a janela: o download continua e o app sai sozinho quando terminar.</li>
+          )}
         </ul>
       ) : (
         ativos.length > 0 && (
