@@ -64,8 +64,8 @@ export async function telegramRoutes(
       }
       const p = await cliente.previa(grupo.peer);
       const ja = db
-        .prepare("SELECT id FROM courses WHERE source='telegram' AND json_extract(telegram_peer, '$.id')=?")
-        .get(grupo.peer.id) as { id: string } | undefined;
+        .prepare("SELECT id FROM courses WHERE source='telegram' AND json_extract(telegram_peer, '$.id')=? AND IFNULL(json_extract(telegram_peer, '$.topico'), 0)=?")
+        .get(grupo.peer.id, grupo.peer.topico ?? 0) as { id: string } | undefined;
       return {
         titulo: grupo.titulo,
         canal: p.canal,

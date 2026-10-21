@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useDownloads, useSetComplete } from '../api/hooks';
@@ -42,6 +42,8 @@ export default function Course() {
   const [rootIssue, setRootIssue] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirmandoBaixar, setConfirmandoBaixar] = useState(false);
+  // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
+  const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
   const { data: downloads } = useDownloads();
 
   const source = data?.source;
@@ -102,6 +104,26 @@ export default function Course() {
     void api.baixarCurso(id).then(
       () => qc.invalidateQueries({ queryKey: ['downloads'] }),
       () => setNotice('Não deu para começar o download. Tente de novo.'),
+    );
+  };
+  const abrirMenuAula =
+    data.source === 'local'
+      ? undefined
+      : (l: LessonDTO, e: MouseEvent) => {
+          if (l.missing) return;
+          e.preventDefault();
+          setMenuAula({ l, x: e.clientX, y: e.clientY });
+        };
+  const acaoAula = (l: LessonDTO) => {
+    setMenuAula(null);
+    const pedido = l.baixada ? api.excluirDownloadAula(l.id) : api.baixarAula(l.id);
+    void pedido.then(
+      () => {
+        qc.invalidateQueries({ queryKey: ['course', id] });
+        qc.invalidateQueries({ queryKey: ['armazenamento'] });
+        setNotice(l.baixada ? `Download de "${l.title}" excluído. Ela continua tocando pela internet.` : null);
+      },
+      () => setNotice(l.baixada ? 'Não deu para excluir o download. Tente de novo.' : 'Não deu para começar o download. Tente de novo.'),
     );
   };
   const chooseSize = (n: number) => {
@@ -174,7 +196,7 @@ export default function Course() {
             </Banner>
           ) : (
             <Banner tone="info">
-              Baixando a aula aberta e as próximas para tocarem sem internet. Para ter o curso todo, use <b>Baixar curso inteiro</b> no menu ⋯.
+              Baixando aulas para tocarem sem internet. Para ter o curso todo, use <b>Baixar</b> no menu ⋯.
             </Banner>
           )}
         </div>
@@ -285,7 +307,7 @@ export default function Course() {
           <section key={m.name ?? '__flat__'}>
             {m.name && <h2 className="mb-2 text-sm font-semibold text-neutral-300">{m.name}</h2>}
             {view === 'grid' ? (
-              <LessonGrid lessons={m.lessons} size={gridSize} onToggleComplete={onToggle} />
+              <LessonGrid lessons={m.lessons} size={gridSize} onToggleComplete={onToggle} onMenu={abrirMenuAula} />
             ) : (
               <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
                 {m.lessons.map((l) => (
@@ -293,6 +315,7 @@ export default function Course() {
                     key={l.id}
                     className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
                     title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}
+                    onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
                   >
                     <Link
                       to={`/lesson/${l.id}`}
@@ -347,13 +370,39 @@ export default function Course() {
 
       <MaterialsSection materials={data.materials} />
       </div>
+      {menuAula && (
+        <>
+          <div
+            className="fixed inset-0 z-30"
+            onClick={() => setMenuAula(null)}
+            onContextMenu={(e) => (e.preventDefault(), setMenuAula(null))}
+          />
+          <div
+            role="menu"
+            aria-label={menuAula.l.title}
+            className="fixed z-40 w-48 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 shadow-lg shadow-black/40"
+            style={{ left: Math.min(menuAula.x, window.innerWidth - 200), top: Math.min(menuAula.y, window.innerHeight - 60) }}
+            onKeyDown={(e) => e.key === 'Escape' && setMenuAula(null)}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              autoFocus
+              className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none ${menuAula.l.baixada ? 'text-red-400' : ''}`}
+              onClick={() => acaoAula(menuAula.l)}
+            >
+              {menuAula.l.baixada ? 'Excluir download' : 'Baixar'}
+            </button>
+          </div>
+        </>
+      )}
       {confirmandoBaixar && (
         <ConfirmDialog
-          title="Baixar o curso inteiro"
+          title="Baixar o curso"
           message={
             <>
-              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} são baixados para a pasta do
-              app, em <b className="text-neutral-200">{data.title}</b>, com os nomes originais, para tocarem sem internet. O que já foi
+              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} são adiantados na pasta
+              de downloads, em <b className="text-neutral-200">{data.title}</b>, com os nomes originais, para tocarem sem internet. O que já foi
               baixado não é baixado de novo. A pasta fica em Configurações → Armazenamento.
             </>
           }

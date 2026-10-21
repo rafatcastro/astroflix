@@ -146,7 +146,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
             <div className="truncate px-3 pb-2 pt-2 text-sm font-medium text-neutral-200">{course.title}</div>
             <button type="button" className={sheetItem} onClick={() => setFlow('rename')}>Renomear…</button>
             {course.source !== 'local' && (
-              <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar curso inteiro…</button>
+              <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar…</button>
             )}
             <button type="button" className={sheetItem} onClick={doRescan}>Re-escanear</button>
             <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
@@ -242,7 +242,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       {flow === 'confirmBaixar' && (
         <ConfirmDialog
           title={`Baixar "${course.title}"`}
-          message="Todas as aulas e materiais são baixados para a pasta do app (Configurações → Armazenamento), numa pasta com o nome do curso e os nomes originais, para tocarem sem internet. O que já foi baixado não é baixado de novo."
+          message="Adianta todas as aulas e materiais na pasta de downloads (Configurações → Armazenamento), numa pasta com o nome do curso e os nomes originais, para tocarem sem internet. O que já foi baixado não é baixado de novo."
           confirmLabel="Baixar"
           onConfirm={() => void doBaixar()}
           onCancel={close}

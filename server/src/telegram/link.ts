@@ -33,7 +33,18 @@ export function parseLinkTelegram(texto: string): LinkTelegram | null {
     return /^[\w-]+$/.test(hash) ? { tipo: 'convite', hash } : null;
   }
   if (primeiro === 'joinchat') return segundo && /^[\w-]+$/.test(segundo) ? { tipo: 'convite', hash: segundo } : null;
-  if (primeiro === 'c') return segundo && /^\d+$/.test(segundo) ? { tipo: 'privado', canalId: segundo } : null;
+  if (primeiro === 'c') return segundo && /^\d+$/.test(segundo) ? { tipo: 'privado', canalId: segundo, ...numeros(segs.slice(2), url) } : null;
   if (RESERVADOS.has(primeiro.toLowerCase())) return null;
-  return USUARIO.test(primeiro) ? { tipo: 'publico', usuario: primeiro } : null;
+  return USUARIO.test(primeiro) ? { tipo: 'publico', usuario: primeiro, ...numeros(segs.slice(1), url) } : null;
+}
+
+// O que vem depois do grupo: /<mensagem>, /<tópico>/<mensagem> ou ?thread=<tópico>.
+function numeros(resto: string[], url: URL): { mensagem?: number; topico?: number } {
+  const n = resto.filter((s) => /^\d+$/.test(s)).map(Number);
+  const thread = Number(url.searchParams.get('thread') ?? url.searchParams.get('topic'));
+  const r: { mensagem?: number; topico?: number } = {};
+  if (n.length) r.mensagem = n[n.length - 1];
+  if (n.length >= 2) r.topico = n[0];
+  else if (thread > 0) r.topico = thread;
+  return r;
 }

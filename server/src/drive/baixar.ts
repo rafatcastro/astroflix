@@ -30,7 +30,7 @@ import { FalhaTelegram } from '../telegram/tipos';
 // - a janela: abrir uma aula baixa ela e as JANELA seguintes. É o que passa na
 //   frente: abrir a aula 30 no meio do curso inteiro interrompe o arquivo atual
 //   (o `.part` fica), baixa a 30 e as próximas, e volta de onde parou;
-// - o curso inteiro ("Baixar curso inteiro"), aulas e materiais, um curso por
+// - o curso inteiro ("Baixar"), aulas e materiais, um curso por
 //   vez, com progresso, retomada ao abrir o app e novas tentativas sozinho.
 // Nada é apagado aqui: o que foi baixado fica até a pessoa remover.
 
@@ -125,6 +125,10 @@ export interface Baixador {
   /** A pessoa abriu esta aula: baixa ela e as próximas JANELA não concluídas, antes de tudo. */
   pedirAula(lessonId: string): void;
   janela(courseId: string): EstadoJanela;
+  /** "Baixar" no botão direito da aula: entra no fim da janela, sem interromper nada. */
+  baixarAula(lessonId: string): void;
+  /** "Excluir download" da aula: tira da fila e, se estava sendo gravada, espera parar. */
+  esquecerAula(lessonId: string): Promise<void>;
   /** Aulas e materiais do curso todo. */
   baixarCurso(courseId: string): void;
   /** Para de baixar o curso (o inteiro e a janela). O `.part` fica: pedir de novo continua dele. */
@@ -164,6 +168,10 @@ const ESPERA_POR_FALHA: Record<string, number> = {
   flood: 60_000,
   'cota-esgotada': 10 * 60_000,
 };
+// O que fica livre no disco depois de cada arquivo: encher até o último byte
+// trava o sistema (e o próprio SQLite do app).
+const FOLGA_NO_DISCO = 2 * 1024 ** 3;
+
 /** Falhas seguidas sem nenhum arquivo novo até desistir e esperar a pessoa. */
 const MAX_TENTATIVAS = 5;
 
@@ -192,6 +200,9 @@ export function criarBaixador(deps: {
   const estados = new Map<string, EstadoDownload>();
   // As aulas da janela que ainda faltam, na ordem; trocada inteira a cada aula aberta.
   let janela: ItemBaixavel[] = [];
+  // As pedidas uma a uma pelo botão direito: abrir outra aula troca a janela, mas
+  // não pode jogar fora o que a pessoa mandou baixar.
+  let avulsas: ItemBaixavel[] = [];
   const janelas = new Map<string, EstadoJanela>();
   // O arquivo sendo gravado agora, de qualquer pedido.
   let atual: { item: ItemBaixavel; ac: AbortController } | null = null;
@@ -234,6 +245,16 @@ export function criarBaixador(deps: {
     return f;
   };
 
+  const espacoLivre = () => {
+    const raiz = pastaDeArmazenamento(db, config);
+    try {
+      const s = fs.statfsSync(fs.existsSync(raiz) ? raiz : path.dirname(raiz));
+      return s.bavail * s.bsize;
+    } catch {
+      return Infinity;
+    }
+  };
+
   const itemDe = (tipo: ItemBaixavel['tipo'], courseId: string, l: Linha): ItemBaixavel => ({
     tipo,
     id: l.id,
@@ -259,6 +280,16 @@ export function criarBaixador(deps: {
     // Já está lá inteiro (o app fechou entre gravar e registrar): só registra.
     const inteiro = fs.existsSync(destino) && (item.tamanho <= 0 || fs.statSync(destino).size === item.tamanho);
     if (!inteiro) {
+      // Arquivo a arquivo, e não o curso todo de uma vez: antes, um curso de 188 GB
+      // num disco com 148 GB livres nem começava ("sem espaço" com o disco longe de
+      // cheio). Agora baixa o que cabe e para só quando o próximo não cabe mais.
+      let jaTem = 0;
+      try {
+        jaTem = fs.statSync(`${destino}.part`).size;
+      } catch {
+        /* sem `.part` */
+      }
+      if (Math.max(item.tamanho - jaTem, 0) + FOLGA_NO_DISCO > espacoLivre()) throw Object.assign(new Error('sem espaço'), { code: 'ENOSPC' });
       const baixar = await fonte(item.courseId);
       if (!baixar) throw new FalhaDrive('sem-conexao');
       fs.mkdirSync(path.dirname(destino), { recursive: true });
@@ -287,6 +318,7 @@ export function criarBaixador(deps: {
         if (!arquivoBaixado(db, config, 'aula', item.id)) await baixarItem(item, destinoDe(db, config, item), ac.signal);
         est.erro = null;
         if (janela[0] === item) janela.shift();
+        avulsas = avulsas.filter((a) => a.id !== item.id);
       } catch (e) {
         // Abortado: outra aula foi aberta (a janela já é outra) ou mandaram parar.
         if (!ac.signal.aborted) {
@@ -310,19 +342,6 @@ export function criarBaixador(deps: {
     estado.bytesTotal = itens.reduce((s, it) => s + peso(it), 0);
     estado.feitos = itens.length - faltam.length;
     estado.bytesFeitos = estado.bytesTotal - faltam.reduce((s, it) => s + peso(it), 0);
-
-    // Um curso passa fácil de 40 GB: não cabendo, nem começa, em vez de encher o
-    // disco e parar no meio.
-    const raiz = pastaDeArmazenamento(db, config);
-    const livre = (() => {
-      try {
-        const s = fs.statfsSync(fs.existsSync(raiz) ? raiz : path.dirname(raiz));
-        return s.bavail * s.bsize;
-      } catch {
-        return Infinity;
-      }
-    })();
-    if (estado.bytesTotal - estado.bytesFeitos > livre) throw Object.assign(new Error('sem espaço'), { code: 'ENOSPC' });
 
     for (let i = 0; i < faltam.length; ) {
       if (signal.aborted) return;
@@ -479,6 +498,8 @@ export function criarBaixador(deps: {
         )
         .all(aula.course_id, aula.order_index, lessonId, JANELA + 1) as Linha[];
       janela = linhas.map((l) => itemDe('aula', aula.course_id, l)).filter((it) => !arquivoBaixado(db, config, 'aula', it.id));
+      avulsas = avulsas.filter((a) => !arquivoBaixado(db, config, 'aula', a.id));
+      janela.push(...avulsas.filter((a) => !janela.some((it) => it.id === a.id)));
       for (const [id, e] of janelas) if (id !== aula.course_id) e.ativo = false;
       if (!janela.length) return;
       janelas.set(aula.course_id, { ativo: true, erro: null });
@@ -488,6 +509,30 @@ export function criarBaixador(deps: {
       iniciar();
     },
     janela: (courseId) => janelas.get(courseId) ?? { ativo: false, erro: null },
+    baixarAula(lessonId) {
+      const l = db
+        .prepare(
+          `SELECT l.id, l.course_id, l.rel_path, l.remote_id, l.size_bytes FROM lessons l JOIN courses c ON c.id = l.course_id
+           WHERE l.id=? AND l.remote_id IS NOT NULL AND c.source IN ('drive','telegram')`,
+        )
+        .get(lessonId) as (Linha & { course_id: string }) | undefined;
+      if (!l || !config.downloadsDir || arquivoBaixado(db, config, 'aula', l.id)) return;
+      const item = itemDe('aula', l.course_id, l);
+      if (!avulsas.some((a) => a.id === l.id)) avulsas.push(item);
+      if (!janela.some((it) => it.tipo === 'aula' && it.id === l.id)) janela.push(item);
+      const e = janelas.get(l.course_id);
+      if (e) Object.assign(e, { ativo: true, erro: null });
+      else janelas.set(l.course_id, { ativo: true, erro: null });
+      iniciar();
+    },
+    async esquecerAula(lessonId) {
+      janela = janela.filter((it) => !(it.tipo === 'aula' && it.id === lessonId));
+      avulsas = avulsas.filter((a) => a.id !== lessonId);
+      if (atual?.item.tipo === 'aula' && atual.item.id === lessonId) {
+        atual.ac.abort(PARAR);
+        while (atual?.item.tipo === 'aula' && atual.item.id === lessonId) await new Promise((r) => setTimeout(r, 50));
+      }
+    },
     baixarCurso(courseId) {
       const curso = db.prepare('SELECT title, source FROM courses WHERE id=?').get(courseId) as { title: string; source: string } | undefined;
       if (!curso || !config.downloadsDir) return tirarPendente(courseId);
@@ -532,6 +577,7 @@ export function criarBaixador(deps: {
       if (i >= 0) fila.splice(i, 1);
       if (e && i >= 0) Object.assign(e, { ativo: false, naFila: false, cancelado: true });
       janela = janela.filter((it) => it.courseId !== courseId);
+      avulsas = avulsas.filter((it) => it.courseId !== courseId);
       const j = janelas.get(courseId);
       if (j) j.ativo = false;
       if (cursoAtual?.id === courseId) cursoAtual.ac.abort(PARAR);

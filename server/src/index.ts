@@ -10,7 +10,10 @@ import { escutarComFallback } from './listen';
 import { mensagemDeBoot } from './banner';
 import { hasFfmpeg } from './media/ffmpeg';
 import { linhaDaUrl, linhaDeDownload, pathComExtras } from './desktop';
+import { corrigirCaminhos, moverPastaDeDados } from './pasta-de-dados';
 
+// Antes do loadConfig: se não deu para mover a pasta antiga, ele tem de apontar para ela.
+const mudanca = moverPastaDeDados();
 const config = loadConfig();
 
 // Antes da primeira detecção do ffmpeg (o resultado fica em cache): aberto pelo
@@ -27,6 +30,7 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config
 }
 
 const db = openDb(config.dbPath);
+if (mudanca?.movida) corrigirCaminhos(db, mudanca.antiga, config.dataDir);
 const app = buildApp(config, db, {
   retomarDownloads: true,
   exigirConta: true,

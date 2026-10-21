@@ -21,6 +21,7 @@ import { swRoutes } from './routes/sw';
 import { backupRoutes } from './routes/backup';
 
 import { criarServicosDrive } from './drive/servicos';
+import { apagarBaixados } from './armazenamento';
 import type { Fetch } from './drive/tipos';
 import { driveRoutes } from './routes/drive';
 import type { ServicosTelegram } from './telegram/servicos';
@@ -56,7 +57,7 @@ export function buildApp(
     supabase?: ClienteSupabase | null;
     /** Só o app de verdade (index.ts): sem conta, nenhuma rota de dados responde; e sincroniza a cada minuto. */
     exigirConta?: boolean;
-    /** Só o app de verdade: avisa a casca desktop quando um "Baixar curso inteiro" começa ou termina. */
+    /** Só o app de verdade: avisa a casca desktop quando um "Baixar" começa ou termina. */
     aoBaixar?: (baixando: boolean) => void;
   },
 ): FastifyInstance {
@@ -88,7 +89,17 @@ export function buildApp(
       if (opts?.exigirConta) sinc?.iniciar();
     },
   });
-  if (supabase) sinc = criarSincronizador({ db, supabase, token: () => conta.token() });
+  if (supabase)
+    sinc = criarSincronizador({
+      db,
+      supabase,
+      token: () => conta.token(),
+      // Como excluir aqui: sem o curso, ninguém acharia (nem removeria) esses arquivos pelo app.
+      aoExcluirCurso: (id) => {
+        drive.baixador.cancelar(id);
+        apagarBaixados(db, config, id);
+      },
+    });
 
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
   registrarGuarda(app);
@@ -133,7 +144,7 @@ export function buildApp(
   app.register(healthRoutes);
   app.register(fsRoutes, { config, db });
   app.register(coursesRoutes, { db, config, drive });
-  app.register(lessonsRoutes, { db, drive });
+  app.register(lessonsRoutes, { db, config, drive });
   app.register(streamRoutes, { db, config, drive, telegram });
   app.register(infoRoutes);
   app.register(thumbsRoutes, { db, config, drive, telegram });
@@ -162,7 +173,7 @@ export function buildApp(
       if (descartarCredenciaisSalvas(db)) await drive.auth.desconectar({ revogar: false });
       // O mesmo com o app próprio do Telegram; sem esperar, porque encerrar a sessão vai à rede.
       void descartarCredenciaisTelegram(db, () => telegram.aoTrocarCredenciais());
-      // Os "Baixar curso inteiro" que o app fechou no meio continuam sozinhos.
+      // Os "Baixar" que o app fechou no meio continuam sozinhos.
       drive.baixador.retomar();
     });
   }

@@ -69,6 +69,8 @@ export function criarSincronizador(deps: {
   token: () => Promise<string>;
   /** Avisa as rotas quando a descida mexeu no cache (para nada ficar velho na tela). */
   aoMudarCache?: () => void;
+  /** Curso excluído em outra máquina: os downloads dele aqui saem junto. */
+  aoExcluirCurso?: (courseId: string) => void;
 }): Sincronizador {
   const { db, supabase } = deps;
   let rodando: Promise<EstadoNuvem> | null = null;
@@ -274,6 +276,7 @@ export function criarSincronizador(deps: {
         return;
       case 'cursos': {
         if (bool(r.excluido)) {
+          deps.aoExcluirCurso?.(r.id);
           db.prepare('DELETE FROM courses WHERE id=?').run(r.id);
           return;
         }

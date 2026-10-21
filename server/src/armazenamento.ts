@@ -201,10 +201,16 @@ export function usoDoArmazenamento(db: Db, config: AppConfig): { pasta: string; 
 }
 
 // Sobe apagando as pastas que ficaram vazias, até a raiz (exclusive).
+// O que o sistema cria sozinho numa pasta aberta no Finder ou no Explorer: não
+// conta como conteúdo, senão a pasta do curso excluído ficava para trás.
+const LIXO_DO_SISTEMA = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+
 function apagarVazias(dir: string, raiz: string): void {
   while (dentro(dir, raiz)) {
     try {
-      if (fs.readdirSync(dir).length) return;
+      const itens = fs.readdirSync(dir);
+      if (itens.some((n) => !LIXO_DO_SISTEMA.has(n))) return;
+      for (const n of itens) fs.rmSync(path.join(dir, n), { force: true });
       fs.rmdirSync(dir);
     } catch {
       return;
@@ -264,6 +270,26 @@ export function apagarBaixados(db: Db, config: AppConfig, courseId?: string): vo
     } catch {
       /* já não existe */
     }
+  }
+}
+
+/** Apaga a cópia baixada de um item (e o `.part`, se o download parou no meio). */
+export function apagarBaixado(db: Db, config: AppConfig, item: Pick<ItemBaixavel, 'tipo' | 'id' | 'courseId' | 'relPath'>): void {
+  const raiz = pastaDeArmazenamento(db, config);
+  const r = db.prepare('SELECT arquivo, convertido FROM baixados WHERE tipo=? AND item_id=?').get(item.tipo, item.id) as
+    | { arquivo: string; convertido: number }
+    | undefined;
+  if (r && dentro(r.arquivo, raiz)) {
+    fs.rmSync(r.arquivo, { force: true });
+    db.prepare('DELETE FROM baixados WHERE tipo=? AND item_id=?').run(item.tipo, item.id);
+    if (item.tipo === 'aula' && r.convertido) db.prepare('UPDATE lessons SET playable=0 WHERE id=?').run(item.id);
+    apagarVazias(path.dirname(r.arquivo), raiz);
+  }
+  // O `.part` fica onde o download estava gravando.
+  const pasta = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?').get(item.courseId, raiz) as { pasta: string } | undefined;
+  if (pasta) {
+    const parcial = path.join(pasta.pasta, ...item.relPath.split('/').filter(Boolean).map((p) => sanear(p))) + '.part';
+    if (dentro(parcial, raiz)) fs.rmSync(parcial, { force: true });
   }
 }
 

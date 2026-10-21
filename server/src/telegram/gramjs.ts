@@ -149,6 +149,62 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     }
   }
 
+  // Os tópicos com este id (o Telegram devolve só os que existem).
+  async function topicoPorId(canal: TiposApi.Channel, id: number): Promise<{ id: number; titulo: string } | null> {
+    const r = await client.invoke(new Api.channels.GetForumTopicsByID({ channel: canal, topics: [id] })).catch(() => null);
+    const t = r?.topics.find((t): t is TiposApi.ForumTopic => t instanceof Api.ForumTopic && t.id === id);
+    return t ? { id: t.id, titulo: t.title } : null;
+  }
+
+  // O número do link num grupo com tópicos: o próprio tópico (t.me/c/123/14078)
+  // ou uma mensagem dentro de um (o tópico vem do cabeçalho dela). Mensagem sem
+  // tópico mora no "General", que é o tópico 1.
+  async function topicoDoLink(canal: TiposApi.Channel, link: { mensagem?: number; topico?: number }) {
+    if (link.topico) return topicoPorId(canal, link.topico);
+    if (!link.mensagem) return null;
+    const direto = await topicoPorId(canal, link.mensagem);
+    if (direto) return direto;
+    const [m] = await client.getMessages(canal, { ids: [link.mensagem] });
+    const rt = m instanceof Api.Message ? m.replyTo : undefined;
+    const id = rt instanceof Api.MessageReplyHeader && rt.forumTopic ? (rt.replyToTopId ?? rt.replyToMsgId) : 1;
+    return id ? topicoPorId(canal, id) : null;
+  }
+
+  // A busca do Telegram com filtro e tópico juntos: o iterMessages do GramJS só
+  // faz um ou outro (com tópico ele lê o tópico inteiro, conversa inclusive).
+  async function* buscar(peer: PeerTelegram, filter: TiposApi.TypeMessagesFilter): AsyncGenerator<TiposApi.Message> {
+    let offsetId = 0;
+    for (;;) {
+      const r = await client.invoke(
+        new Api.messages.Search({
+          peer: inputPeer(Api, peer),
+          q: '',
+          filter,
+          topMsgId: peer.topico,
+          minDate: 0,
+          maxDate: 0,
+          offsetId,
+          addOffset: 0,
+          limit: 100,
+          maxId: 0,
+          minId: 0,
+          hash: bigInt.zero,
+        }),
+      );
+      if (r instanceof Api.messages.MessagesNotModified || !r.messages.length) return;
+      for (const m of r.messages) if (m instanceof Api.Message) yield m;
+      offsetId = r.messages[r.messages.length - 1].id;
+    }
+  }
+
+  const contarNoTopico = async (peer: PeerTelegram, filter: TiposApi.TypeMessagesFilter) => {
+    const r = await client.invoke(
+      new Api.messages.Search({ peer: inputPeer(Api, peer), q: '', filter, topMsgId: peer.topico, minDate: 0, maxDate: 0, offsetId: 0, addOffset: 0, limit: 1, maxId: 0, minId: 0, hash: bigInt.zero }),
+    );
+    if (r instanceof Api.messages.MessagesNotModified) return 0;
+    return 'count' in r ? r.count : r.messages.length;
+  };
+
   return {
     resolver: (link) =>
       chamar(async () => {
@@ -161,7 +217,13 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
                 const f = falhaDoErro(err);
                 throw f.tipo === 'telegram' || f.tipo === 'sem-acesso' ? new FalhaTelegram('sem-acesso') : f;
               });
-        return peerDe(Api, e);
+        const grupo = peerDe(Api, e);
+        // Link com número num grupo sem tópicos: é só uma mensagem, e o curso é o grupo todo.
+        if ((link.mensagem || link.topico) && e instanceof Api.Channel && e.forum) {
+          const t = await topicoDoLink(e, link);
+          if (t) return { peer: { ...grupo.peer, topico: t.id }, titulo: t.titulo || grupo.titulo };
+        }
+        return grupo;
       }),
 
     verConvite: (hash) =>
@@ -191,7 +253,8 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         const alvo = inputPeer(Api, peer);
         // limit 1 com filtro: o Telegram devolve o total da busca sem mandar o
         // histórico, então a prévia sai rápida mesmo num grupo com milhares de vídeos.
-        const contar = async (filter: TiposApi.TypeMessagesFilter) => (await client.getMessages(alvo, { limit: 1, filter })).total ?? 0;
+        const contar = async (filter: TiposApi.TypeMessagesFilter) =>
+          peer.topico ? contarNoTopico(peer, filter) : ((await client.getMessages(alvo, { limit: 1, filter })).total ?? 0);
         const videos = await contar(new Api.InputMessagesFilterVideo());
         const arquivos = await contar(new Api.InputMessagesFilterDocument());
 
@@ -228,7 +291,8 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         // num grupo com milhares de mensagens de conversa, ler tudo levaria minutos.
         const porId = new Map<number, MensagemTelegram>();
         for (const filter of [new Api.InputMessagesFilterVideo(), new Api.InputMessagesFilterDocument()]) {
-          for await (const m of client.iterMessages(inputPeer(Api, peer), { limit: undefined, filter })) {
+          const lista = peer.topico ? buscar(peer, filter) : client.iterMessages(inputPeer(Api, peer), { limit: undefined, filter });
+          for await (const m of lista) {
             if (!(m instanceof Api.Message) || porId.has(m.id)) continue;
             porId.set(m.id, { id: m.id, data: m.date, legenda: m.message ?? '', midia: midiaDe(Api, m) });
           }

@@ -47,7 +47,7 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
   const [confirmandoBaixar, setConfirmandoBaixar] = useState(false);
 
   // "Baixar" a categoria: os cursos do Drive e do Telegram dela vão para a pasta
-  // de armazenamento, cada um na sua pasta (o mesmo "Baixar curso inteiro" do curso).
+  // de armazenamento, cada um na sua pasta (o mesmo "Baixar" do curso).
   const { data: cursos } = useCourses();
   const remotos = (cursos ?? []).filter((c) => c.source !== 'local' && (c.collectionId ?? SEM) === cat);
   // O progresso fica no painel de downloads (em toda tela).

@@ -241,6 +241,28 @@ function SecaoDrive({ onNotice }: { onNotice: (m: string) => void }) {
   );
 }
 
+// Colar o link de um grupo e já baixar o curso inteiro, sem passar pela biblioteca:
+// o curso é adicionado (ou reaproveitado, se já existe) e entra na fila de downloads.
+function SecaoAutoDownload() {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-sm font-semibold text-neutral-300">Auto download</h2>
+      <div className="flex items-center justify-between gap-3 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+        <span className="py-2 text-neutral-400">Cole o link de um grupo do Telegram e o curso inteiro vai para a fila de downloads.</span>
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+        >
+          Auto download
+        </button>
+      </div>
+      {aberto && <TelegramLinkModal baixar onClose={() => setAberto(false)} />}
+    </section>
+  );
+}
+
 function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const { data: status } = useQuery({ queryKey: ['telegramStatus'], queryFn: api.telegramStatus });
@@ -517,6 +539,7 @@ export default function Settings() {
       )}
 
       <SecaoConta />
+      <SecaoAutoDownload />
       <SecaoPomodoro />
 
       <section className="mb-8">

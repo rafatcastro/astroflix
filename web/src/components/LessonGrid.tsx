@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatDuration } from '../lib/format';
@@ -7,15 +8,18 @@ export default function LessonGrid({
   lessons,
   size,
   onToggleComplete,
+  onMenu,
 }: {
   lessons: LessonDTO[];
   size: number;
   onToggleComplete: (id: string, completed: boolean) => void;
+  /** Botão direito na aula (Baixar / Excluir download); só nos cursos do Drive e do Telegram. */
+  onMenu?: (l: LessonDTO, e: MouseEvent) => void;
 }) {
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${size}px, 45vw), 1fr))` }}>
       {lessons.map((l) => (
-        <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative">
+        <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative" onContextMenu={onMenu ? (e) => onMenu(l, e) : undefined}>
           <Link to={`/lesson/${l.id}`} title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}>
             {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
             <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : l.baixada === false ? 'opacity-40 grayscale' : ''}`}>

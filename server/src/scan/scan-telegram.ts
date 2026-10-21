@@ -51,8 +51,8 @@ export async function createCourseFromTelegram(
   linkOriginal: string,
 ): Promise<{ id: string; existente: boolean }> {
   const ja = db
-    .prepare("SELECT id, archived FROM courses WHERE source='telegram' AND json_extract(telegram_peer, '$.id')=?")
-    .get(grupo.peer.id) as { id: string; archived: number } | undefined;
+    .prepare("SELECT id, archived FROM courses WHERE source='telegram' AND json_extract(telegram_peer, '$.id')=? AND IFNULL(json_extract(telegram_peer, '$.topico'), 0)=?")
+    .get(grupo.peer.id, grupo.peer.topico ?? 0) as { id: string; archived: number } | undefined;
   if (ja) {
     if (ja.archived) db.prepare('UPDATE courses SET archived=0 WHERE id=?').run(ja.id);
     await reconcileTelegramCourse(db, deps, ja.id);

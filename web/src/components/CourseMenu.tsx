@@ -198,7 +198,7 @@ export default function CourseMenu({
             {course.source === 'local' && <button className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
             {onBaixar && (
               <button className={`${item} disabled:text-neutral-500`} disabled={baixando} onClick={() => { close(); onBaixar(); }}>
-                {baixando ? 'Baixando o curso…' : 'Baixar curso inteiro…'}
+                {baixando ? 'Baixando…' : 'Baixar…'}
               </button>
             )}
             {temBaixadas && (

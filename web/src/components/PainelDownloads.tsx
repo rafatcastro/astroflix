@@ -8,7 +8,7 @@ import { formatBytes, formatRestante, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { Download, X } from './icons';
 
-// Os "Baixar curso inteiro" em andamento, em qualquer tela: o download de um
+// Os "Baixar" em andamento, em qualquer tela: o download de um
 // curso leva horas, e a pessoa continua usando o app enquanto isso. Fica no canto
 // esquerdo (o direito é do pomodoro), recolhido numa pílula ou aberto com cada
 // curso. Some quando não há nada na lista.

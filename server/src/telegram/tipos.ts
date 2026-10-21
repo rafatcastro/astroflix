@@ -30,9 +30,14 @@ export interface CredenciaisTelegram {
   apiHash: string | null;
 }
 
+/**
+ * `mensagem` é o número depois do grupo (t.me/c/123/14078): num grupo com
+ * tópicos, é o tópico (ou uma mensagem dentro dele), e o curso vira só aquele
+ * tópico. `topico` vem de t.me/c/123/<tópico>/<mensagem> ou de ?thread=.
+ */
 export type LinkTelegram =
-  | { tipo: 'publico'; usuario: string }
-  | { tipo: 'privado'; canalId: string }
+  | { tipo: 'publico'; usuario: string; mensagem?: number; topico?: number }
+  | { tipo: 'privado'; canalId: string; mensagem?: number; topico?: number }
   | { tipo: 'convite'; hash: string };
 
 /**
@@ -44,6 +49,8 @@ export interface PeerTelegram {
   tipo: 'canal' | 'chat';
   id: string;
   accessHash: string | null;
+  /** Só este tópico do grupo (o id da mensagem que abre o tópico). Sem ele, o grupo inteiro. */
+  topico?: number;
 }
 
 /** O recorte de uma mensagem que o resto do app usa — o cliente real e o falso dos testes produzem isto. */

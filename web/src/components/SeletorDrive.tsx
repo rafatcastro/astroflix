@@ -6,6 +6,9 @@ import { autorizarNoGoogle, mensagemErroDrive } from '../api/driveAuth';
 import { abrirFora } from '../lib/desktop';
 import { Check, ChevronRight, FileText } from './icons';
 
+// Sem conexão com o Drive: quanto esperar antes de tentar listar de novo.
+const ESPERA_REDE_MS = 5000;
+
 // `modo="curso"`: a mesma navegação escolhe a pasta de um curso (só pastas aparecem).
 // Escolher PDFs (ou uma pasta inteira) navegando no próprio Google Drive, em vez
 // de copiar e colar um link. O Google Picker oficial não serve aqui: ele roda
@@ -57,12 +60,19 @@ export default function SeletorDrive({
 
   useEffect(() => {
     let vivo = true;
+    let repetir: ReturnType<typeof setTimeout> | undefined;
     setItens(null);
     setErro(null);
     void api.driveNavegar(pasta).then(async (r) => {
       if (!vivo) return;
       if (r.tipo === 'itens') return setItens(modo === 'curso' ? r.itens.filter((i) => i.tipo === 'pasta') : r.itens);
-      if (r.tipo === 'erro') return setErro(mensagemErroDrive(r.erro));
+      if (r.tipo === 'erro') {
+        setErro(mensagemErroDrive(r.erro));
+        // Rede que caiu por um instante: tenta de novo sozinho, sem a pessoa
+        // ter de fechar e abrir a janela.
+        if (r.erro === 'sem-conexao') repetir = setTimeout(() => setTentativa((t) => t + 1), ESPERA_REDE_MS);
+        return;
+      }
       // Sem conta Google conectada: conecta e lista de novo.
       const ctrl = new AbortController();
       abort.current = ctrl;
@@ -75,6 +85,7 @@ export default function SeletorDrive({
     });
     return () => {
       vivo = false;
+      clearTimeout(repetir);
     };
   }, [pasta, tentativa, modo]);
 
@@ -197,7 +208,14 @@ export default function SeletorDrive({
             </p>
           ) : erro ? (
             <p role="alert" className="p-4 text-sm text-amber-200">
-              {erro}
+              {erro}{' '}
+              <button
+                type="button"
+                className="text-neutral-300 underline underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                onClick={() => setTentativa((t) => t + 1)}
+              >
+                Tentar de novo
+              </button>
             </p>
           ) : !itens ? (
             <p className="p-4 text-sm text-neutral-500">Carregando…</p>

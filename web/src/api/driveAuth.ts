@@ -10,7 +10,7 @@ export const TEXTOS_ERRO_DRIVE: Record<string, string> = {
   'cota-esgotada': 'O Google bloqueou downloads desta pasta por excesso de acessos. Tente de novo em algumas horas.',
   'sem-conexao': 'Sem conexão com o Google Drive.',
   'nao-autorizado': 'A autorização do Google expirou.',
-  'sem-espaco': 'O disco está cheio. Libere espaço para o download continuar.',
+  'sem-espaco': 'Não há espaço no disco para o próximo arquivo (o app deixa 2 GB livres). Libere espaço ou troque a pasta em Configurações → Armazenamento, e clique em Continuar.',
   'nao-e-pdf': 'Esse link não é de um PDF nem de uma pasta. Cole o link de um PDF ou de uma pasta do Google Drive.',
   carregando: 'A pasta ainda está sendo lida. Espere terminar e tente de novo.',
   'sem-credenciais': 'O app do Google não está configurado. Configure um app próprio em Configurações → Google Drive.',

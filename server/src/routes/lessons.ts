@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
 import type { ServicosDrive } from '../drive/servicos';
+import type { AppConfig } from '../config';
+import { apagarBaixado } from '../armazenamento';
 
-export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; drive?: ServicosDrive }): Promise<void> {
-  const { db, drive } = opts;
+export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
+  const { db, config, drive } = opts;
 
   app.get('/api/lessons/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
@@ -31,6 +33,28 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; drive?
       courseSource: r.course_source === 'drive' || r.course_source === 'telegram' ? r.course_source : 'local',
       prevLessonId: prev?.id ?? null, nextLessonId: next?.id ?? null,
     };
+  });
+
+  // O botão direito da aula na página do curso (Drive e Telegram).
+  const aulaRemota = (id: string) =>
+    db
+      .prepare("SELECT l.id, l.course_id, l.rel_path FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=? AND c.source IN ('drive','telegram')")
+      .get(id) as { id: string; course_id: string; rel_path: string } | undefined;
+
+  app.post('/api/lessons/:id/baixar', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    if (!aulaRemota(id)) return reply.code(404).send({ error: 'not_found' });
+    if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
+    drive.baixador.baixarAula(id);
+    return reply.code(202).send();
+  });
+
+  app.delete('/api/lessons/:id/baixado', async (req, reply) => {
+    const a = aulaRemota((req.params as { id: string }).id);
+    if (!a) return reply.code(404).send({ error: 'not_found' });
+    await drive?.baixador.esquecerAula(a.id);
+    apagarBaixado(db, config, { tipo: 'aula', id: a.id, courseId: a.course_id, relPath: a.rel_path });
+    return reply.code(204).send();
   });
 
   app.patch('/api/lessons/:id/progress', async (req, reply) => {

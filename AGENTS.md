@@ -25,19 +25,19 @@ guarda os metadados da pessoa (cursos, aulas, progresso, bibliotecas e flashcard
 **Nome:** o app se chamava Learnflix e virou **Astroflix** (repositório `rafatcastro/astroflix`; o
 GitHub redireciona o nome antigo, então o atualizador de quem tem uma versão velha continua achando
 as releases). Ficaram com o nome antigo, de propósito, os identificadores que dão continuidade: o
-`identifier` do Tauri, a pasta de dados (`~/.learnflix`, `%LOCALAPPDATA%\Learnflix`), o formato do
+`identifier` do Tauri, o formato do
 backup (`learnflix-library`), o tipo de nota "Learnflix" do Anki, o sidecar `learnflix-server` e a
-linha `LEARNFLIX_URL=`. Os baralhos `Learnflix::…` são movidos sozinhos para `Astroflix::…`.
+linha `LEARNFLIX_URL=`. A pasta de dados virou `~/.astroflix` (`%LOCALAPPDATA%\Astroflix`): a antiga
+(`~/.learnflix`, `%LOCALAPPDATA%\Learnflix`) é movida na primeira abertura e os caminhos dos
+downloads no banco são corrigidos (`pasta-de-dados.ts`). Os baralhos `Learnflix::…` são movidos sozinhos para `Astroflix::…`.
 
 O código e os comentários estão em **português**. Os comentários explicam o **porquê** (o caso que
 motivou a decisão), não o quê. Siga esse estilo.
 
-**Commits e Pull Requests:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:`
-são opcionais). **Não faça push direto na `main`**: cada push nela dispara uma release (~10 min, em
-fila), e vários pushes seguidos viravam uma fila de releases. Trabalhe numa branch, abra um Pull
-Request para a `main` (`gh pr create -R rafatcastro/astroflix`) e deixe o merge para a pessoa: o
-merge é o que gera a release, uma por vez. O PR roda `.github/workflows/verificar.yml` (`pnpm
-build`).
+**Commits:** não há padrão obrigatório de mensagem de commit (prefixos como `feat:` são
+opcionais). O commit vai **direto na `main`** (sem branch nem Pull Request). Cada push nela dispara
+uma release (~10 min, em fila), então junte as mudanças num commit só em vez de vários pushes
+seguidos.
 
 ## Comandos
 
@@ -82,7 +82,7 @@ Lidas em `server/src/config.ts`:
 
 - `PORT`: padrão 7777. Se estiver ocupada, o app anda para a próxima (ver `listen.ts`).
 - `BIND`: padrão 127.0.0.1.
-- `DATA_DIR`: padrão `~/.learnflix`, ou `%LOCALAPPDATA%\Astroflix` no Windows. Guarda `app.db`,
+- `DATA_DIR`: padrão `~/.astroflix`, ou `%LOCALAPPDATA%\Astroflix` no Windows. Guarda `app.db`,
   `thumbs/`, `converted/` e `downloads/` (pasta de armazenamento padrão dos cursos do Drive e do Telegram).
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
@@ -154,8 +154,8 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   configurável em Configurações → Armazenamento) com o nome real, `<raiz>/<curso>/<rel_path>`,
   registrado na tabela `baixados` (v11, só local, sem nuvem). Dois pedidos: **abrir uma aula**
   (`GET /api/lessons/:id` → `baixador.pedirAula`) baixa ela e as `JANELA` (2) seguintes não
-  concluídas e passa na frente (interrompe o arquivo atual, o `.part` fica); **"Baixar curso
-  inteiro"** (menu ⋯ do curso, do cartão e da categoria) traz aulas e materiais, com o painel de
+  concluídas e passa na frente (interrompe o arquivo atual, o `.part` fica); **"Baixar"**
+  (menu ⋯ do curso, do cartão e da categoria) traz aulas e materiais, com o painel de
   downloads, retomada ao abrir o app e novas tentativas. Retoma `.part` com Range; aula que não toca
   é convertida (`media/preparar.ts`) e o `.mp4` toma o lugar do original. **Nada é apagado
   sozinho**: só "Remover download" (curso), "Limpar tudo" (Configurações) ou excluir o curso. A
@@ -238,7 +238,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
   erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
   sair. Cada subida tem uma geração: eventos de um processo antigo não mexem mais na janela.
-- Segundo plano: enquanto há "Baixar curso inteiro" em andamento, o servidor escreve
+- Segundo plano: enquanto há "Baixar" em andamento, o servidor escreve
   `LEARNFLIX_BAIXANDO=1` (e `=0` no fim). O `lib.rs` segura o sistema acordado (no macOS uma
   atividade `UserInitiated`, que também tira o App Nap; no Windows `SetThreadExecutionState`) e
   fechar a janela só a esconde (no macOS; nos outros, minimiza). O Dock a traz de volta; acabou o

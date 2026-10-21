@@ -46,9 +46,14 @@ function defaultRoots(): string[] {
 export function defaultDataDir(env: NodeJS.ProcessEnv = process.env, plataforma = process.platform): string {
   // No Windows, pasta oculta na home não é a convenção: dados de aplicativo
   // moram em LOCALAPPDATA, que é onde backup e perfil móvel vão procurar.
-  // O app virou Astroflix, mas a pasta de dados mantém o nome de quando era
-  // Learnflix: trocá-la deixaria para trás o banco, as capas e os downloads de
-  // quem já usava (e a sessão da conta).
+  // A pasta de quando o app se chamava Learnflix é movida para cá ao abrir
+  // (pasta-de-dados.ts), com o banco, as capas, os downloads e a sessão da conta.
+  if (plataforma === 'win32' && env.LOCALAPPDATA) return path.join(env.LOCALAPPDATA, 'Astroflix');
+  return path.join(os.homedir(), '.astroflix');
+}
+
+/** A pasta de dados de quando o app se chamava Learnflix. */
+export function pastaDeDadosAntiga(env: NodeJS.ProcessEnv = process.env, plataforma = process.platform): string {
   if (plataforma === 'win32' && env.LOCALAPPDATA) return path.join(env.LOCALAPPDATA, 'Learnflix');
   return path.join(os.homedir(), '.learnflix');
 }

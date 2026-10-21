@@ -37,7 +37,7 @@ export interface CourseDetail {
   importacao: { carregando: boolean; erro: string | null } | null;
   // Curso do Drive ou do Telegram: aulas na pasta de armazenamento e se a aula aberta e as próximas estão baixando.
   download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
-  /** O "Baixar curso inteiro" (só Drive e Telegram); null = não pedido desde que o app abriu. */
+  /** O "Baixar" (só Drive e Telegram); null = não pedido desde que o app abriu. */
   downloadCurso: DownloadCurso | null;
   /** Bytes do curso inteiro (aulas e materiais), para o diálogo do "Baixar". */
   tamanhoRemoto: number | null;
@@ -427,6 +427,8 @@ export const api = {
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
   baixarCurso: (id: string) => jsonFetch<DownloadCurso>(`/api/courses/${id}/baixar`, { method: 'POST' }),
   cancelarDownloadCurso: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixar`, { method: 'DELETE' }),
+  baixarAula: (id: string) => jsonFetch<void>(`/api/lessons/${id}/baixar`, { method: 'POST' }),
+  excluirDownloadAula: (id: string) => jsonFetch<void>(`/api/lessons/${id}/baixado`, { method: 'DELETE' }),
   removerBaixados: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixados`, { method: 'DELETE' }),
   baixarCategoria: (cat: string) => jsonFetch<{ cursos: number }>(`/api/collections/${cat}/baixar`, { method: 'POST' }),
   listarDownloads: () => jsonFetch<{ itens: DownloadCurso[] }>('/api/downloads'),
