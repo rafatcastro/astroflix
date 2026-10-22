@@ -142,7 +142,11 @@ export interface Conta {
 export const materialUrl = (id: string, download = false) => `/api/materials/${id}${download ? '?download=1' : ''}`;
 export interface DirEntry { name: string; path: string; }
 export interface BrowseResult { path: string | null; parent: string | null; dirs: DirEntry[]; }
-export interface RepointSummary { matched: number; relinked: number; missing: number; added: number; structureChanged: boolean; }
+export interface RepointSummary {
+  matched: number; relinked: number; missing: number; added: number; structureChanged: boolean;
+  /** Re-escanear do Drive/Telegram: arquivos baixados levados para a pasta do módulo. */
+  movidos?: number;
+}
 export interface RootUnavailable { status: 'root_unavailable'; }
 export interface Settings { allowedRootsExtra: string[]; }
 // Categoria (a API ainda diz collection: eram as bibliotecas de cursos).

@@ -188,12 +188,19 @@ export default function CourseMenu({
 
   const doRescan = async () => {
     close();
+    // Num grupo grande a leitura leva alguns segundos: avisa que começou.
+    if (remoto) onNotice(doCurso('re-escaneando: lendo a origem, montando os módulos e organizando os arquivos baixados…'));
     try {
       const res = await api.rescan(course.id);
       if ('status' in res) return onNotice(doCurso('pasta indisponível — se ela mudou de lugar, re-aponte pelo menu.'));
       invalidate();
       const novas = course.source === 'telegram' ? `+${res.added} novos (vídeos e fotos)` : `+${res.added} novas`;
-      onNotice(res.added || res.missing || res.relinked ? doCurso(`atualizado: ${novas}, ${res.missing} faltando.`) : doCurso('nada mudou.'));
+      const partes = [
+        res.added || res.missing ? `${novas}, ${res.missing} faltando` : null,
+        res.structureChanged ? 'módulos reorganizados' : null,
+        res.movidos ? `${res.movidos} arquivo${res.movidos === 1 ? '' : 's'} movido${res.movidos === 1 ? '' : 's'} para as pastas dos módulos` : null,
+      ].filter(Boolean);
+      onNotice(partes.length ? doCurso(`atualizado: ${partes.join('; ')}.`) : doCurso('nada mudou.'));
     } catch (e) {
       if (course.source === 'telegram' && e instanceof Error) return onNotice(doCurso(mensagemErroTelegram(e.message, (e as { esperaSeg?: number }).esperaSeg)));
       onNotice(

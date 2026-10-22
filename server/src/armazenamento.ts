@@ -503,6 +503,66 @@ export function adotarConvertido(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' 
 }
 
 /**
+ * Depois de um re-escaneio que mudou a estrutura (o grupo do Telegram ganhou
+ * módulos por tópico, a pasta do Drive foi reorganizada), leva os arquivos já
+ * baixados para onde o app os gravaria agora: <curso>/<módulo>/<arquivo>. Só
+ * renomeia dentro da pasta de armazenamento; nunca grava por cima de outro
+ * arquivo, e a pasta conectada é da pessoa, então nela nada se move. O `.part`
+ * de um download que parou também vai, para continuar de onde estava.
+ * `simular` só conta, sem mover (para saber se vale pausar os downloads).
+ */
+export function reorganizarBaixados(db: Db, config: AppConfig, courseId: string, simular = false): number {
+  if (!config.downloadsDir || pastaConectada(db, courseId)) return 0;
+  const raiz = pastaDeArmazenamento(db, config);
+  const mapeada = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?').get(courseId, raiz) as { pasta: string } | undefined;
+  if (!mapeada || !fs.existsSync(mapeada.pasta)) return 0;
+
+  type Linha = { id: string; rel_path: string; remote_id: string | null; size_bytes: number | null };
+  const itens = [
+    ...(db.prepare('SELECT id, rel_path, remote_id, size_bytes FROM lessons WHERE course_id=?').all(courseId) as Linha[]).map((l) => ['aula', l] as const),
+    ...(db.prepare('SELECT id, rel_path, remote_id, size_bytes FROM materials WHERE course_id=?').all(courseId) as Linha[]).map((l) => ['material', l] as const),
+  ];
+  const registro = db.prepare('SELECT arquivo, convertido FROM baixados WHERE tipo=? AND item_id=?');
+  const atualizar = db.prepare('UPDATE baixados SET arquivo=? WHERE tipo=? AND item_id=?');
+  const mover = (de: string, para: string) => {
+    fs.mkdirSync(path.dirname(para), { recursive: true });
+    try {
+      fs.renameSync(de, para);
+    } catch {
+      // Outro disco (não deveria, é a mesma raiz): copia e apaga.
+      fs.copyFileSync(de, para);
+      fs.rmSync(de, { force: true });
+    }
+    apagarVazias(path.dirname(de), raiz);
+  };
+
+  let movidos = 0;
+  for (const [tipo, l] of itens) {
+    const item: ItemBaixavel = { tipo, id: l.id, courseId, relPath: l.rel_path, remoteId: l.remote_id ?? '', tamanho: Number(l.size_bytes ?? 0) };
+    let ideal = destinoDe(db, config, item);
+    const r = registro.get(tipo, l.id) as { arquivo: string; convertido: number } | undefined;
+    if (r) {
+      // Aula convertida: o arquivo é o .mp4 com o nome do original.
+      if (r.convertido) ideal = ideal.slice(0, ideal.length - path.extname(ideal).length) + '.mp4';
+      if (r.arquivo === ideal || !dentro(r.arquivo, raiz) || !fs.existsSync(r.arquivo) || fs.existsSync(ideal)) continue;
+      movidos++;
+      if (simular) continue;
+      mover(r.arquivo, ideal);
+      atualizar.run(ideal, tipo, l.id);
+    } else {
+      // Download que parou no meio, gravado no lugar antigo (na raiz do curso, sem módulo).
+      const antigo = path.join(mapeada.pasta, sanear(path.basename(l.rel_path))) + '.part';
+      const novo = `${ideal}.part`;
+      if (antigo === novo || !fs.existsSync(antigo) || fs.existsSync(novo)) continue;
+      movidos++;
+      if (simular) continue;
+      mover(antigo, novo);
+    }
+  }
+  return movidos;
+}
+
+/**
  * Onde gravar a conversão de um arquivo baixado: ao lado dele (o rename final não
  * cruza discos) ou, na pasta conectada, em DATA_DIR/converted, para não criar
  * nada temporário na pasta da pessoa.

@@ -11,7 +11,7 @@ import { FalhaDrive } from '../drive/tipos';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
 import { reconcileTelegramCourse } from '../scan/scan-telegram';
-import { adotarArquivosDaPasta } from '../armazenamento';
+import { adotarArquivosDaPasta, reorganizarBaixados } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
 import { statusDaFalha, resourceKeyDoCurso } from '../drive/status';
 
@@ -60,6 +60,22 @@ export async function migrationRoutes(
     return r;
   });
 
+  // Depois de reler a origem: os arquivos já baixados vão para a pasta do módulo
+  // de agora. Os downloads do curso param enquanto isso (um `.part` sendo
+  // gravado não pode trocar de lugar) e o "Baixar" do curso inteiro continua depois.
+  const organizar = async (id: string) => {
+    if (!reorganizarBaixados(db, config, id, true)) return 0;
+    const e = drive?.baixador.estado(id);
+    const continuar = !!e && (e.ativo || e.naFila || e.tentarEm !== null);
+    drive?.baixador.cancelar(id);
+    await drive?.baixador.soltar(id);
+    try {
+      return reorganizarBaixados(db, config, id);
+    } finally {
+      if (continuar) drive?.baixador.baixarCurso(id);
+    }
+  };
+
   app.post('/api/courses/:id/rescan', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     const curso = origemDo(id);
@@ -71,8 +87,9 @@ export async function migrationRoutes(
       const rk = resourceKeyDoCurso(curso.drive_folder_id, curso.drive_resource_key);
       try {
         const r = await reconcileDriveCourse(db, drive.ingestao(rk), id);
+        const movidos = await organizar(id);
         adotarArquivosDaPasta(db, config, id, true);
-        return r;
+        return { ...r, movidos };
       } catch (e) {
         if (e instanceof FalhaDrive) return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo });
         throw e;
@@ -82,9 +99,10 @@ export async function migrationRoutes(
       if (!telegram) return reply.code(503).send({ error: 'sem-conexao' });
       try {
         const r = await reconcileTelegramCourse(db, { cliente: await telegram.cliente(), config }, id);
+        const movidos = await organizar(id);
         // Itens novos (fotos, mensagens recentes) que já estão na pasta do curso.
         adotarArquivosDaPasta(db, config, id, true);
-        return r;
+        return { ...r, movidos };
       } catch (e) {
         const r = respostaDeFalhaTelegram(e);
         return reply.code(r.status).send(r.corpo);
