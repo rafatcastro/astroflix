@@ -373,6 +373,10 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     topicos: (peer) =>
       chamar(async () => {
         if (peer.tipo !== 'canal' || peer.topico) return [];
+        // Só grupo com tópicos: num canal ou grupo comum, pedir os tópicos dá erro
+        // (CHANNEL_INVALID, que viraria "sem acesso" e derrubaria a criação do curso).
+        const e = await client.getEntity(inputPeer(Api, peer)).catch(() => null);
+        if (!(e instanceof Api.Channel) || !e.forum) return [];
         const canal = new Api.InputChannel({ channelId: bigInt(peer.id), accessHash: bigInt(peer.accessHash ?? '0') });
         const lista: TopicoTelegram[] = [];
         let offsetDate = 0;
@@ -382,9 +386,11 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
           const r = await client
             .invoke(new Api.channels.GetForumTopics({ channel: canal, q: '', offsetDate, offsetId, offsetTopic, limit: 100 }))
             .catch((e) => {
-              // Grupo sem tópicos (ou canal): o curso fica sem módulos, como sempre foi.
-              if ((e as { errorMessage?: string }).errorMessage === 'CHANNEL_FORUM_MISSING') return null;
-              throw e;
+              // Os tópicos só organizam em módulos: se não vierem, o curso fica sem
+              // módulos, como sempre foi. Sessão caída e flood seguem, para a interface explicar.
+              const f = falhaDoErro(e);
+              if (f.tipo === 'nao-autorizado' || f.tipo === 'flood' || f.tipo === 'sem-conexao') throw e;
+              return null;
             });
           if (!r) return [];
           const topicos = r.topics.filter((t): t is TiposApi.ForumTopic => t instanceof Api.ForumTopic);
