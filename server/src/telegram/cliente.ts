@@ -1,4 +1,4 @@
-import type { LinkTelegram, MensagemTelegram, PeerTelegram } from './tipos';
+import type { LinkTelegram, MensagemTelegram, PeerTelegram, TopicoTelegram } from './tipos';
 
 export interface GrupoTelegram {
   peer: PeerTelegram;
@@ -42,6 +42,12 @@ export interface ClienteTelegram {
   previa(peer: PeerTelegram): Promise<DetalhesGrupo & { videos: number; arquivos: number; fotos: number }>;
   /** Os grupos, canais e bots da conta, na ordem do app do Telegram (a conversa mais recente primeiro). */
   dialogos(): Promise<DialogoTelegram[]>;
+  /**
+   * Os tópicos do grupo, na ordem em que o Telegram os mostra (fixados primeiro,
+   * depois a atividade mais recente). Vazio para canal, grupo sem tópicos ou um
+   * curso que já é de um tópico só.
+   */
+  topicos(peer: PeerTelegram): Promise<TopicoTelegram[]>;
   /** O histórico inteiro do grupo, em qualquer ordem (montarCurso ordena). */
   mensagens(peer: PeerTelegram): Promise<MensagemTelegram[]>;
   /** Blocos de BLOCO bytes a partir de `offset` (múltiplo de BLOCO), até o fim do arquivo ou o abort. */

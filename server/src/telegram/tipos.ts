@@ -63,6 +63,14 @@ export interface MensagemTelegram {
   data: number;
   legenda: string;
   midia: MidiaTelegram | null;
+  /** Num grupo com tópicos, o tópico da mensagem (1 = "General"); fora disso, ausente. */
+  topico?: number;
+}
+
+/** Um tópico de um grupo com tópicos, para virar módulo do curso. */
+export interface TopicoTelegram {
+  id: number;
+  titulo: string;
 }
 
 export interface MidiaTelegram {

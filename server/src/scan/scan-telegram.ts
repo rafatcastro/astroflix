@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import type { ClienteTelegram, GrupoTelegram } from '../telegram/cliente';
-import { montarCurso, type CursoTelegram } from '../telegram/mensagens';
-import { FalhaTelegram, type PeerTelegram } from '../telegram/tipos';
+import { montarCurso, pastasDosTopicos, type CursoTelegram } from '../telegram/mensagens';
+import { FalhaTelegram, type PeerTelegram, type TopicoTelegram } from '../telegram/tipos';
 import { gravarCapaAtomico, lessonThumbPath } from '../media/thumbs';
 import { deriveCourse, type DerivedCourse } from './derive';
 import { aplicarReconcile, planReconcile, type ExistingLesson, type ReconcileResult } from './reconcile';
@@ -19,10 +19,24 @@ const CAPAS_SIMULTANEAS = 3;
 // O deriveCourse ordena pelo relPath (que começa pelo id da mensagem, então dá
 // a ordem de postagem) e tira o título do nome do arquivo. No Telegram o
 // título bom está na legenda: troca aqui, pelo relPath, que é a identidade.
-function derivar(curso: CursoTelegram): DerivedCourse {
+// Num grupo com tópicos, os módulos seguem a ordem em que o Telegram mostra os
+// tópicos (fixados primeiro, depois a atividade mais recente), e não a
+// alfabética do deriveCourse; cada re-escaneio a atualiza.
+function derivar(curso: CursoTelegram, topicos: TopicoTelegram[] = []): DerivedCourse {
   const derived = deriveCourse(curso.videos);
   const titulos = new Map(curso.videos.map((v) => [v.relPath, v.titulo]));
   for (const l of derived.lessons) l.title = titulos.get(l.relPath) ?? l.title;
+  if (topicos.length && derived.structure === 'modules') {
+    const ordem = new Map([...pastasDosTopicos(topicos).values()].map((nome, i) => [nome, i]));
+    const posicao = (m: string | null) => (m === null ? -1 : (ordem.get(m) ?? ordem.size));
+    // sort estável: dentro do módulo, fica a ordem de postagem que o deriveCourse deu.
+    derived.lessons.sort((a, b) => posicao(a.module) - posicao(b.module));
+    const modulos = [...new Set(derived.lessons.map((l) => l.module))];
+    derived.lessons.forEach((l, i) => {
+      l.orderIndex = i;
+      l.moduleOrder = modulos.indexOf(l.module);
+    });
+  }
   return derived;
 }
 
@@ -59,13 +73,14 @@ export async function createCourseFromTelegram(
     return { id: ja.id, existente: true };
   }
 
-  const curso = montarCurso(await deps.cliente.mensagens(grupo.peer));
+  const topicos = await deps.cliente.topicos(grupo.peer);
+  const curso = montarCurso(await deps.cliente.mensagens(grupo.peer), topicos);
   if (!curso.videos.length) throw new FalhaTelegram('sem-videos');
 
   const id = inserirCursoDerivado(
     db,
     { title: grupo.titulo || 'Curso do Telegram', rootPath: linkOriginal, source: 'telegram', telegramPeer: JSON.stringify(grupo.peer) },
-    derivar(curso),
+    derivar(curso, topicos),
     curso.materials,
     extrasDe(curso),
   );
@@ -83,8 +98,9 @@ export async function reconcileTelegramCourse(db: Db, deps: DepsTelegram, course
     | undefined;
   if (!peer || !course) throw new Error('curso-sem-grupo-do-telegram');
 
-  const curso = montarCurso(await deps.cliente.mensagens(peer));
-  const derived = derivar(curso);
+  const topicos = await deps.cliente.topicos(peer);
+  const curso = montarCurso(await deps.cliente.mensagens(peer), topicos);
+  const derived = derivar(curso, topicos);
   const existing = db
     .prepare('SELECT id, rel_path, mtime, order_index FROM lessons WHERE course_id=?')
     .all(courseId) as unknown as ExistingLesson[];

@@ -10,7 +10,7 @@ import type { ClienteTelegram, Convite, DialogoTelegram, GrupoTelegram } from '.
 import { credenciaisTelegram } from './credenciais';
 import type { EstadoLogin, ServicosTelegram } from './servicos';
 import { falhaDoErro } from './status';
-import { FalhaTelegram, type CredenciaisTelegram, type MensagemTelegram, type MidiaTelegram, type PeerTelegram } from './tipos';
+import { FalhaTelegram, type CredenciaisTelegram, type MensagemTelegram, type MidiaTelegram, type PeerTelegram, type TopicoTelegram } from './tipos';
 
 // A implementação real, sobre o GramJS (MTProto, a conta da própria pessoa).
 // Tudo o que é do GramJS fica neste arquivo: o resto do app só conhece
@@ -370,6 +370,36 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         return lista;
       }),
 
+    topicos: (peer) =>
+      chamar(async () => {
+        if (peer.tipo !== 'canal' || peer.topico) return [];
+        const canal = new Api.InputChannel({ channelId: bigInt(peer.id), accessHash: bigInt(peer.accessHash ?? '0') });
+        const lista: TopicoTelegram[] = [];
+        let offsetDate = 0;
+        let offsetId = 0;
+        let offsetTopic = 0;
+        for (;;) {
+          const r = await client
+            .invoke(new Api.channels.GetForumTopics({ channel: canal, q: '', offsetDate, offsetId, offsetTopic, limit: 100 }))
+            .catch((e) => {
+              // Grupo sem tópicos (ou canal): o curso fica sem módulos, como sempre foi.
+              if ((e as { errorMessage?: string }).errorMessage === 'CHANNEL_FORUM_MISSING') return null;
+              throw e;
+            });
+          if (!r) return [];
+          const topicos = r.topics.filter((t): t is TiposApi.ForumTopic => t instanceof Api.ForumTopic);
+          for (const t of topicos) if (!lista.some((x) => x.id === t.id)) lista.push({ id: t.id, titulo: t.title });
+          if (!topicos.length || lista.length >= r.count) break;
+          // A próxima página continua do último tópico, pela data da última mensagem dele.
+          const ultimo = topicos[topicos.length - 1];
+          const msg = r.messages.find((m) => 'id' in m && m.id === ultimo.topMessage) as { date?: number } | undefined;
+          offsetTopic = ultimo.id;
+          offsetId = ultimo.topMessage;
+          offsetDate = msg?.date ?? 0;
+        }
+        return lista;
+      }),
+
     mensagens: (peer) =>
       chamar(async () => {
         // Buscas filtradas (vídeos; arquivos; fotos) em vez do histórico inteiro:
@@ -379,7 +409,10 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
           const lista = peer.topico ? buscar(peer, filter) : client.iterMessages(inputPeer(Api, peer), { limit: undefined, filter });
           for await (const m of lista) {
             if (!(m instanceof Api.Message) || porId.has(m.id)) continue;
-            porId.set(m.id, { id: m.id, data: m.date, legenda: m.message ?? '', midia: midiaDe(Api, m) });
+            // Num grupo com tópicos, mensagem sem cabeçalho de tópico mora no "General" (1).
+            const rt = m.replyTo;
+            const topico = rt instanceof Api.MessageReplyHeader && rt.forumTopic ? (rt.replyToTopId ?? rt.replyToMsgId) : 1;
+            porId.set(m.id, { id: m.id, data: m.date, legenda: m.message ?? '', midia: midiaDe(Api, m), topico });
           }
         }
         return [...porId.values()];

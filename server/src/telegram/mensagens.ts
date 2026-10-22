@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { VIDEO_EXTS, cleanTitle, type ScannedFile } from '../scan/derive';
 import { materialKind, type MaterialKind } from '../scan/walk';
-import type { MensagemTelegram } from './tipos';
+import type { MensagemTelegram, TopicoTelegram } from './tipos';
 
 export interface ArquivoTelegram extends ScannedFile {
   /** O id da mensagem — o endereço para baixar, nunca a identidade da aula. */
@@ -36,6 +36,20 @@ function ehVideo(nome: string, mime: string): boolean {
   return mime.startsWith('video/') || VIDEO_EXTS.has(path.extname(nome).toLowerCase());
 }
 
+/** O nome da pasta (e do módulo) de cada tópico; dois tópicos com o mesmo nome viram "Nome (2)". */
+export function pastasDosTopicos(topicos: TopicoTelegram[]): Map<number, string> {
+  const pastas = new Map<number, string>();
+  const usados = new Set<string>();
+  for (const t of topicos) {
+    const base = limpar(t.titulo).replace(/^\.+/, '') || `Tópico ${t.id}`;
+    let nome = base;
+    for (let n = 2; usados.has(nome.toLowerCase()); n++) nome = `${base} (${n})`;
+    usados.add(nome.toLowerCase());
+    pastas.set(t.id, nome);
+  }
+  return pastas;
+}
+
 const dataCurta = (seg: number): string => {
   const d = new Date(seg * 1000);
   const dois = (n: number) => String(n).padStart(2, '0');
@@ -48,9 +62,10 @@ const dataCurta = (seg: number): string => {
  * natural do deriveCourse dá a ordem do grupo — e o id não muda entre
  * re-escaneamentos, então o progresso nunca troca de aula.
  */
-export function montarCurso(mensagens: MensagemTelegram[]): CursoTelegram {
+export function montarCurso(mensagens: MensagemTelegram[], topicos: TopicoTelegram[] = []): CursoTelegram {
   const videos: ArquivoTelegram[] = [];
   const materials: CursoTelegram['materials'] = [];
+  const pastas = pastasDosTopicos(topicos);
 
   for (const m of [...mensagens].sort((a, b) => a.id - b.id)) {
     const midia = m.midia;
@@ -58,7 +73,8 @@ export function montarCurso(mensagens: MensagemTelegram[]): CursoTelegram {
     const prefixo = String(m.id).padStart(10, '0');
     const nome = midia.tipo === 'foto' ? 'foto.jpg' : comExtensao(midia.nome, midia.mime, midia.tipo === 'video' ? 'video' : 'arquivo');
     const base = {
-      relPath: `${prefixo}-${nome}`,
+      // Grupo com tópicos: o tópico é o módulo, e a subpasta do curso ao baixar.
+      relPath: pastas.size ? `${pastas.get(m.topico ?? 1) ?? 'General'}/${prefixo}-${nome}` : `${prefixo}-${nome}`,
       sizeBytes: midia.tamanho,
       mtime: m.data * 1000,
       remoteId: String(m.id),
