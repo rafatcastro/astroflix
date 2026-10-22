@@ -384,15 +384,22 @@ export default function Course() {
             style={{ left: Math.min(menuAula.x, window.innerWidth - 200), top: Math.min(menuAula.y, window.innerHeight - 60) }}
             onKeyDown={(e) => e.key === 'Escape' && setMenuAula(null)}
           >
-            <button
-              type="button"
-              role="menuitem"
-              autoFocus
-              className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none ${menuAula.l.baixada ? 'text-red-400' : ''}`}
-              onClick={() => acaoAula(menuAula.l)}
-            >
-              {menuAula.l.baixada ? 'Excluir download' : 'Baixar'}
-            </button>
+            {menuAula.l.baixada && data?.pastaConectada ? (
+              // Pasta conectada: o arquivo é da pessoa, e o app não o apaga.
+              <div role="menuitem" aria-disabled className="px-3 py-2.5 text-sm text-neutral-500">
+                Na pasta conectada
+              </div>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                autoFocus
+                className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none ${menuAula.l.baixada ? 'text-red-400' : ''}`}
+                onClick={() => acaoAula(menuAula.l)}
+              >
+                {menuAula.l.baixada ? 'Excluir download' : 'Baixar'}
+              </button>
+            )}
           </div>
         </>
       )}

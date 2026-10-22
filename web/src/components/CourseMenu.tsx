@@ -8,8 +8,9 @@ import DirPicker from './DirPicker';
 import RepointModal from './RepointModal';
 import ConfirmDialog from './ConfirmDialog';
 import TextField from './TextField';
+import { mensagemErroTelegram } from '../api/telegramTextos';
 
-type Flow = null | 'menu' | 'pickRepoint' | 'preview' | 'rename' | 'collection' | 'confirmArchive' | 'confirmReset' | 'confirmDelete' | 'confirmRemoverBaixados';
+type Flow = null | 'menu' | 'pickRepoint' | 'pickConectar' | 'confirmDesconectar' | 'preview' | 'rename' | 'collection' | 'confirmArchive' | 'confirmReset' | 'confirmDelete' | 'confirmRemoverBaixados';
 
 export default function CourseMenu({
   course,
@@ -85,6 +86,38 @@ export default function CourseMenu({
     }
   };
 
+  // A pasta da pessoa vira a pasta do curso: o que já está lá conta como baixado.
+  const onPickConectar = async (p: string) => {
+    close();
+    try {
+      const r = await api.conectarPasta(course.id, p);
+      invalidate();
+      onNotice(
+        `Pasta conectada. ${r.adotados ? `${r.adotados} arquivo${r.adotados === 1 ? '' : 's'} já estava${r.adotados === 1 ? '' : 'm'} lá` : 'Nenhum arquivo do curso estava lá'}; ${r.baixadas} de ${r.total} aulas disponíveis offline.`,
+      );
+    } catch (e) {
+      const erro = e instanceof Error ? e.message : '';
+      onNotice(
+        erro === 'pasta-de-outro-curso'
+          ? 'Essa pasta já está conectada a outro curso.'
+          : erro === 'forbidden'
+            ? 'Essa pasta fica fora das pastas que o app pode ler.'
+            : 'Não deu para conectar essa pasta.',
+      );
+    }
+  };
+
+  const desconectar = async () => {
+    close();
+    try {
+      await api.desconectarPasta(course.id);
+      invalidate();
+      onNotice('Pasta desconectada. Nenhum arquivo foi apagado.');
+    } catch {
+      onNotice('Falha na operação. Tente novamente.');
+    }
+  };
+
   const applyRepoint = async () => {
     setBusy(true);
     try {
@@ -107,8 +140,10 @@ export default function CourseMenu({
       const res = await api.rescan(course.id);
       if ('status' in res) return onNotice('Pasta indisponível — se ela mudou de lugar, re-aponte pelo menu.');
       invalidate();
-      onNotice(res.added || res.missing || res.relinked ? `Atualizado: +${res.added} novas, ${res.missing} faltando.` : 'Nada mudou.');
+      const novas = course.source === 'telegram' ? `+${res.added} novos (vídeos e fotos)` : `+${res.added} novas`;
+      onNotice(res.added || res.missing || res.relinked ? `Atualizado: ${novas}, ${res.missing} faltando.` : 'Nada mudou.');
     } catch (e) {
+      if (course.source === 'telegram' && e instanceof Error) return onNotice(mensagemErroTelegram(e.message, (e as { esperaSeg?: number }).esperaSeg));
       onNotice(e instanceof Error && e.message === 'carregando'
         ? 'A pasta ainda está sendo lida. Espere terminar e tente de novo.'
         : 'Falha na operação. Tente novamente.');
@@ -201,13 +236,21 @@ export default function CourseMenu({
                 {baixando ? 'Baixando…' : 'Baixar…'}
               </button>
             )}
-            {temBaixadas && (
+            {(temBaixadas || course.pastaConectada) && (
               <button className={item} onClick={() => { close(); void api.abrirArmazenamento(course.id).catch(() => onNotice('Não deu para abrir a pasta.')); }}>
-                Abrir pasta baixada
+                {course.pastaConectada ? 'Abrir pasta conectada' : 'Abrir pasta baixada'}
               </button>
             )}
-            {temBaixadas && <button className={item} onClick={() => setFlow('confirmRemoverBaixados')}>Remover download…</button>}
-            <button className={item} onClick={doRescan}>Re-escanear agora</button>
+            {temBaixadas && !course.pastaConectada && (
+              <button className={item} onClick={() => setFlow('confirmRemoverBaixados')}>Remover download…</button>
+            )}
+            {course.source !== 'local' && (
+              <button className={item} onClick={() => setFlow('pickConectar')}>
+                {course.pastaConectada ? 'Trocar pasta conectada…' : 'Conectar a uma pasta…'}
+              </button>
+            )}
+            {course.pastaConectada && <button className={item} onClick={() => setFlow('confirmDesconectar')}>Desconectar pasta…</button>}
+            <button className={item} onClick={doRescan}>{course.source === 'telegram' ? 'Re-escanear (vídeos e fotos)' : 'Re-escanear agora'}</button>
             <button className={item} onClick={() => { setTitle(course.title); setFlow('rename'); }}>Renomear…</button>
             <button className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button className={item} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>
@@ -218,6 +261,23 @@ export default function CourseMenu({
       )}
 
       {flow === 'pickRepoint' && <DirPicker onClose={close} onPick={onPickRepoint} />}
+      {flow === 'pickConectar' && (
+        <DirPicker
+          title="Escolha a pasta onde está o conteúdo deste curso. O app só acrescenta arquivos nela: nada do que está lá é apagado ou alterado."
+          confirmLabel="Conectar esta pasta"
+          onClose={close}
+          onPick={(p) => void onPickConectar(p)}
+        />
+      )}
+      {flow === 'confirmDesconectar' && (
+        <ConfirmDialog
+          title="Desconectar a pasta?"
+          message={`O curso deixa de usar ${course.pastaConectada ?? 'a pasta'}. Nenhum arquivo é apagado; as aulas voltam a tocar pela internet e os próximos downloads vão para a pasta de armazenamento do app.`}
+          confirmLabel="Desconectar"
+          onConfirm={() => void desconectar()}
+          onCancel={close}
+        />
+      )}
 
       {flow === 'preview' && summary && (
         <RepointModal courseTitle={course.title} targetPath={pickedPath} summary={summary} busy={busy} onApply={applyRepoint} onCancel={close} />
@@ -325,7 +385,7 @@ export default function CourseMenu({
           message={
             course.source === 'local'
               ? 'Remove o curso e todo o progresso definitivamente. Os arquivos de vídeo no disco não são tocados.'
-              : 'Remove o curso e todo o progresso definitivamente, e apaga o que foi baixado dele. O original no ' +
+              : 'Remove o curso e todo o progresso definitivamente. O que foi baixado fica na pasta e é aproveitado se você importar o curso de novo. O original no ' +
                 (course.source === 'drive' ? 'Drive' : 'Telegram') +
                 ' não é tocado.'
           }

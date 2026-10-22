@@ -17,6 +17,7 @@ const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
   mkv: 'video/x-matroska', avi: 'video/x-msvideo', flv: 'video/x-flv',
   wmv: 'video/x-ms-wmv', ts: 'video/mp2t', mpg: 'video/mpeg', mpeg: 'video/mpeg',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
 };
 
 export function parseRange(header: string | undefined, size: number): { start: number; end: number } | null {
@@ -57,6 +58,9 @@ export async function streamRoutes(
     const remota = row.source === 'drive' || row.source === 'telegram';
     const baixada = remota ? arquivoBaixado(db, config, 'aula', id) : null;
     if (baixada) {
+      // Arquivo da pasta conectada que não tocava: a cópia convertida ficou em DATA_DIR/converted.
+      const copia = path.join(config.convertedDir, `${id}.mp4`);
+      if (!baixada.convertido && fs.existsSync(copia)) return servirArquivo(req, reply, copia, 'video/mp4');
       return servirArquivo(req, reply, baixada.arquivo, baixada.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
     }
 

@@ -323,7 +323,12 @@ export default function Lesson() {
       // Enquanto um overlay está aberto, os atalhos do player ficam suspensos.
       if (help || confirmCover) return;
       const v = videoRef.current;
-      if (!v) return;
+      if (!v) {
+        // Foto: não há vídeo para avançar, então ←/→ passam de item, como num álbum.
+        if ((e.key === 'ArrowRight' || e.key === 'n') && lesson?.nextLessonId) goTo(lesson.nextLessonId);
+        if ((e.key === 'ArrowLeft' || e.key === 'p') && lesson?.prevLessonId) goTo(lesson.prevLessonId);
+        return;
+      }
       switch (e.key) {
         case ' ':
           e.preventDefault();
@@ -440,6 +445,7 @@ export default function Lesson() {
   const ehTelegram = lesson?.courseSource === 'telegram';
   // Sem arquivo local: nem remux, nem frame como capa, e o erro do vídeo se explica pela origem.
   const ehRemoto = ehDrive || ehTelegram;
+  const ehFoto = !!lesson && ['jpg', 'jpeg', 'png', 'webp'].includes(lesson.container);
   const onVideoError = useCallback(() => {
     if (!ehRemoto) {
       if (!verdict) void verifyPlayback();
@@ -850,6 +856,19 @@ export default function Lesson() {
             if (pressingRef.current) e.preventDefault();
           }}
         >
+          {ehFoto ? (
+            <img
+              key={videoKey}
+              src={`/api/lessons/${id}/stream`}
+              alt={lesson.title}
+              className="mx-auto max-h-[calc(100vh-12rem)] w-full bg-black object-contain"
+              onLoad={() => {
+                // Foto vista é foto concluída: não há posição nem fim para esperar.
+                if (!lesson.completed) void toggleComplete();
+              }}
+              onError={onVideoError}
+            />
+          ) : (
           <video
             key={videoKey}
             ref={videoRef}
@@ -872,6 +891,7 @@ export default function Lesson() {
             onEnded={onEnded}
             onError={onVideoError}
           />
+          )}
 
           <BloqueioDaPausa />
 

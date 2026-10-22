@@ -38,7 +38,9 @@ export interface CredenciaisTelegram {
 export type LinkTelegram =
   | { tipo: 'publico'; usuario: string; mensagem?: number; topico?: number }
   | { tipo: 'privado'; canalId: string; mensagem?: number; topico?: number }
-  | { tipo: 'convite'; hash: string };
+  | { tipo: 'convite'; hash: string }
+  /** Escolhido da lista de conversas (tg:<peer>/<id>): grupo antigo e bot sem @ não têm link t.me. */
+  | { tipo: 'id'; peer: PeerTelegram['tipo']; id: string };
 
 /**
  * Onde o grupo mora, guardado em courses.telegram_peer. O accessHash é o que
@@ -46,7 +48,8 @@ export type LinkTelegram =
  * não guarda o cache de entidades, e sem ele o id sozinho não basta.
  */
 export interface PeerTelegram {
-  tipo: 'canal' | 'chat';
+  /** 'usuario' = conversa com um bot (ou pessoa): os arquivos que ele mandou viram as aulas. */
+  tipo: 'canal' | 'chat' | 'usuario';
   id: string;
   accessHash: string | null;
   /** Só este tópico do grupo (o id da mensagem que abre o tópico). Sem ele, o grupo inteiro. */
@@ -63,8 +66,8 @@ export interface MensagemTelegram {
 }
 
 export interface MidiaTelegram {
-  /** 'video' = mandado como vídeo; 'documento' = mandado como arquivo; 'outro' = foto, figurinha, voz… */
-  tipo: 'video' | 'documento' | 'outro';
+  /** 'video' = mandado como vídeo; 'documento' = mandado como arquivo; 'foto' = foto (vira item do curso); 'outro' = figurinha, voz… */
+  tipo: 'video' | 'documento' | 'foto' | 'outro';
   nome: string | null;
   tamanho: number;
   mime: string;

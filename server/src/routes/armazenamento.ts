@@ -58,7 +58,15 @@ export async function armazenamentoRoutes(app: FastifyInstance, opts: { db: Db; 
     const courseId = (req.body as { courseId?: unknown } | undefined)?.courseId;
     let pasta = pastaDeArmazenamento(db, config);
     if (typeof courseId === 'string') {
-      const r = db.prepare('SELECT pasta, raiz FROM pastas_baixadas WHERE course_id=?').get(courseId) as { pasta: string; raiz: string } | undefined;
+      const r = db.prepare('SELECT pasta, raiz, conectada FROM pastas_baixadas WHERE course_id=?').get(courseId) as
+        | { pasta: string; raiz: string; conectada: number }
+        | undefined;
+      // A pasta conectada é da pessoa: abre se existir, e nunca é criada.
+      if (r?.conectada) {
+        if (!fs.existsSync(r.pasta)) return reply.code(404).send({ error: 'pasta-sumiu' });
+        abrirNoSistema(r.pasta);
+        return reply.code(204).send();
+      }
       if (r && r.raiz === pasta && fs.existsSync(r.pasta)) pasta = r.pasta;
     }
     fs.mkdirSync(pasta, { recursive: true });

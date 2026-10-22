@@ -56,7 +56,7 @@ export function montarCurso(mensagens: MensagemTelegram[]): CursoTelegram {
     const midia = m.midia;
     if (!midia || midia.tipo === 'outro') continue;
     const prefixo = String(m.id).padStart(10, '0');
-    const nome = comExtensao(midia.nome, midia.mime, midia.tipo === 'video' ? 'video' : 'arquivo');
+    const nome = midia.tipo === 'foto' ? 'foto.jpg' : comExtensao(midia.nome, midia.mime, midia.tipo === 'video' ? 'video' : 'arquivo');
     const base = {
       relPath: `${prefixo}-${nome}`,
       sizeBytes: midia.tamanho,
@@ -66,9 +66,12 @@ export function montarCurso(mensagens: MensagemTelegram[]): CursoTelegram {
       temMiniatura: midia.temMiniatura,
     };
 
-    if (midia.tipo === 'video' || ehVideo(nome, midia.mime)) {
+    // Foto entra na lista junto com os vídeos, na ordem de postagem: em canal de
+    // conteúdo, ela é parte do que se vê, não material de apoio.
+    if (midia.tipo === 'foto' || midia.tipo === 'video' || ehVideo(nome, midia.mime)) {
       const legenda = m.legenda.split('\n')[0]?.trim() ?? '';
-      const titulo = legenda || (midia.nome ? cleanTitle(limpar(midia.nome)) : '') || `Vídeo de ${dataCurta(m.data)}`;
+      const padrao = midia.tipo === 'foto' ? `Foto de ${dataCurta(m.data)}` : `Vídeo de ${dataCurta(m.data)}`;
+      const titulo = legenda || (midia.nome ? cleanTitle(limpar(midia.nome)) : '') || padrao;
       videos.push({ ...base, titulo: titulo.slice(0, 200) });
     } else {
       materials.push({ ...base, titulo: nome, kind: materialKind(path.extname(nome)) });

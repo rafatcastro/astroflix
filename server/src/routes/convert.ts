@@ -6,7 +6,7 @@ import type { AppConfig } from '../config';
 import { arquivoDoCurso } from './fs';
 import { classifyPlayback, hasFfmpeg, probeDurationSec, probeFormat, remuxToMp4, transcodeToMp4, type Capacidades } from '../media/ffmpeg';
 import { converterPara as gerarConvertido, naFilaDeRecodificacao } from '../media/preparar';
-import { adotarConvertido, arquivoBaixado } from '../armazenamento';
+import { adotarConvertido, arquivoBaixado, saidaDaConversao } from '../armazenamento';
 import { salvarCapacidades } from '../drive/baixar';
 
 // Verificação e conversão de reprodução. A extensão .mp4 mente no acervo real
@@ -65,7 +65,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     cap: Capacidades,
   ) => {
     if (loc.remota) {
-      const out = loc.file.slice(0, loc.file.length - path.extname(loc.file).length) + '.convertendo.mp4';
+      const out = saidaDaConversao(db, config, id, loc.file);
       await gerarConvertido(loc.file, out, gerar, cap);
       adotarConvertido(db, { tipo: 'aula', id, courseId: loc.courseId }, loc.file, out);
       return;

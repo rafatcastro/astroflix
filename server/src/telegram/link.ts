@@ -10,6 +10,8 @@ const USUARIO = /^[a-zA-Z][a-zA-Z0-9_]{3,31}$/;
 export function parseLinkTelegram(texto: string): LinkTelegram | null {
   const t = texto.trim();
   if (!t) return null;
+  const daLista = /^tg:(canal|chat|usuario)\/(\d+)$/.exec(t);
+  if (daLista) return { tipo: 'id', peer: daLista[1] as 'canal' | 'chat' | 'usuario', id: daLista[2] };
   if (t.startsWith('@')) {
     const u = t.slice(1);
     return USUARIO.test(u) ? { tipo: 'publico', usuario: u } : null;
@@ -25,6 +27,8 @@ export function parseLinkTelegram(texto: string): LinkTelegram | null {
   if (host !== 't.me' && host !== 'telegram.me') return null;
 
   const segs = url.pathname.split('/').filter(Boolean);
+  // t.me/@usuario: o @ aparece quando a pessoa copia o nome do perfil e monta o link à mão.
+  if (segs[0]?.startsWith('@')) segs[0] = segs[0].slice(1);
   const [primeiro, segundo] = segs;
   if (!primeiro) return null;
 

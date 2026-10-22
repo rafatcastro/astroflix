@@ -6,7 +6,7 @@ import { BLOCO } from './blocos';
 
 /** Blocos de 512 KB em andamento ao mesmo tempo num download do Telegram. */
 const PEDIDOS_SIMULTANEOS = 8;
-import type { ClienteTelegram, Convite, GrupoTelegram } from './cliente';
+import type { ClienteTelegram, Convite, DialogoTelegram, GrupoTelegram } from './cliente';
 import { credenciaisTelegram } from './credenciais';
 import type { EstadoLogin, ServicosTelegram } from './servicos';
 import { falhaDoErro } from './status';
@@ -34,6 +34,8 @@ const K_USUARIO = 'telegram.usuario';
 // O file_reference de um documento expira; guardar a mensagem por pouco tempo
 // poupa uma ida ao Telegram a cada seek sem arriscar uma referência vencida.
 const VALIDADE_DOCUMENTO_MS = 10 * 60_000;
+// Quem está em milhares de conversas não precisa de todas na lista: a busca e o link cobrem o resto.
+const LIMITE_DIALOGOS = 500;
 const ESPERA_PRIMEIRO_QR_MS = 20_000;
 
 async function novoCliente(sessao: string, c: CredenciaisTelegram): Promise<TelegramClient> {
@@ -66,18 +68,37 @@ function peerDe(Api: typeof TiposApi, e: unknown): GrupoTelegram {
     return { peer: { tipo: 'canal', id: e.id.toString(), accessHash: e.accessHash?.toString() ?? null }, titulo: e.title };
   }
   if (e instanceof Api.Chat) return { peer: { tipo: 'chat', id: e.id.toString(), accessHash: null }, titulo: e.title };
-  // Um usuário ou bot não é grupo de curso.
+  // Bot que entrega o curso em arquivos na conversa: a conversa com ele vira o curso.
+  if (e instanceof Api.User) {
+    const nome = [e.firstName, e.lastName].filter(Boolean).join(' ') || e.username || e.id.toString();
+    return { peer: { tipo: 'usuario', id: e.id.toString(), accessHash: e.accessHash?.toString() ?? null }, titulo: nome };
+  }
   throw new FalhaTelegram('link-invalido');
 }
 
 function inputPeer(Api: typeof TiposApi, p: PeerTelegram): TiposApi.TypeInputPeer {
   if (p.tipo === 'chat') return new Api.InputPeerChat({ chatId: bigInt(p.id) });
+  if (p.tipo === 'usuario') return new Api.InputPeerUser({ userId: bigInt(p.id), accessHash: bigInt(p.accessHash ?? '0') });
   return new Api.InputPeerChannel({ channelId: bigInt(p.id), accessHash: bigInt(p.accessHash ?? '0') });
+}
+
+// A foto chega em vários tamanhos; o maior é o original que a pessoa postou.
+function tamanhoDaFoto(Api: typeof TiposApi, s: TiposApi.TypePhotoSize): number {
+  return s instanceof Api.PhotoSize ? s.size : s instanceof Api.PhotoSizeProgressive ? (s.sizes.at(-1) ?? 0) : -1;
+}
+
+function maiorFoto(Api: typeof TiposApi, foto: TiposApi.Photo): { tipo: string; tamanho: number } | null {
+  const s = foto.sizes.filter((x) => tamanhoDaFoto(Api, x) > 0).sort((a, b) => tamanhoDaFoto(Api, b) - tamanhoDaFoto(Api, a))[0];
+  return s ? { tipo: (s as { type: string }).type, tamanho: tamanhoDaFoto(Api, s) } : null;
 }
 
 function midiaDe(Api: typeof TiposApi, m: TiposApi.Message): MidiaTelegram | null {
   const media = m.media;
   if (!media) return null;
+  if (media instanceof Api.MessageMediaPhoto && media.photo instanceof Api.Photo) {
+    const maior = maiorFoto(Api, media.photo);
+    if (maior) return { tipo: 'foto', nome: null, tamanho: maior.tamanho, mime: 'image/jpeg', duracaoSec: null, temMiniatura: true };
+  }
   if (!(media instanceof Api.MessageMediaDocument) || !(media.document instanceof Api.Document)) {
     return { tipo: 'outro', nome: null, tamanho: 0, mime: '', duracaoSec: null, temMiniatura: false };
   }
@@ -108,7 +129,8 @@ function midiaDe(Api: typeof TiposApi, m: TiposApi.Message): MidiaTelegram | nul
 
 function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void): ClienteTelegram {
   const { Api } = m.tg;
-  const documentos = new Map<string, { msg: TiposApi.Message; doc: TiposApi.Document; ate: number }>();
+  type Arquivo = { local: TiposApi.TypeInputFileLocation; tamanho: number; dcId: number };
+  const documentos = new Map<string, { msg: TiposApi.Message; doc: TiposApi.Document | null; arquivo: Arquivo; ate: number }>();
 
   // Toda saída para o Telegram passa por aqui: o erro vira FalhaTelegram, e a
   // sessão revogada em outro aparelho é esquecida, para o status não mentir.
@@ -128,11 +150,31 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     if (!renovar && guardado && guardado.ate > Date.now()) return guardado;
     const [msg] = await chamar(() => client.getMessages(inputPeer(Api, peer), { ids: [msgId] }));
     const media = msg?.media;
-    if (!msg || !(media instanceof Api.MessageMediaDocument) || !(media.document instanceof Api.Document)) {
+    let doc: TiposApi.Document | null = null;
+    let arquivo: Arquivo | null = null;
+    if (media instanceof Api.MessageMediaDocument && media.document instanceof Api.Document) {
+      doc = media.document;
+      arquivo = {
+        local: new Api.InputDocumentFileLocation({ id: doc.id, accessHash: doc.accessHash, fileReference: doc.fileReference, thumbSize: '' }),
+        tamanho: Number(doc.size),
+        dcId: doc.dcId,
+      };
+    } else if (media instanceof Api.MessageMediaPhoto && media.photo instanceof Api.Photo) {
+      const f = media.photo;
+      const maior = maiorFoto(Api, f);
+      if (maior) {
+        arquivo = {
+          local: new Api.InputPhotoFileLocation({ id: f.id, accessHash: f.accessHash, fileReference: f.fileReference, thumbSize: maior.tipo }),
+          tamanho: maior.tamanho,
+          dcId: f.dcId,
+        };
+      }
+    }
+    if (!msg || !arquivo) {
       documentos.delete(chave);
       throw new FalhaTelegram('removido');
     }
-    const novo = { msg, doc: media.document, ate: Date.now() + VALIDADE_DOCUMENTO_MS };
+    const novo = { msg, doc, arquivo, ate: Date.now() + VALIDADE_DOCUMENTO_MS };
     documentos.set(chave, novo);
     return novo;
   }
@@ -208,16 +250,27 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
   return {
     resolver: (link) =>
       chamar(async () => {
+        const alvo =
+          link.tipo === 'id'
+            ? link.peer === 'chat'
+              ? new Api.PeerChat({ chatId: bigInt(link.id) })
+              : link.peer === 'usuario'
+                ? new Api.PeerUser({ userId: bigInt(link.id) })
+                : new Api.PeerChannel({ channelId: bigInt(link.id) })
+            : link.tipo === 'privado'
+              ? new Api.PeerChannel({ channelId: bigInt(link.canalId) })
+              : null;
         const e =
           link.tipo === 'publico'
             ? await entidade(link.usuario)
-            : await entidade(new Api.PeerChannel({ channelId: bigInt(link.canalId) })).catch((err) => {
+            : await entidade(alvo!).catch((err) => {
                 // Não achar o canal é "não está no grupo"; sessão caída, rede e flood
                 // seguem com o próprio nome, para a interface oferecer a saída certa.
                 const f = falhaDoErro(err);
                 throw f.tipo === 'telegram' || f.tipo === 'sem-acesso' ? new FalhaTelegram('sem-acesso') : f;
               });
         const grupo = peerDe(Api, e);
+        if (link.tipo === 'id') return grupo;
         // Link com número num grupo sem tópicos: é só uma mensagem, e o curso é o grupo todo.
         if ((link.mensagem || link.topico) && e instanceof Api.Channel && e.forum) {
           const t = await topicoDoLink(e, link);
@@ -257,6 +310,7 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
           peer.topico ? contarNoTopico(peer, filter) : ((await client.getMessages(alvo, { limit: 1, filter })).total ?? 0);
         const videos = await contar(new Api.InputMessagesFilterVideo());
         const arquivos = await contar(new Api.InputMessagesFilterDocument());
+        const fotos = await contar(new Api.InputMessagesFilterPhotos());
 
         const e = await client.getEntity(alvo).catch(() => null);
         let membros = (e as { participantsCount?: number } | null)?.participantsCount ?? null;
@@ -270,10 +324,12 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         const foto = e ? await client.downloadProfilePhoto(e, { isBig: false }).catch(() => null) : null;
         return {
           canal: e instanceof Api.Channel && !!e.broadcast,
+          bot: e instanceof Api.User && !!e.bot,
           membros,
           foto: Buffer.isBuffer(foto) && foto.length ? foto : null,
           videos,
           arquivos,
+          fotos,
         };
       }),
 
@@ -285,12 +341,41 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         return peerDe(Api, chat);
       }),
 
+    dialogos: () =>
+      chamar(async () => {
+        const lista: DialogoTelegram[] = [];
+        for (const d of await client.getDialogs({ limit: LIMITE_DIALOGOS })) {
+          const e = d.entity;
+          let tipo: DialogoTelegram['tipo'];
+          if (e instanceof Api.Channel) tipo = e.broadcast ? 'canal' : 'grupo';
+          // Grupo antigo que virou supergrupo continua na lista, desativado: o novo aparece à parte.
+          else if (e instanceof Api.Chat && !e.deactivated && !e.left) tipo = 'grupo';
+          // Pessoa não: só bot, que é quem entrega curso em arquivos.
+          else if (e instanceof Api.User && e.bot) tipo = 'bot';
+          else continue;
+          let g: GrupoTelegram;
+          try {
+            g = peerDe(Api, e);
+          } catch {
+            continue;
+          }
+          lista.push({
+            chave: `tg:${g.peer.tipo}/${g.peer.id}`,
+            peer: g.peer,
+            titulo: g.titulo,
+            tipo,
+            membros: (e as { participantsCount?: number }).participantsCount ?? null,
+          });
+        }
+        return lista;
+      }),
+
     mensagens: (peer) =>
       chamar(async () => {
-        // Duas buscas filtradas (vídeos; arquivos) em vez do histórico inteiro:
+        // Buscas filtradas (vídeos; arquivos; fotos) em vez do histórico inteiro:
         // num grupo com milhares de mensagens de conversa, ler tudo levaria minutos.
         const porId = new Map<number, MensagemTelegram>();
-        for (const filter of [new Api.InputMessagesFilterVideo(), new Api.InputMessagesFilterDocument()]) {
+        for (const filter of [new Api.InputMessagesFilterVideo(), new Api.InputMessagesFilterDocument(), new Api.InputMessagesFilterPhotos()]) {
           const lista = peer.topico ? buscar(peer, filter) : client.iterMessages(inputPeer(Api, peer), { limit: undefined, filter });
           for await (const m of lista) {
             if (!(m instanceof Api.Message) || porId.has(m.id)) continue;
@@ -307,19 +392,14 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
       // Como cada bloco tem BLOCO bytes (menos o último), a soma segue alinhada.
       let entregue = 0;
       for (let tentativa = 0; tentativa < 2; tentativa++) {
-        const { doc } = await documento(peer, msgId, renovar);
-        const local = new Api.InputDocumentFileLocation({
-          id: doc.id,
-          accessHash: doc.accessHash,
-          fileReference: doc.fileReference,
-          thumbSize: '',
-        });
+        const { arquivo } = await documento(peer, msgId, renovar);
+        const local = arquivo.local;
         // Vários blocos pedidos de uma vez, entregues na ordem. O iterDownload do
         // GramJS pede um, espera e só então pede o próximo: a velocidade ficava
         // presa ao tempo de ida e volta de cada pedido, e um curso inteiro
         // levava horas. O Telegram atende pedidos simultâneos na mesma conexão.
-        const tamanho = Number(doc.size);
-        let sender = await client.getSender(doc.dcId);
+        const tamanho = arquivo.tamanho;
+        let sender = await client.getSender(arquivo.dcId);
         const pedir = async (pos: number): Promise<Buffer> => {
           const req = new Api.upload.GetFile({ location: local, offset: bigInt(pos), limit: BLOCO, precise: false, cdnSupported: false });
           for (let t = 0; ; t++) {
@@ -376,6 +456,14 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     miniatura: (peer, msgId) =>
       chamar(async () => {
         const { msg, doc } = await documento(peer, msgId);
+        // Foto: a miniatura é um tamanho menor da própria foto (~800 px).
+        if (!doc) {
+          const media = msg.media as TiposApi.MessageMediaPhoto;
+          const foto = media.photo as TiposApi.Photo;
+          const media800 = foto.sizes.filter((s) => tamanhoDaFoto(Api, s) > 0).find((s) => (s as { type: string }).type === 'x');
+          const r = await client.downloadMedia(msg, media800 ? { thumb: media800 } : {});
+          return Buffer.isBuffer(r) && r.length ? r : null;
+        }
         // A maior miniatura de verdade, escolhida aqui: por índice, o GramJS descarta
         // os PhotoPathSize antes de indexar, e um índice fora da lista o faz baixar
         // o VÍDEO inteiro para a memória no lugar da capa.

@@ -90,7 +90,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 11;
+const ULTIMA_VERSAO = 12;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -414,6 +414,16 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
         );
       `);
       pragma(db, 'user_version = 11');
+    });
+  }
+
+  // v12: "Conectar a uma pasta". A pasta do curso pode ser uma pasta da pessoa
+  // (conectada=1): o app adota o que já está lá e só acrescenta arquivos; nunca
+  // apaga, renomeia nem converte no lugar (ver armazenamento.ts).
+  if (version < 12 && ate >= 12) {
+    transaction(db, () => {
+      db.exec('ALTER TABLE pastas_baixadas ADD COLUMN conectada INTEGER NOT NULL DEFAULT 0');
+      pragma(db, 'user_version = 12');
     });
   }
 }

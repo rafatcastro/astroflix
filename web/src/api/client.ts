@@ -41,6 +41,8 @@ export interface CourseDetail {
   downloadCurso: DownloadCurso | null;
   /** Bytes do curso inteiro (aulas e materiais), para o diálogo do "Baixar". */
   tamanhoRemoto: number | null;
+  /** A pasta da pessoa conectada a este curso ("Conectar a uma pasta"): o app só acrescenta nela. */
+  pastaConectada?: string | null;
 }
 export interface DownloadCurso {
   courseId: string;
@@ -204,7 +206,11 @@ async function migrationFetch(url: string, init?: RequestInit): Promise<RepointS
   const headers = init?.body ? { 'Content-Type': 'application/json', ...(init?.headers ?? {}) } : init?.headers;
   const res = await fetch(url, { ...init, headers });
   if (res.status === 409) return (await res.json()) as RootUnavailable;
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  if (!res.ok) {
+    // O código do erro (sem-acesso, flood…) vai na mensagem, para o menu explicar a falha do Telegram.
+    const j = (await res.json().catch(() => null)) as { error?: string; esperaSeg?: number } | null;
+    throw Object.assign(new Error(j?.error ?? `${res.status} ${res.statusText}`), { esperaSeg: j?.esperaSeg });
+  }
   return (await res.json()) as RepointSummary;
 }
 
@@ -298,14 +304,27 @@ export type RespostaTelegram =
   | { tipo: 'erro'; erro: string; esperaSeg?: number };
 
 /** O grupo antes de virar curso. Convite de grupo em que a pessoa não está: sem contagem (null). */
+/** Uma conversa da conta (grupo, canal ou bot) que pode virar curso. */
+export interface DialogoTelegram {
+  /** O que vai no lugar do link na prévia e na criação. */
+  chave: string;
+  titulo: string;
+  tipo: 'canal' | 'grupo' | 'bot';
+  membros: number | null;
+  cursoId: string | null;
+}
+export type RespostaDialogos = { tipo: 'lista'; itens: DialogoTelegram[] } | { tipo: 'conectar' } | { tipo: 'erro'; erro: string; esperaSeg?: number };
+
 export interface PreviaTelegram {
   titulo: string;
   canal: boolean;
+  bot?: boolean;
   membros: number | null;
   /** data: URL da miniatura, ou null (a interface mostra a inicial). */
   foto: string | null;
   videos: number | null;
   arquivos: number | null;
+  fotos?: number | null;
   convite: boolean;
   /** O grupo já é um curso da biblioteca. */
   cursoId: string | null;
@@ -354,6 +373,19 @@ async function telegramPrevia(link: string, signal?: AbortSignal): Promise<Respo
   if (res.ok) return { tipo: 'previa', previa: corpo as unknown as PreviaTelegram };
   if (res.status === 401 && corpo.precisaConectar) return { tipo: 'conectar' };
   return { tipo: 'erro', erro: corpo.error ?? 'telegram', esperaSeg: corpo.esperaSeg };
+}
+
+async function telegramDialogos(signal?: AbortSignal): Promise<RespostaDialogos> {
+  try {
+    const res = await fetch('/api/telegram/dialogos', { signal });
+    const corpo = (await res.json().catch(() => ({}))) as { error?: string; esperaSeg?: number; precisaConectar?: boolean } | DialogoTelegram[];
+    if (res.ok && Array.isArray(corpo)) return { tipo: 'lista', itens: corpo };
+    const c = corpo as { error?: string; esperaSeg?: number; precisaConectar?: boolean };
+    if (res.status === 401 && c.precisaConectar) return { tipo: 'conectar' };
+    return { tipo: 'erro', erro: c.error ?? 'telegram', esperaSeg: c.esperaSeg };
+  } catch {
+    return { tipo: 'erro', erro: 'sem-conexao' };
+  }
 }
 
 export interface NumerosEstudo { pomodoros: number; segundosAula: number }
@@ -428,6 +460,12 @@ export const api = {
   baixarCurso: (id: string) => jsonFetch<DownloadCurso>(`/api/courses/${id}/baixar`, { method: 'POST' }),
   cancelarDownloadCurso: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixar`, { method: 'DELETE' }),
   baixarAula: (id: string) => jsonFetch<void>(`/api/lessons/${id}/baixar`, { method: 'POST' }),
+  conectarPasta: (id: string, pasta: string) =>
+    jsonFetch<{ pasta: string; adotados: number; total: number; baixadas: number }>(`/api/courses/${id}/pasta`, {
+      method: 'PUT',
+      body: JSON.stringify({ pasta }),
+    }),
+  desconectarPasta: (id: string) => jsonFetch<void>(`/api/courses/${id}/pasta`, { method: 'DELETE' }),
   excluirDownloadAula: (id: string) => jsonFetch<void>(`/api/lessons/${id}/baixado`, { method: 'DELETE' }),
   removerBaixados: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixados`, { method: 'DELETE' }),
   baixarCategoria: (cat: string) => jsonFetch<{ cursos: number }>(`/api/collections/${cat}/baixar`, { method: 'POST' }),
@@ -493,6 +531,7 @@ export const api = {
   telegramCriarCurso: (link: string) => telegramPost('/api/telegram/courses', link),
   telegramEntrarConvite: (link: string) => telegramPost('/api/telegram/convite', link),
   telegramPrevia,
+  telegramDialogos,
   telegramStatus: () => jsonFetch<TelegramStatus>('/api/telegram/status'),
   telegramIniciarLogin: () => jsonFetch<EstadoLoginTelegram>('/api/telegram/login', { method: 'POST' }),
   telegramEstadoLogin: () => jsonFetch<EstadoLoginTelegram>('/api/telegram/login'),

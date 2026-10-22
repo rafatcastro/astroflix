@@ -158,7 +158,15 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   (menu ⋯ do curso, do cartão e da categoria) traz aulas e materiais, com o painel de
   downloads, retomada ao abrir o app e novas tentativas. Retoma `.part` com Range; aula que não toca
   é convertida (`media/preparar.ts`) e o `.mp4` toma o lugar do original. **Nada é apagado
-  sozinho**: só "Remover download" (curso), "Limpar tudo" (Configurações) ou excluir o curso. A
+  sozinho**: só "Remover download" (curso) ou "Limpar tudo" (Configurações). Excluir o curso deixa
+  os arquivos; importá-lo de novo (mesmo nome, mesma pasta) os adota em vez de baixar outra vez
+  (`adotarArquivosDaPasta`, ao abrir o curso). **Conectar a uma pasta** (menu ⋯ do curso
+  remoto, v12 `pastas_baixadas.conectada`): uma pasta da pessoa vira a pasta do curso. O que já está
+  lá é adotado pelo caminho, pelo tamanho em bytes ou pelo nome (sem acento, pontuação nem o número
+  da mensagem do Telegram), cada arquivo para um item só; o que for baixado depois é acrescentado.
+  Nela o app **só acrescenta**: "Remover download", "Limpar tudo" e "Excluir download" não a tocam,
+  um arquivo da pessoa com o mesmo nome e outro tamanho faz o download ir para "Nome (2)", e a
+  conversão vai para `DATA_DIR/converted` (`protegido`, `saidaDaConversao`). Desconectar só esquece. A
   pessoa pode tirar arquivos da pasta: a aula volta a aparecer cinza (`baixada: false`) e toca pela
   rede. Trocar a raiz começa vazio (a antiga fica intacta). Stream e materiais preferem o arquivo
   baixado; o que não está lá vem da origem. Ao abrir (`buildApp(..., { retomarDownloads })`, só no

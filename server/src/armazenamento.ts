@@ -48,6 +48,22 @@ const dentro = (arquivo: string, raiz: string) => {
   return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel);
 };
 
+/**
+ * A pasta da pessoa conectada a este curso ("Conectar a uma pasta"), ou null.
+ * Nela o app só acrescenta: adota o que já está lá e grava o que a pessoa
+ * mandar baixar, mas nunca apaga, renomeia nem converte no lugar um arquivo.
+ */
+export function pastaConectada(db: Db, courseId: string): string | null {
+  const r = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND conectada=1').get(courseId) as { pasta: string } | undefined;
+  return r?.pasta ?? null;
+}
+
+/** Dentro de alguma pasta conectada: é da pessoa, e o app não mexe. */
+export function protegido(db: Db, arquivo: string): boolean {
+  const pastas = db.prepare('SELECT pasta FROM pastas_baixadas WHERE conectada=1').all() as Array<{ pasta: string }>;
+  return pastas.some(({ pasta }) => dentro(arquivo, pasta));
+}
+
 // Os nomes vêm do dono da pasta do Drive ou do grupo: nada de "..", separador ou
 // caractere que o Windows recusa, nem ponto ou espaço no fim. O teto de tamanho
 // guarda a extensão: sem ela o player não saberia o tipo.
@@ -83,6 +99,8 @@ export function pastaDoCurso(db: Db, config: AppConfig, courseId: string): strin
     | { raiz: string; pasta: string }
     | undefined;
   if (r && r.raiz === raiz) return r.pasta;
+  const conectada = pastaConectada(db, courseId);
+  if (conectada) return conectada;
   const curso = db.prepare('SELECT title FROM courses WHERE id=?').get(courseId) as { title: string } | undefined;
   const base = path.join(raiz, sanear(curso?.title ?? courseId, 120));
   const deOutro = db.prepare('SELECT 1 FROM pastas_baixadas WHERE raiz=? AND lower(pasta)=lower(?) AND course_id<>?');
@@ -107,8 +125,19 @@ export function destinoDe(db: Db, config: AppConfig, item: ItemBaixavel): string
   // Saneado, não escapa; a conferência fica como a última barreira.
   if (!dentro(base, pasta)) throw new Error('caminho fora da pasta do curso');
   const deOutro = db.prepare('SELECT 1 FROM baixados WHERE lower(arquivo)=lower(?) AND NOT (tipo=? AND item_id=?)');
+  // Na pasta conectada, um arquivo da pessoa com o mesmo nome e outro tamanho
+  // não é este item: o download vai para "Nome (2)" em vez de gravar por cima.
+  const conectada = pastaConectada(db, item.courseId) !== null;
+  const ocupado = (d: string) => {
+    if (!conectada || item.tamanho <= 0) return false;
+    try {
+      return fs.statSync(d).size !== item.tamanho;
+    } catch {
+      return false;
+    }
+  };
   let destino = base;
-  for (let n = 2; deOutro.get(destino, item.tipo, item.id); n++) destino = comNumero(base, n);
+  for (let n = 2; deOutro.get(destino, item.tipo, item.id) || ocupado(destino); n++) destino = comNumero(base, n);
   return destino;
 }
 
@@ -126,11 +155,12 @@ export function registrarBaixado(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' 
 export function arquivoBaixado(db: Db, config: AppConfig, tipo: TipoBaixado, id: string): { arquivo: string; convertido: boolean } | null {
   // Configs montadas à mão nos testes antigos não têm a pasta: sem ela, nada é local.
   if (!config.downloadsDir) return null;
-  const r = db.prepare('SELECT arquivo, convertido FROM baixados WHERE tipo=? AND item_id=?').get(tipo, id) as
-    | { arquivo: string; convertido: number }
+  const r = db.prepare('SELECT arquivo, convertido, course_id FROM baixados WHERE tipo=? AND item_id=?').get(tipo, id) as
+    | { arquivo: string; convertido: number; course_id: string }
     | undefined;
   if (!r) return null;
-  const naRaiz = dentro(r.arquivo, pastaDeArmazenamento(db, config));
+  const conectada = pastaConectada(db, r.course_id);
+  const naRaiz = dentro(r.arquivo, pastaDeArmazenamento(db, config)) || (!!conectada && dentro(r.arquivo, conectada));
   const existe = naRaiz && fs.existsSync(r.arquivo);
   if (tipo === 'aula' && r.convertido) {
     // Só a cópia convertida tocava: sem ela, a aula volta a dizer que não toca
@@ -148,13 +178,166 @@ export function aulasBaixadas(db: Db, config: AppConfig, courseId: string): Set<
   return new Set(ids.map((r) => r.item_id).filter((id) => arquivoBaixado(db, config, 'aula', id)));
 }
 
-const tamanhoDe = (arquivo: string) => {
+// Nomes que o Telegram dá quando o arquivo não tem nome: casar por eles juntaria
+// aulas diferentes. Nesses, só o caminho exato ou o tamanho valem.
+const NOMES_GENERICOS = new Set(['video', 'foto', 'arquivo', 'photo', 'image', 'img', 'file', 'documento', 'audio']);
+const VIDEO = new Set(['.mp4', '.m4v', '.webm', '.mov', '.mkv', '.avi', '.flv', '.wmv', '.ts', '.mpg', '.mpeg']);
+const IMAGEM = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const categoria = (ext: string) => (VIDEO.has(ext) ? 'video' : IMAGEM.has(ext) ? 'imagem' : ext);
+// "0000012345-Aula 01 – Introdução.mp4" e "aula_01_introducao.MP4" viram "aula01introducao".
+const nomeComparavel = (arquivo: string) =>
+  path
+    .basename(arquivo, path.extname(arquivo))
+    .replace(/^\d{10}-/, '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+// Abaixo disso, dois arquivos diferentes com o mesmo tamanho não são raros (fotos pequenas, PDFs de uma página).
+const TAMANHO_QUE_IDENTIFICA = 256 * 1024;
+const PROFUNDIDADE_MAXIMA = 8;
+const ARQUIVOS_NO_MAXIMO = 50_000;
+
+interface ArquivoDaPasta {
+  arquivo: string;
+  nome: string;
+  ext: string;
+  tamanho: number;
+}
+
+// Só lê: nada é criado nem alterado. Pastas e arquivos ocultos ficam de fora, e `.part` também.
+function listarPasta(pasta: string): ArquivoDaPasta[] {
+  const lista: ArquivoDaPasta[] = [];
+  const andar = (dir: string, nivel: number) => {
+    if (nivel > PROFUNDIDADE_MAXIMA || lista.length >= ARQUIVOS_NO_MAXIMO) return;
+    let itens: fs.Dirent[];
+    try {
+      itens = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const it of itens) {
+      if (it.name.startsWith('.') || it.name.endsWith('.part')) continue;
+      const p = path.join(dir, it.name);
+      if (it.isDirectory()) andar(p, nivel + 1);
+      else if (it.isFile()) {
+        const ext = path.extname(it.name).toLowerCase();
+        lista.push({ arquivo: p, nome: nomeComparavel(it.name), ext, tamanho: tamanhoDe(p) });
+      }
+    }
+  };
+  andar(pasta, 0);
+  return lista;
+}
+
+const ultimaAdocao = new Map<string, number>();
+const ADOCAO_NO_MAXIMO_A_CADA_MS = 60_000;
+
+/**
+ * Arquivos que já estão na pasta do curso sem registro: o curso foi excluído e
+ * importado de novo (os ids mudam, a pasta e os nomes não), a pessoa conectou
+ * uma pasta onde já tinha baixado o conteúdo, ou copiou a pasta de outra
+ * máquina. Cada aula e material que acha o seu arquivo passa a contar como
+ * baixado, em vez de ser baixado de novo (e duplicado). A ordem de confiança:
+ * o caminho exato; o mesmo tamanho em bytes (arquivo grande, um só na pasta); o
+ * mesmo nome, sem acento, pontuação nem o número da mensagem do Telegram (um só
+ * na pasta, e não um nome genérico como "video"). Cada arquivo serve a um item.
+ * Sem pasta com o nome do curso, não faz nada (e não reserva o nome).
+ * `sempre` ignora o intervalo mínimo entre duas leituras da pasta (que é cara numa pasta grande).
+ */
+export function adotarArquivosDaPasta(db: Db, config: AppConfig, courseId: string, sempre = false): number {
+  if (!config.downloadsDir) return 0;
+  const agora = Date.now();
+  if (!sempre && agora - (ultimaAdocao.get(courseId) ?? 0) < ADOCAO_NO_MAXIMO_A_CADA_MS) return 0;
+  ultimaAdocao.set(courseId, agora);
+
+  const raiz = pastaDeArmazenamento(db, config);
+  const conectada = pastaConectada(db, courseId);
+  if (!conectada) {
+    const mapeada = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?').get(courseId, raiz) as { pasta: string } | undefined;
+    if (!mapeada) {
+      const curso = db.prepare('SELECT title FROM courses WHERE id=?').get(courseId) as { title: string } | undefined;
+      if (!curso || !fs.existsSync(path.join(raiz, sanear(curso.title, 120)))) return 0;
+    }
+  }
+  const pasta = pastaDoCurso(db, config, courseId);
+  if (!fs.existsSync(pasta)) return 0;
+
+  const registrados = new Set(
+    (db.prepare('SELECT tipo, item_id FROM baixados WHERE course_id=?').all(courseId) as Array<{ tipo: string; item_id: string }>).map(
+      (r) => `${r.tipo}:${r.item_id}`,
+    ),
+  );
+  // Arquivos que já são de algum item (deste ou de outro curso) não são adotados de novo.
+  const usados = new Set((db.prepare('SELECT arquivo FROM baixados').all() as Array<{ arquivo: string }>).map((r) => r.arquivo));
+  type Linha = { id: string; rel_path: string; remote_id: string | null; size_bytes: number | null };
+  const aulas = db.prepare('SELECT id, rel_path, remote_id, size_bytes FROM lessons WHERE course_id=?').all(courseId) as Linha[];
+  const materiais = db.prepare('SELECT id, rel_path, remote_id, size_bytes FROM materials WHERE course_id=?').all(courseId) as Linha[];
+  const faltam = [
+    ...aulas.map((l) => ['aula', l] as const),
+    ...materiais.map((l) => ['material', l] as const),
+  ].filter(([tipo, l]) => !registrados.has(`${tipo}:${l.id}`));
+  if (!faltam.length) return 0;
+
+  let naPasta: ArquivoDaPasta[] | null = null;
+  const livres = () => (naPasta ??= listarPasta(pasta)).filter((f) => !usados.has(f.arquivo));
+  const toca = db.prepare('UPDATE lessons SET playable=1 WHERE id=?');
+  let adotados = 0;
+
+  for (const [tipo, l] of faltam) {
+    const item: ItemBaixavel = { tipo, id: l.id, courseId, relPath: l.rel_path, remoteId: l.remote_id ?? '', tamanho: Number(l.size_bytes ?? 0) };
+    const extItem = path.extname(l.rel_path).toLowerCase();
+    let achado: { arquivo: string; convertido: boolean } | null = null;
+
+    // 1. O caminho exato. O download grava no `.part` e só renomeia no fim: com o
+    // nome final, está inteiro. Tamanho diferente numa aula = convertida no lugar.
+    const destino = destinoDe(db, config, item);
+    if (!usados.has(destino)) {
+      try {
+        const t = fs.statSync(destino).size;
+        if (!conectada || item.tamanho <= 0 || t === item.tamanho) achado = { arquivo: destino, convertido: tipo === 'aula' && item.tamanho > 0 && t !== item.tamanho };
+      } catch {
+        // Aula que não tocava (MPEG-TS) ficou na pasta como o .mp4 convertido.
+        const mp4 = destino.slice(0, destino.length - path.extname(destino).length) + '.mp4';
+        if (tipo === 'aula' && mp4 !== destino && !usados.has(mp4) && fs.existsSync(mp4)) achado = { arquivo: mp4, convertido: true };
+      }
+    }
+
+    // 2. O mesmo tamanho em bytes, com o mesmo tipo de arquivo: o nome pode ser
+    // outro (o Telegram Desktop salva "video_2024-03-01.mp4").
+    if (!achado && item.tamanho >= TAMANHO_QUE_IDENTIFICA) {
+      const mesmos = livres().filter((f) => f.tamanho === item.tamanho && categoria(f.ext) === categoria(extItem));
+      const escolhido = mesmos.length === 1 ? mesmos[0] : mesmos.find((f) => f.nome === nomeComparavel(l.rel_path));
+      if (escolhido) achado = { arquivo: escolhido.arquivo, convertido: false };
+    }
+
+    // 3. O mesmo nome: com outra extensão só se for o .mp4 de uma aula (a cópia convertida).
+    if (!achado) {
+      const nome = nomeComparavel(l.rel_path);
+      if (nome.length >= 4 && !NOMES_GENERICOS.has(nome)) {
+        const mesmos = livres().filter(
+          (f) => f.nome === nome && (f.ext === extItem || (tipo === 'aula' && f.ext === '.mp4' && categoria(extItem) === 'video')),
+        );
+        if (mesmos.length === 1) achado = { arquivo: mesmos[0].arquivo, convertido: tipo === 'aula' && mesmos[0].ext !== extItem };
+      }
+    }
+
+    if (!achado) continue;
+    registrarBaixado(db, item, achado.arquivo, achado.convertido);
+    usados.add(achado.arquivo);
+    if (achado.convertido) toca.run(l.id);
+    adotados++;
+  }
+  return adotados;
+}
+
+function tamanhoDe(arquivo: string): number {
   try {
     return fs.statSync(arquivo).size;
   } catch {
     return 0;
   }
-};
+}
 
 export interface UsoDoCurso {
   courseId: string;
@@ -248,13 +431,14 @@ export function apagarBaixados(db: Db, config: AppConfig, courseId?: string): vo
   ) as Array<{ tipo: TipoBaixado; item_id: string; arquivo: string; convertido: number }>;
   const pastas = (
     courseId
-      ? db.prepare('SELECT pasta FROM pastas_baixadas WHERE raiz=? AND course_id=?').all(raiz, courseId)
-      : db.prepare('SELECT pasta FROM pastas_baixadas WHERE raiz=?').all(raiz)
+      ? db.prepare('SELECT pasta FROM pastas_baixadas WHERE raiz=? AND course_id=? AND conectada=0').all(raiz, courseId)
+      : db.prepare('SELECT pasta FROM pastas_baixadas WHERE raiz=? AND conectada=0').all(raiz)
   ) as Array<{ pasta: string }>;
   const tirar = db.prepare('DELETE FROM baixados WHERE tipo=? AND item_id=?');
   const naoToca = db.prepare('UPDATE lessons SET playable=0 WHERE id=?');
   for (const l of linhas) {
-    if (!dentro(l.arquivo, raiz)) continue;
+    // Na pasta conectada, os arquivos são da pessoa: "Limpar tudo" não os toca nem os esquece.
+    if (!dentro(l.arquivo, raiz) || protegido(db, l.arquivo)) continue;
     fs.rmSync(l.arquivo, { force: true });
     tirar.run(l.tipo, l.item_id);
     if (l.tipo === 'aula' && l.convertido) naoToca.run(l.item_id);
@@ -279,6 +463,8 @@ export function apagarBaixado(db: Db, config: AppConfig, item: Pick<ItemBaixavel
   const r = db.prepare('SELECT arquivo, convertido FROM baixados WHERE tipo=? AND item_id=?').get(item.tipo, item.id) as
     | { arquivo: string; convertido: number }
     | undefined;
+  // Pasta conectada: o arquivo é da pessoa (ou foi acrescentado a pedido dela) e fica.
+  if (pastaConectada(db, item.courseId)) return;
   if (r && dentro(r.arquivo, raiz)) {
     fs.rmSync(r.arquivo, { force: true });
     db.prepare('DELETE FROM baixados WHERE tipo=? AND item_id=?').run(item.tipo, item.id);
@@ -298,6 +484,14 @@ export function apagarBaixado(db: Db, config: AppConfig, item: Pick<ItemBaixavel
  * (só a extensão vira .mp4). Devolve o caminho final.
  */
 export function adotarConvertido(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' | 'courseId'>, original: string, convertido: string): string {
+  // Pasta conectada: o original fica como está, e a cópia que toca mora em
+  // DATA_DIR/converted, como a de um curso local (o stream a prefere).
+  if (protegido(db, original)) {
+    const final = path.join(path.dirname(convertido), `${item.id}.mp4`);
+    fs.renameSync(convertido, final);
+    db.prepare('UPDATE lessons SET playable=1 WHERE id=?').run(item.id);
+    return final;
+  }
   let final = original.slice(0, original.length - path.extname(original).length) + '.mp4';
   // Outra aula já tem esse nome (Aula.mkv e Aula.mp4 lado a lado).
   if (final !== original && fs.existsSync(final)) final = comNumero(final, 2);
@@ -306,6 +500,16 @@ export function adotarConvertido(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' 
   registrarBaixado(db, item, final, true);
   db.prepare('UPDATE lessons SET playable=1 WHERE id=?').run(item.id);
   return final;
+}
+
+/**
+ * Onde gravar a conversão de um arquivo baixado: ao lado dele (o rename final não
+ * cruza discos) ou, na pasta conectada, em DATA_DIR/converted, para não criar
+ * nada temporário na pasta da pessoa.
+ */
+export function saidaDaConversao(db: Db, config: AppConfig, id: string, original: string): string {
+  if (protegido(db, original)) return path.join(config.convertedDir, `${id}.convertendo.mp4`);
+  return original.slice(0, original.length - path.extname(original).length) + '.convertendo.mp4';
 }
 
 const CHAVE_LEGADO = 'armazenamento.legado';

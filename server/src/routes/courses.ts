@@ -10,7 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
-import { apagarBaixados, aulasBaixadas } from '../armazenamento';
+import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
 
 // Só os três valores conhecidos saem na API; qualquer outra coisa é curso local.
@@ -180,6 +180,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     if (!course) { reply.code(404); return { error: 'not_found' }; }
     const remoto = course.source === 'drive' || course.source === 'telegram';
     // Antes de ler as aulas: conferir o disco pode corrigir o `playable` delas.
+    if (remoto) adotarArquivosDaPasta(db, config, id);
     const baixadas = remoto ? aulasBaixadas(db, config, id) : new Set<string>();
 
     const rows = db.prepare(`
@@ -225,6 +226,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
       download: remoto ? downloadDe(course.id, baixadas) : null,
+      pastaConectada: remoto ? pastaConectada(db, course.id) : null,
       downloadCurso: drive?.baixador.estado(course.id) ?? null,
       // O tamanho do curso inteiro, para o "Baixar" dizer quanto vai ocupar.
       tamanhoRemoto:
@@ -250,6 +252,56 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
 
   app.delete('/api/courses/:id/baixar', async (req, reply) => {
     drive?.baixador.cancelar((req.params as { id: string }).id);
+    return reply.code(204).send();
+  });
+
+  // "Conectar a uma pasta": a pasta da pessoa vira a pasta do curso. O que já
+  // está lá é adotado (caminho, tamanho ou nome) e o que for baixado depois é
+  // acrescentado nela; o app nunca apaga, renomeia nem converte no lugar o que
+  // está nela. A pasta precisa existir: o app não a cria.
+  app.put('/api/courses/:id/pasta', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const curso = db.prepare('SELECT source FROM courses WHERE id=?').get(id) as { source: string } | undefined;
+    if (!curso) return reply.code(404).send({ error: 'not_found' });
+    if (curso.source === 'local') return reply.code(400).send({ error: 'curso-local' });
+    const pedida = (req.body as { pasta?: unknown } | undefined)?.pasta;
+    if (typeof pedida !== 'string' || !path.isAbsolute(pedida)) return reply.code(400).send({ error: 'pasta-invalida' });
+    const pasta = path.resolve(pedida);
+    if (!isWithinRoots(pasta, allowedRootsFor(config, db))) return reply.code(403).send({ error: 'forbidden' });
+    try {
+      if (!fs.statSync(pasta).isDirectory()) return reply.code(400).send({ error: 'pasta-invalida' });
+      fs.accessSync(pasta, fs.constants.R_OK);
+    } catch {
+      return reply.code(400).send({ error: 'sem-permissao' });
+    }
+    const outro = db.prepare('SELECT 1 FROM pastas_baixadas WHERE conectada=1 AND pasta=? AND course_id<>?').get(pasta, id);
+    if (outro) return reply.code(409).send({ error: 'pasta-de-outro-curso' });
+    // Downloads em andamento iriam para a pasta antiga.
+    drive?.baixador.cancelar(id);
+    await drive?.baixador.soltar(id);
+    db.prepare(
+      `INSERT INTO pastas_baixadas (course_id, raiz, pasta, conectada) VALUES (?, ?, ?, 1)
+       ON CONFLICT(course_id) DO UPDATE SET raiz=excluded.raiz, pasta=excluded.pasta, conectada=1`,
+    ).run(id, pasta, pasta);
+    const adotados = adotarArquivosDaPasta(db, config, id, true);
+    const baixadas = aulasBaixadas(db, config, id);
+    return { pasta, adotados, ...downloadDe(id, baixadas) };
+  });
+
+  // Desconectar: o app esquece a pasta e o que adotou dela; nenhum arquivo é tocado.
+  app.delete('/api/courses/:id/pasta', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const pasta = pastaConectada(db, id);
+    if (!pasta) return reply.code(204).send();
+    drive?.baixador.cancelar(id);
+    await drive?.baixador.soltar(id);
+    const linhas = db.prepare('SELECT tipo, item_id, arquivo FROM baixados WHERE course_id=?').all(id) as Array<{ tipo: string; item_id: string; arquivo: string }>;
+    const tirar = db.prepare('DELETE FROM baixados WHERE tipo=? AND item_id=?');
+    for (const l of linhas) {
+      const rel = path.relative(pasta, l.arquivo);
+      if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) tirar.run(l.tipo, l.item_id);
+    }
+    db.prepare('DELETE FROM pastas_baixadas WHERE course_id=?').run(id);
     return reply.code(204).send();
   });
 
@@ -319,11 +371,11 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     const id = (req.params as { id: string }).id;
     if (!db.prepare('SELECT 1 FROM courses WHERE id=?').get(id)) return reply.code(404).send({ error: 'not_found' });
     const lessonIds = (db.prepare('SELECT id FROM lessons WHERE course_id=?').all(id) as any[]).map((r) => r.id);
-    // Excluir o curso leva o que foi baixado dele: sem o curso, ninguém acharia
-    // (nem removeria) esses arquivos pelo app.
+    // O que foi baixado fica na pasta: a pessoa exclui um curso e o importa de
+    // novo depois, e os arquivos (às vezes gigas) são adotados em vez de baixados
+    // outra vez (ver adotarArquivosDaPasta). Para apagar, "Remover download" antes.
     drive?.baixador.cancelar(id);
     await drive?.baixador.soltar(id);
-    apagarBaixados(db, config, id);
     db.prepare('DELETE FROM courses WHERE id=?').run(id); // cascata remove lessons/progress/materials
     // Convertidos de curso local: sem o curso, só ocupariam disco.
     for (const lid of lessonIds) fs.rmSync(path.join(config.convertedDir ?? '', `${lid}.mp4`), { force: true });

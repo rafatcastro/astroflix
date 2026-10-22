@@ -656,7 +656,7 @@ export default function Library({ categoria }: { categoria: string }) {
             }
           : { rotulo: 'Do Google Drive', descricao: 'Escolha a pasta do curso no seu Drive', onClick: () => setPicking('drive') },
         ...(temTelegram
-          ? [{ rotulo: 'Do Telegram', descricao: 'Cole o link de um grupo ou canal', onClick: () => setPicking('telegram') }]
+          ? [{ rotulo: 'Do Telegram', descricao: 'Cole o link de um grupo, canal ou bot', onClick: () => setPicking('telegram') }]
           : []),
       ]}
     />

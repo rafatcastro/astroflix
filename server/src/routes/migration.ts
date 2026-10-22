@@ -11,6 +11,7 @@ import { FalhaDrive } from '../drive/tipos';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
 import { reconcileTelegramCourse } from '../scan/scan-telegram';
+import { adotarArquivosDaPasta } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
 import { statusDaFalha, resourceKeyDoCurso } from '../drive/status';
 
@@ -69,7 +70,9 @@ export async function migrationRoutes(
       if (importacaoDrive(id).carregando) return reply.code(409).send({ error: 'carregando' });
       const rk = resourceKeyDoCurso(curso.drive_folder_id, curso.drive_resource_key);
       try {
-        return await reconcileDriveCourse(db, drive.ingestao(rk), id);
+        const r = await reconcileDriveCourse(db, drive.ingestao(rk), id);
+        adotarArquivosDaPasta(db, config, id, true);
+        return r;
       } catch (e) {
         if (e instanceof FalhaDrive) return reply.code(statusDaFalha(e.tipo)).send({ error: e.tipo });
         throw e;
@@ -78,7 +81,10 @@ export async function migrationRoutes(
     if (curso?.source === 'telegram') {
       if (!telegram) return reply.code(503).send({ error: 'sem-conexao' });
       try {
-        return await reconcileTelegramCourse(db, { cliente: await telegram.cliente(), config }, id);
+        const r = await reconcileTelegramCourse(db, { cliente: await telegram.cliente(), config }, id);
+        // Itens novos (fotos, mensagens recentes) que já estão na pasta do curso.
+        adotarArquivosDaPasta(db, config, id, true);
+        return r;
       } catch (e) {
         const r = respostaDeFalhaTelegram(e);
         return reply.code(r.status).send(r.corpo);

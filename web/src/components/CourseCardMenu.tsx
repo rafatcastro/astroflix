@@ -4,6 +4,7 @@ import { api, type CourseSummary } from '../api/client';
 import { useCollections } from '../api/hooks';
 import ConfirmDialog from './ConfirmDialog';
 import TextField from './TextField';
+import { mensagemErroTelegram } from '../api/telegramTextos';
 
 type Flow = null | 'sheet' | 'rename' | 'collection' | 'confirmBaixar' | 'confirmReset' | 'confirmDelete';
 
@@ -44,10 +45,11 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       invalidate();
       onNotice(
         res.added || res.missing || res.relinked
-          ? `"${course.title}" atualizado: +${res.added} novas, ${res.missing} faltando.`
+          ? `"${course.title}" atualizado: +${res.added} ${course.source === 'telegram' ? 'novos (vídeos e fotos)' : 'novas'}, ${res.missing} faltando.`
           : `"${course.title}": nada mudou.`,
       );
-    } catch {
+    } catch (e) {
+      if (course.source === 'telegram' && e instanceof Error) return onNotice(`"${course.title}": ${mensagemErroTelegram(e.message, (e as { esperaSeg?: number }).esperaSeg)}`);
       onNotice('Falha ao re-escanear. Tente novamente.');
     }
   };
@@ -148,7 +150,7 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
             {course.source !== 'local' && (
               <button type="button" className={sheetItem} onClick={() => setFlow('confirmBaixar')}>Baixar…</button>
             )}
-            <button type="button" className={sheetItem} onClick={doRescan}>Re-escanear</button>
+            <button type="button" className={sheetItem} onClick={doRescan}>{course.source === 'telegram' ? 'Re-escanear (vídeos e fotos)' : 'Re-escanear'}</button>
             <button type="button" className={sheetItem} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button type="button" className={sheetItem} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>
             <button type="button" className={sheetItem} onClick={doArchiveToggle}>Arquivar</button>
@@ -263,7 +265,11 @@ export default function CourseCardMenu({ course, onNotice }: { course: CourseSum
       {flow === 'confirmDelete' && (
         <ConfirmDialog
           title={`Excluir "${course.title}"?`}
-          message="Remove o curso e todo o progresso definitivamente. Os arquivos de vídeo no disco não são tocados."
+          message={
+            course.source === 'local'
+              ? 'Remove o curso e todo o progresso definitivamente. Os arquivos de vídeo no disco não são tocados.'
+              : 'Remove o curso e todo o progresso definitivamente. O que foi baixado fica na pasta e é aproveitado se você importar o curso de novo.'
+          }
           confirmLabel="Excluir"
           danger
           onConfirm={doDelete}

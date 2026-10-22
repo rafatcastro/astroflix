@@ -7,6 +7,8 @@ export const VIDEO_EXTS = new Set([
   '.mp4', '.m4v', '.webm', '.mov', '.mkv', '.avi', '.flv', '.wmv', '.ts', '.mpg', '.mpeg',
 ]);
 export const PLAYABLE_EXTS = new Set(['.mp4', '.m4v', '.webm', '.mov']);
+// Fotos do Telegram entram como itens do curso; a página da aula as mostra como imagem.
+export const FOTO_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 
 export interface ScannedFile {
   relPath: string;
@@ -82,7 +84,7 @@ export function deriveCourse(videoFiles: ScannedFile[]): DerivedCourse {
         orderIndex: orderIndex++,
         moduleOrder,
         container: ext.replace('.', ''),
-        playable: PLAYABLE_EXTS.has(ext),
+        playable: PLAYABLE_EXTS.has(ext) || FOTO_EXTS.has(ext),
         sizeBytes: file.sizeBytes,
         mtime: file.mtime,
       });

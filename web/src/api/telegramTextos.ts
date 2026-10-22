@@ -1,11 +1,11 @@
 // O que cada falha do Telegram diz à pessoa. Um lugar só para o modal, o player e as Configurações.
 const TEXTOS: Record<string, string> = {
-  'link-invalido': 'Cole o link de um grupo ou canal do Telegram (t.me/…).',
+  'link-invalido': 'Cole o link de um grupo, canal ou bot do Telegram (t.me/…).',
   'nao-encontrado': 'Não achei esse grupo no Telegram. Confira o link.',
   'sem-acesso': 'Sua conta não está neste grupo. Entre pelo Telegram e tente de novo.',
   'convite-invalido': 'Este convite expirou ou não vale mais. Peça um link novo.',
   'aguardando-aprovacao': 'Pedido enviado: um administrador do grupo precisa aprovar sua entrada.',
-  'sem-videos': 'Não achei vídeos neste grupo.',
+  'sem-videos': 'Não achei vídeos nem fotos neste grupo.',
   removido: 'Este vídeo foi removido do grupo.',
   'nao-autorizado': 'A conexão com o Telegram caiu.',
   'sem-conexao': 'Sem conexão com o Telegram.',

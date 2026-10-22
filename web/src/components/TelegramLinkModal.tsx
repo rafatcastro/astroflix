@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, type PreviaTelegram, type RespostaTelegram } from '../api/client';
+import { api, type DialogoTelegram, type PreviaTelegram, type RespostaTelegram } from '../api/client';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import TelegramLogin from './TelegramLogin';
 import TextField from './TextField';
@@ -14,6 +14,11 @@ const plural = (n: number, um: string, varios: string) => `${numero(n)} ${n === 
 // Espera a pessoa parar de digitar: cada prévia é uma ida ao Telegram, e colar
 // letra por letra não pode virar uma rajada de pedidos (o Telegram responde com flood).
 const ESPERA_PREVIA_MS = 600;
+
+// O campo serve para colar o link e para buscar na lista: só o que parece link vai ao Telegram.
+const pareceLink = (t: string) => /t(elegram)?\.me\/|^@|^https?:|^tg:/i.test(t.trim());
+const semAcento = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const TIPO_DIALOGO = { canal: 'Canal', grupo: 'Grupo', bot: 'Bot' } as const;
 
 const botaoPrimario =
   'min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40';
@@ -43,6 +48,9 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
   const [erro, setErro] = useState<string | null>(null);
   const [previa, setPrevia] = useState<PreviaTelegram | null>(null);
   const [lendo, setLendo] = useState(false);
+  const [dialogos, setDialogos] = useState<DialogoTelegram[] | null>(null);
+  const [erroLista, setErroLista] = useState<string | null>(null);
+  const [escolhido, setEscolhido] = useState<DialogoTelegram | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   // Esc fecha e Tab fica preso no diálogo (docs/design.md: teclado em primeiro plano).
@@ -72,8 +80,23 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
 
   // Refeita a cada mudança do link (e ao voltar do login). O abort descarta a
   // resposta de um link antigo, para ela não aparecer por cima da do novo.
+  // As conversas da conta, para escolher sem colar link. Relida ao voltar do login.
   useEffect(() => {
-    const texto = link.trim();
+    if (fase.tipo !== 'link' || soLogin) return;
+    const ctrl = new AbortController();
+    void api.telegramDialogos(ctrl.signal).then((r) => {
+      if (ctrl.signal.aborted) return;
+      if (r.tipo === 'lista') setDialogos(r.itens);
+      else if (r.tipo === 'conectar') setFase({ tipo: 'login' });
+      else setErroLista(mensagemErroTelegram(r.erro, r.esperaSeg));
+    });
+    return () => ctrl.abort();
+  }, [fase.tipo, soLogin]);
+
+  const alvo = escolhido?.chave ?? (pareceLink(link) ? link.trim() : '');
+
+  useEffect(() => {
+    const texto = alvo;
     setPrevia(null);
     setErro(null);
     setLendo(false);
@@ -92,7 +115,7 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [link, fase.tipo]);
+  }, [alvo, fase.tipo]);
 
   const tratar = (res: RespostaTelegram) => {
     if (res.tipo === 'criado') {
@@ -123,7 +146,7 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
     setBusy(true);
     setErro(null);
     // Entrar num grupo é uma ação na conta da pessoa: só pelo botão que diz isso.
-    tratar(await (previa.convite ? api.telegramEntrarConvite(link.trim()) : api.telegramCriarCurso(link.trim())));
+    tratar(await (previa.convite ? api.telegramEntrarConvite(alvo) : api.telegramCriarCurso(alvo)));
     setBusy(false);
   };
 
@@ -137,7 +160,7 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
     setFase({ tipo: 'link' });
   };
 
-  const semVideos = previa !== null && !previa.convite && previa.videos === 0 && previa.arquivos === 0;
+  const semVideos = previa !== null && !previa.convite && previa.videos === 0 && previa.arquivos === 0 && !previa.fotos;
   const rotulo = busy
     ? previa?.convite ? 'Entrando…' : 'Lendo o grupo…'
     : baixar
@@ -179,26 +202,42 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
             }}
           >
             <label htmlFor="tg-link" className="mb-1 block text-sm text-neutral-300">
-              Link do grupo ou canal no Telegram
+              Cole o link ou busque um dos seus grupos, canais e bots
             </label>
             <TextField
               id="tg-link"
               autoFocus
               value={link}
-              onChange={(e) => setLink(e.target.value)}
+              onChange={(e) => {
+                setLink(e.target.value);
+                setEscolhido(null);
+              }}
               disabled={busy}
               aria-invalid={erro ? true : undefined}
               aria-describedby={erro ? 'tg-erro' : 'tg-dica'}
-              placeholder="https://t.me/…"
+              placeholder="https://t.me/… ou o nome do grupo"
             />
+            {!escolhido && !pareceLink(link) && (
+              <ListaDialogos
+                dialogos={dialogos}
+                erro={erroLista}
+                busca={link}
+                onEscolher={(d) => setEscolhido(d)}
+              />
+            )}
             {erro ? (
               <p id="tg-erro" role="alert" className="mt-2 text-sm text-amber-200">{erro}</p>
             ) : (
               <p id="tg-dica" className="mt-2 text-sm text-neutral-500">
-                {lendo ? 'Lendo o link…' : 'Os vídeos viram aulas na ordem em que foram postados.'}
+                {lendo ? 'Lendo o grupo…' : 'Os vídeos e as fotos viram aulas na ordem em que foram postados.'}
               </p>
             )}
             <div aria-live="polite">{previa && <CartaoPrevia previa={previa} semVideos={semVideos} />}</div>
+            {escolhido && (
+              <button type="button" onClick={() => setEscolhido(null)} className="mt-2 text-sm text-blue-400 hover:underline">
+                Escolher outro
+              </button>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={onClose} className={botaoSecundario}>Cancelar</button>
               <button type="submit" disabled={busy || !previa || semVideos} className={botaoPrimario}>
@@ -212,14 +251,58 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
   );
 }
 
+function ListaDialogos({ dialogos, erro, busca, onEscolher }: {
+  dialogos: DialogoTelegram[] | null;
+  erro: string | null;
+  busca: string;
+  onEscolher: (d: DialogoTelegram) => void;
+}) {
+  if (erro) return <p className="mt-3 text-sm text-amber-200">{erro}</p>;
+  if (!dialogos) return <p className="mt-3 text-sm text-neutral-500">Carregando seus grupos…</p>;
+  const termo = semAcento(busca.trim());
+  const itens = termo ? dialogos.filter((d) => semAcento(d.titulo).includes(termo)) : dialogos;
+  if (!itens.length) {
+    return <p className="mt-3 text-sm text-neutral-500">{termo ? 'Nenhum grupo com esse nome.' : 'Você não está em nenhum grupo ou canal.'}</p>;
+  }
+  return (
+    <ul className="mt-3 max-h-64 overflow-y-auto rounded-lg bg-neutral-800/60 p-1" aria-label="Seus grupos, canais e bots">
+      {itens.map((d) => (
+        <li key={d.chave}>
+          <button
+            type="button"
+            onClick={() => onEscolher(d)}
+            className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-neutral-700/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-neutral-700 text-sm font-medium text-neutral-200">
+              {d.titulo.trim().charAt(0).toUpperCase() || '?'}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-neutral-100">{d.titulo || 'Sem nome'}</span>
+              <span className="block text-xs text-neutral-400">
+                {[
+                  TIPO_DIALOGO[d.tipo],
+                  d.membros !== null && d.tipo !== 'bot' ? plural(d.membros, d.tipo === 'canal' ? 'inscrito' : 'membro', d.tipo === 'canal' ? 'inscritos' : 'membros') : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            </span>
+            {d.cursoId && <span className="shrink-0 text-xs text-blue-400">Na biblioteca</span>}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function CartaoPrevia({ previa, semVideos }: { previa: PreviaTelegram; semVideos: boolean }) {
   const linhas = [
-    previa.canal ? 'Canal' : 'Grupo',
-    previa.membros !== null ? plural(previa.membros, previa.canal ? 'inscrito' : 'membro', previa.canal ? 'inscritos' : 'membros') : null,
+    previa.bot ? 'Bot' : previa.canal ? 'Canal' : 'Grupo',
+    !previa.bot && previa.membros !== null ? plural(previa.membros, previa.canal ? 'inscrito' : 'membro', previa.canal ? 'inscritos' : 'membros') : null,
   ].filter(Boolean);
   const conteudo =
     previa.videos !== null
-      ? [plural(previa.videos, 'vídeo', 'vídeos'), previa.arquivos ? plural(previa.arquivos, 'arquivo', 'arquivos') : null].filter(Boolean).join(' · ')
+      ? [plural(previa.videos, 'vídeo', 'vídeos'), previa.fotos ? plural(previa.fotos, 'foto', 'fotos') : null, previa.arquivos ? plural(previa.arquivos, 'arquivo', 'arquivos') : null].filter(Boolean).join(' · ')
       : null;
   return (
     <div className="mt-3 flex items-center gap-3 rounded-lg bg-neutral-800 p-3">

@@ -6,9 +6,11 @@ import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import type { Capacidades } from '../media/ffmpeg';
 import { prepararParaTocar } from '../media/preparar';
+import { FOTO_EXTS } from '../scan/derive';
 import type { ClienteDrive } from './api';
 import {
   adotarConvertido,
+  saidaDaConversao,
   arquivoBaixado,
   destinoDe,
   pastaDeArmazenamento,
@@ -296,10 +298,12 @@ export function criarBaixador(deps: {
       await baixar(item.remoteId, destino, item.tamanho, signal);
     }
     registrarBaixado(db, item, destino);
-    if (item.tipo !== 'aula') return;
+    // Foto não passa pelo ffmpeg: ele a "converteria" num vídeo de um quadro.
+    if (item.tipo !== 'aula' || FOTO_EXTS.has(path.extname(destino).toLowerCase())) return;
     try {
-      // Ao lado do original, para a troca ser um rename mesmo com a pasta em outro disco.
-      const convertido = destino.slice(0, destino.length - path.extname(destino).length) + '.convertendo.mp4';
+      // Ao lado do original, para a troca ser um rename mesmo com a pasta em outro disco
+      // (na pasta conectada, em DATA_DIR/converted: lá o app não mexe no que gravou).
+      const convertido = saidaDaConversao(db, config, item.id, destino);
       if (await prepararParaTocar(destino, convertido, capacidadesSalvas(db))) adotarConvertido(db, item, destino, convertido);
     } catch {
       // Conversão que falha não perde o download: o player tenta o arquivo

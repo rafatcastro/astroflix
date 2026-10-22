@@ -56,7 +56,7 @@ export async function telegramRoutes(
       if (link.tipo === 'convite') {
         const c = await cliente.verConvite(link.hash);
         if (c.tipo === 'convite') {
-          return { titulo: c.titulo, canal: c.canal, membros: c.membros, foto: dataUrl(c.foto), videos: null, arquivos: null, convite: true, cursoId: null };
+          return { titulo: c.titulo, canal: c.canal, membros: c.membros, foto: dataUrl(c.foto), videos: null, arquivos: null, fotos: null, convite: true, cursoId: null };
         }
         grupo = c.grupo;
       } else {
@@ -69,10 +69,12 @@ export async function telegramRoutes(
       return {
         titulo: grupo.titulo,
         canal: p.canal,
+        bot: !!p.bot,
         membros: p.membros,
         foto: dataUrl(p.foto),
         videos: p.videos,
         arquivos: p.arquivos,
+        fotos: p.fotos,
         convite: false,
         cursoId: ja?.id ?? null,
       };
@@ -94,6 +96,22 @@ export async function telegramRoutes(
       return reply.code(r.existente ? 200 : 201).send(r);
     } catch (e) {
       const r = respostaDeFalhaTelegram(e);
+      return reply.code(r.status).send(r.corpo);
+    }
+  });
+
+  // As conversas da conta que podem virar curso, para escolher sem colar link.
+  app.get('/api/telegram/dialogos', async (_req, reply) => {
+    try {
+      const lista = await (await telegram.cliente()).dialogos();
+      const cursos = db
+        .prepare("SELECT id, json_extract(telegram_peer, '$.id') AS peer FROM courses WHERE source='telegram' AND IFNULL(json_extract(telegram_peer, '$.topico'), 0)=0")
+        .all() as Array<{ id: string; peer: string }>;
+      const porPeer = new Map(cursos.map((c) => [String(c.peer), c.id]));
+      return lista.map((d) => ({ chave: d.chave, titulo: d.titulo, tipo: d.tipo, membros: d.membros, cursoId: porPeer.get(d.peer.id) ?? null }));
+    } catch (e) {
+      const r = respostaDeFalhaTelegram(e);
+      if (r.corpo.error === 'nao-autorizado') return reply.code(401).send({ precisaConectar: true });
       return reply.code(r.status).send(r.corpo);
     }
   });

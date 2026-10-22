@@ -21,7 +21,6 @@ import { swRoutes } from './routes/sw';
 import { backupRoutes } from './routes/backup';
 
 import { criarServicosDrive } from './drive/servicos';
-import { apagarBaixados } from './armazenamento';
 import type { Fetch } from './drive/tipos';
 import { driveRoutes } from './routes/drive';
 import type { ServicosTelegram } from './telegram/servicos';
@@ -94,11 +93,8 @@ export function buildApp(
       db,
       supabase,
       token: () => conta.token(),
-      // Como excluir aqui: sem o curso, ninguém acharia (nem removeria) esses arquivos pelo app.
-      aoExcluirCurso: (id) => {
-        drive.baixador.cancelar(id);
-        apagarBaixados(db, config, id);
-      },
+      // Como excluir aqui: para o download, e o que já foi baixado fica na pasta.
+      aoExcluirCurso: (id) => drive.baixador.cancelar(id),
     });
 
   // Antes de qualquer rota: recusa Host e Origin que não são desta máquina — ver guarda.ts.
