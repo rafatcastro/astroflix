@@ -148,8 +148,14 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       FROM lessons l LEFT JOIN progress p ON p.lesson_id = l.id
       WHERE l.course_id = ?
     `);
+    // O que o menu ⋯ do cartão precisa para mostrar as mesmas opções da página do
+    // curso. Os baixados contam pelo registro, sem conferir o disco (seria um stat
+    // por aula de cada curso da lista).
+    const baixadasStmt = db.prepare("SELECT COUNT(*) AS n FROM baixados WHERE course_id=? AND tipo='aula'");
+    const primeiraStmt = db.prepare('SELECT id FROM lessons WHERE course_id=? AND missing=0 ORDER BY order_index LIMIT 1');
     return courses.map((c) => {
       const agg = aggStmt.get(c.id) as any;
+      const remoto = c.source === 'drive' || c.source === 'telegram';
       const ultima = ultimaStmt.get(c.id) as any;
       let total = 0;
       let visto = 0;
@@ -170,6 +176,9 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
         progressoReal: total > 0 ? Math.round((visto / total) * 100) : null,
+        pastaConectada: remoto ? pastaConectada(db, c.id) : null,
+        baixadas: remoto ? (baixadasStmt.get(c.id) as { n: number }).n : 0,
+        primeiraAulaId: (primeiraStmt.get(c.id) as { id: string } | undefined)?.id ?? null,
       };
     });
   });

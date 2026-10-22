@@ -9,6 +9,12 @@ export interface CourseSummary {
   ultimaAula: { id: string; titulo: string; posicaoSec: number; duracaoSec: number | null } | null;
   // 0–100 por tempo assistido; null se nenhuma aula tem duração conhecida.
   progressoReal: number | null;
+  /** A pasta da pessoa conectada a este curso, ou null. */
+  pastaConectada?: string | null;
+  /** Aulas registradas como baixadas (sem conferir o disco). */
+  baixadas?: number;
+  /** Para "Editar capa": a capa é escolhida num quadro da aula. */
+  primeiraAulaId?: string | null;
 }
 export interface LessonDTO {
   id: string; title: string; module: string | null; relPath: string;

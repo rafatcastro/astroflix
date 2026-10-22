@@ -1,8 +1,8 @@
 import { useState, useEffect, type MouseEvent } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { useCourse, useDownloads, useSetComplete } from '../api/hooks';
-import { formatBytes, formatDuration, percent } from '../lib/format';
+import { useCourse, useSetComplete } from '../api/hooks';
+import { formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { api } from '../api/client';
 import type { LessonDTO } from '../api/client';
@@ -10,7 +10,6 @@ import LessonGrid from '../components/LessonGrid';
 import MaterialsSection from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
-import ConfirmDialog from '../components/ConfirmDialog';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
@@ -41,10 +40,8 @@ export default function Course() {
   const qc = useQueryClient();
   const [rootIssue, setRootIssue] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [confirmandoBaixar, setConfirmandoBaixar] = useState(false);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
-  const { data: downloads } = useDownloads();
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
@@ -90,21 +87,9 @@ export default function Course() {
   const cont = pickContinue(allLessons);
   const pct = percent(data.completedLessons, data.totalLessons);
   const onToggle = (lid: string, completed: boolean) => setComplete.mutate({ id: lid, completed });
-  const editCover = () => {
-    const first = allLessons[0];
-    if (first) navigate(`/lesson/${first.id}`);
-  };
   const chooseView = (v: 'list' | 'grid') => {
     setView(v);
     setPref('course.view', v);
-  };
-  // O progresso fica no painel de downloads (em toda tela).
-  const baixarCurso = () => {
-    setConfirmandoBaixar(false);
-    void api.baixarCurso(id).then(
-      () => qc.invalidateQueries({ queryKey: ['downloads'] }),
-      () => setNotice('Não deu para começar o download. Tente de novo.'),
-    );
   };
   const abrirMenuAula =
     data.source === 'local'
@@ -162,11 +147,17 @@ export default function Course() {
             <Cards size={16} /> Questões
           </Link>
           <CourseMenu
-            course={data}
-            onEditCover={editCover}
+            course={{
+              id: data.id,
+              title: data.title,
+              source: data.source,
+              collectionId: data.collectionId,
+              pastaConectada: data.pastaConectada,
+              baixadas: data.download?.baixadas ?? 0,
+              primeiraAulaId: allLessons[0]?.id ?? null,
+              tamanhoRemoto: data.tamanhoRemoto,
+            }}
             onNotice={(t) => setNotice(t)}
-            onBaixar={data.source !== 'local' ? () => setConfirmandoBaixar(true) : undefined}
-            baixando={!!downloads?.itens.some((e) => e.courseId === id && e.ativo)}
           />
         </div>
       </div>
@@ -402,21 +393,6 @@ export default function Course() {
             )}
           </div>
         </>
-      )}
-      {confirmandoBaixar && (
-        <ConfirmDialog
-          title="Baixar o curso"
-          message={
-            <>
-              Todas as aulas e materiais{data.tamanhoRemoto ? ` (${formatBytes(data.tamanhoRemoto)})` : ''} são adiantados na pasta
-              de downloads, em <b className="text-neutral-200">{data.title}</b>, com os nomes originais, para tocarem sem internet. O que já foi
-              baixado não é baixado de novo. A pasta fica em Configurações → Armazenamento.
-            </>
-          }
-          confirmLabel="Baixar"
-          onConfirm={baixarCurso}
-          onCancel={() => setConfirmandoBaixar(false)}
-        />
       )}
     </div>
   );

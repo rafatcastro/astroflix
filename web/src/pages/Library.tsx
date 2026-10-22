@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCollections, useConexaoDrive, useCourseRoots, useCourses } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
-import CourseCardMenu from '../components/CourseCardMenu';
+import CourseMenu from '../components/CourseMenu';
 import DriveLinkModal from '../components/DriveLinkModal';
 import SeletorDrive from '../components/SeletorDrive';
 import MenuAdicionar from '../components/MenuAdicionar';
@@ -552,7 +552,7 @@ export default function Library({ categoria }: { categoria: string }) {
   const cardProps = (c: CourseSummary) =>
     selectMode
       ? { selectable: true, selected: selected.has(c.id), onToggleSelect: toggleSelect }
-      : { menu: tab === 'active' ? <CourseCardMenu course={c} onNotice={setNotice} /> : undefined };
+      : { menu: tab === 'active' ? <CourseMenu course={c} onNotice={setNotice} noCartao /> : undefined };
 
   // O destaque é o ÚLTIMO CURSO ACESSADO (lastActivityAt mais recente); o resto
   // mantém a ordem do servidor. Sem atividade nenhuma, nada se move. Só em Ativos.
