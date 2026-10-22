@@ -5,7 +5,7 @@ import { caminhoDaCategoria } from './CabecalhoCategoria';
 import { api, type RepointSummary } from '../api/client';
 import { useCollections, useDownloads } from '../api/hooks';
 import { formatBytes } from '../lib/format';
-import DirPicker from './DirPicker';
+import { escolherPasta } from '../lib/desktop';
 import RepointModal from './RepointModal';
 import ConfirmDialog from './ConfirmDialog';
 import TextField from './TextField';
@@ -14,9 +14,7 @@ import { mensagemErroTelegram } from '../api/telegramTextos';
 type Flow =
   | null
   | 'menu'
-  | 'pickRepoint'
   | 'preview'
-  | 'pickConectar'
   | 'confirmDesconectar'
   | 'rename'
   | 'collection'
@@ -124,6 +122,18 @@ export default function CourseMenu({
       onNotice('Falha na operação. Tente novamente.');
       close();
     }
+  };
+
+  // Seletor nativo (Finder): o menu fecha antes, para não ficar por cima da janela do sistema.
+  const escolherRepoint = async () => {
+    close();
+    const p = await escolherPasta('Nova pasta do curso');
+    if (p) await onPickRepoint(p);
+  };
+  const escolherConectar = async () => {
+    close();
+    const p = await escolherPasta('Pasta onde está o conteúdo deste curso (o app só acrescenta arquivos nela)');
+    if (p) await onPickConectar(p);
   };
 
   const applyRepoint = async () => {
@@ -302,7 +312,7 @@ export default function CourseMenu({
                 Editar capa
               </button>
             )}
-            {!remoto && <button type="button" className={item} onClick={() => setFlow('pickRepoint')}>Re-apontar pasta…</button>}
+            {!remoto && <button type="button" className={item} onClick={() => void escolherRepoint()}>Re-apontar pasta…</button>}
             {remoto && (
               <button type="button" className={item} disabled={baixando} onClick={() => setFlow('confirmBaixar')}>
                 {baixando ? 'Baixando…' : 'Baixar…'}
@@ -321,7 +331,7 @@ export default function CourseMenu({
               <button type="button" className={item} onClick={() => setFlow('confirmRemoverBaixados')}>Remover download…</button>
             )}
             {remoto && (
-              <button type="button" className={item} onClick={() => setFlow('pickConectar')}>
+              <button type="button" className={item} onClick={() => void escolherConectar()}>
                 {course.pastaConectada ? 'Trocar pasta conectada…' : 'Conectar a uma pasta…'}
               </button>
             )}
@@ -340,19 +350,10 @@ export default function CourseMenu({
         </div>
       )}
 
-      {flow === 'pickRepoint' && <DirPicker onClose={close} onPick={onPickRepoint} />}
       {flow === 'preview' && summary && (
         <RepointModal courseTitle={course.title} targetPath={pickedPath} summary={summary} busy={busy} onApply={applyRepoint} onCancel={close} />
       )}
 
-      {flow === 'pickConectar' && (
-        <DirPicker
-          title="Escolha a pasta onde está o conteúdo deste curso. O app só acrescenta arquivos nela: nada do que está lá é apagado ou alterado."
-          confirmLabel="Conectar esta pasta"
-          onClose={close}
-          onPick={(p) => void onPickConectar(p)}
-        />
-      )}
       {flow === 'confirmDesconectar' && (
         <ConfirmDialog
           title="Desconectar a pasta?"

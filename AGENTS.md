@@ -306,7 +306,8 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   - Pdfs: estante de PDFs da categoria e Adicionar (arquivos, pasta ou Drive).
   - LeitorPdf: rolagem contínua, cada página desenhada só perto da tela; salva a página onde
     parou; ←/→, +/−, 0 e Esc.
-- `components/DirPicker.tsx` conduz o seletor de pastas via `/api/fs/browse`.
+- Pastas e arquivos do disco são escolhidos pelo seletor nativo do sistema (`escolherPasta` e
+  `escolherPdfs` em `lib/desktop.ts`, plugin dialog do Tauri), inclusive "Conectar a uma pasta".
 
 ## Convenções
 
