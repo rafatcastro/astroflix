@@ -31,10 +31,8 @@ const botaoSecundario =
  * o que está trazendo. Sem conta conectada, o login por QR aparece no meio do
  * caminho e, ao concluir, o link é lido de novo sozinho. `soLogin` usa o mesmo diálogo só para conectar (Configurações, player).
  */
-export default function TelegramLinkModal({ onClose, soLogin, onConectado, categoriaId, baixar }: {
+export default function TelegramLinkModal({ onClose, soLogin, onConectado, categoriaId }: {
   onClose: () => void;
-  /** Auto download (Configurações): adicionado o grupo, já põe o curso inteiro para baixar. */
-  baixar?: boolean;
   /** Aberto dentro de uma categoria: o curso entra nela. */
   categoriaId?: string;
   soLogin?: boolean;
@@ -124,9 +122,8 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
         qc.invalidateQueries({ queryKey: ['courses'] });
         navigate(`/course/${id}`);
       };
-      const depois = baixar ? () => api.baixarCurso(id).then(() => qc.invalidateQueries({ queryKey: ['downloads'] })).then(ir, ir) : ir;
-      if (categoriaId) void api.patchCourse(id, { collectionId: categoriaId }).then(depois, depois);
-      else void depois();
+      if (categoriaId) void api.patchCourse(id, { collectionId: categoriaId }).then(ir, ir);
+      else ir();
       onClose();
       return;
     }
@@ -163,11 +160,9 @@ export default function TelegramLinkModal({ onClose, soLogin, onConectado, categ
   const semVideos = previa !== null && !previa.convite && previa.videos === 0 && previa.arquivos === 0 && !previa.fotos;
   const rotulo = busy
     ? previa?.convite ? 'Entrando…' : 'Lendo o grupo…'
-    : baixar
-      ? previa?.convite ? 'Entrar no grupo e baixar' : 'Baixar'
-      : previa?.cursoId ? 'Abrir curso' : previa?.convite ? 'Entrar no grupo e adicionar' : 'Adicionar';
+    : previa?.cursoId ? 'Abrir curso' : previa?.convite ? 'Entrar no grupo e adicionar' : 'Adicionar';
 
-  const titulo = fase.tipo === 'login' ? 'Conectar ao Telegram' : baixar ? 'Auto download do Telegram' : 'Do Telegram';
+  const titulo = fase.tipo === 'login' ? 'Conectar ao Telegram' : 'Do Telegram';
 
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={onClose}>

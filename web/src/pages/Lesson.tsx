@@ -234,7 +234,18 @@ export default function Lesson() {
 
   const onLoaded = () => {
     const v = videoRef.current;
-    if (v && lesson && !lesson.completed && lesson.position > 0) v.currentTime = lesson.position;
+    if (!v) return;
+    // A velocidade escolhida (ex.: 2×) vale para as próximas aulas também.
+    const velocidade = getPref('player.velocidade', 1);
+    v.defaultPlaybackRate = velocidade;
+    v.playbackRate = velocidade;
+    if (lesson && !lesson.completed && lesson.position > 0) v.currentTime = lesson.position;
+  };
+
+  // Segurar para 2× é temporário: não vira a velocidade salva.
+  const onRateChange = () => {
+    const v = videoRef.current;
+    if (v && !boostRef.current) setPref('player.velocidade', v.playbackRate);
   };
 
   const mandarAssistido = useCallback(
@@ -878,6 +889,7 @@ export default function Lesson() {
             autoPlay
             playsInline
             onLoadedMetadata={onLoaded}
+            onRateChange={onRateChange}
             onTimeUpdate={onTimeUpdate}
             onPlay={() => {
               ultimoTique.current = Date.now();
