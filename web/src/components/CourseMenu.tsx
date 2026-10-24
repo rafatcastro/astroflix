@@ -124,15 +124,23 @@ export default function CourseMenu({
     }
   };
 
-  // Seletor nativo (Finder): o menu fecha antes, para não ficar por cima da janela do sistema.
-  const escolherRepoint = async () => {
+  // Seletor nativo (Finder): o menu fecha antes, para não ficar por cima da janela
+  // do sistema. Se ele não abrir, a pessoa precisa saber, e não ficar clicando no vazio.
+  const seletor = async (titulo: string): Promise<string | null> => {
     close();
-    const p = await escolherPasta('Nova pasta do curso');
+    try {
+      return await escolherPasta(titulo);
+    } catch {
+      onNotice('Não foi possível abrir o seletor de pastas.');
+      return null;
+    }
+  };
+  const escolherRepoint = async () => {
+    const p = await seletor('Nova pasta do curso');
     if (p) await onPickRepoint(p);
   };
   const escolherConectar = async () => {
-    close();
-    const p = await escolherPasta('Pasta onde está o conteúdo deste curso (o app só acrescenta arquivos nela)');
+    const p = await seletor('Pasta onde está o conteúdo deste curso (o app só acrescenta arquivos nela)');
     if (p) await onPickConectar(p);
   };
 

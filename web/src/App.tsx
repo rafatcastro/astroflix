@@ -12,7 +12,6 @@ import { caminhoDaCategoria, ultimaCategoria } from './components/CabecalhoCateg
 import HelpDrawer from './components/HelpDrawer';
 import AtualizacaoInicial from './components/AtualizacaoInicial';
 import PortaoConta from './components/PortaoConta';
-import PainelDownloads from './components/PainelDownloads';
 import { PomodoroProvider } from './lib/pomodoro';
 
 function NaCategoria({ pagina }: { pagina: (cat: string) => JSX.Element }) {
@@ -40,8 +39,6 @@ export default function App() {
         <Route path="/pdf/:id" element={<LeitorPdf />} />
       </Routes>
       </PomodoroProvider>
-      {/* Fora das rotas: o download de um curso continua visível em qualquer tela. */}
-      <PainelDownloads />
       </PortaoConta>
       {/* Fora das rotas: a ajuda abre por cima de qualquer tela sem desmontar a
           página de trás — quem pede ajuda não perde o lugar onde estava. */}

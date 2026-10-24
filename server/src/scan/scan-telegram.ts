@@ -15,6 +15,8 @@ export interface DepsTelegram {
 }
 
 const CAPAS_SIMULTANEAS = 3;
+// O máximo de mensagens que o Telegram devolve num getMessages.
+const LOTE_CAPAS = 100;
 
 // O deriveCourse ordena pelo relPath (que começa pelo id da mensagem, então dá
 // a ordem de postagem) e tira o título do nome do arquivo. No Telegram o
@@ -110,17 +112,21 @@ export async function reconcileTelegramCourse(db: Db, deps: DepsTelegram, course
   return resultado;
 }
 
-const capasEmAndamento = new Set<Promise<void>>();
+// As capas de um curso por vez: importar vários grupos seguidos não multiplica
+// os pedidos ao Telegram.
+let filaDeCapas: Promise<void> = Promise.resolve();
 
 export async function aguardarCapasTelegram(): Promise<void> {
-  while (capasEmAndamento.size) await Promise.all([...capasEmAndamento]);
+  let atual: Promise<void>;
+  do {
+    atual = filaDeCapas;
+    await atual;
+  } while (atual !== filaDeCapas);
 }
 
 function dispararCapas(db: Db, deps: DepsTelegram, courseId: string, peer: PeerTelegram, curso: CursoTelegram): void {
   const comMiniatura = new Set(curso.videos.filter((v) => v.temMiniatura).map((v) => v.relPath));
-  const p = baixarCapas(db, deps, courseId, peer, comMiniatura).catch(() => {});
-  capasEmAndamento.add(p);
-  void p.finally(() => capasEmAndamento.delete(p));
+  filaDeCapas = filaDeCapas.then(() => baixarCapas(db, deps, courseId, peer, comMiniatura).catch(() => {}));
 }
 
 async function baixarCapas(db: Db, deps: DepsTelegram, courseId: string, peer: PeerTelegram, comMiniatura: Set<string>): Promise<void> {
@@ -133,8 +139,22 @@ async function baixarCapas(db: Db, deps: DepsTelegram, courseId: string, peer: P
       thumb_path: string | null;
     }>
   ).filter((a) => a.remote_id && comMiniatura.has(a.rel_path) && !(a.thumb_path && fs.existsSync(a.thumb_path)));
-  const gravar = db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?');
 
+  // Em lotes de LOTE_CAPAS: as mensagens do lote vêm num pedido só, e só então as capas dele.
+  for (let inicio = 0; inicio < aulas.length; inicio += LOTE_CAPAS) {
+    const lote = aulas.slice(inicio, inicio + LOTE_CAPAS);
+    await deps.cliente.prepararMiniaturas?.(peer, lote.map((a) => Number(a.remote_id))).catch(() => {});
+    await baixarLote(db, deps, peer, lote);
+  }
+}
+
+async function baixarLote(
+  db: Db,
+  deps: DepsTelegram,
+  peer: PeerTelegram,
+  aulas: Array<{ id: string; mtime: number; remote_id: string | null }>,
+): Promise<void> {
+  const gravar = db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?');
   let proxima = 0;
   const trabalhador = async () => {
     while (proxima < aulas.length) {

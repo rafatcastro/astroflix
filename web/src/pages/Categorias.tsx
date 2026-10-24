@@ -1,4 +1,4 @@
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Collection } from '../api/client';
@@ -8,10 +8,13 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DialogoCategoria from '../components/DialogoCategoria';
 import { EstudoDeHoje, PainelEstudo } from '../components/Pomodoro';
 import { Plus, Settings as SettingsIcon } from '../components/icons';
+import { getPref, setPref } from '../lib/prefs';
 
 // O menu principal: as categorias (Pós, Concurso, Inglês…), a última aberta
 // primeiro. Cada uma junta cursos, PDFs e questões. O que ainda não tem
-// categoria aparece em "Sem categoria", para nada sumir.
+// categoria fica em "Sem categoria", oculta como os arquivos ocultos do Finder:
+// ⌘⇧. (Ctrl+Shift+. fora do Mac) mostra ou esconde. Sem nenhuma categoria ela
+// aparece sempre, senão a tela diria que não há nada.
 
 
 function contagem(cursos: number, pdfs: number): string {
@@ -36,6 +39,21 @@ export default function Categorias() {
   const [excluindo, setExcluindo] = useState<Collection | null>(null);
   const [nomeandoSem, setNomeandoSem] = useState(false);
   const [apagandoSem, setApagandoSem] = useState(false);
+
+  const [mostrarSem, setMostrarSem] = useState(() => getPref<boolean>('inicio.mostrarSemCategoria', false));
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'Period') {
+        e.preventDefault();
+        setMostrarSem((v) => {
+          setPref('inicio.mostrarSemCategoria', !v);
+          return !v;
+        });
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const semCursos = cursos?.filter((c) => !c.collectionId).length ?? 0;
   const semPdfs = docs?.filter((d) => !d.categoriaId).length ?? 0;
@@ -145,7 +163,7 @@ export default function Categorias() {
             {botaoAcoes(c)}
           </div>
         ))}
-        {(semCursos > 0 || semPdfs > 0) && (
+        {(semCursos > 0 || semPdfs > 0) && (mostrarSem || (cats ?? []).length === 0) && (
           <div className="group relative" onContextMenu={abrirMenu(null)}>
             <Link
               to={caminhoDaCategoria(SEM)}

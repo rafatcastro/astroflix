@@ -11,6 +11,7 @@ import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
 import ConfirmDialog from '../components/ConfirmDialog';
 import Banner from '../components/Banner';
+import PainelDownloads from '../components/PainelDownloads';
 import { ArrowLeft } from '../components/icons';
 
 const plural = (n: number) => (n === 1 ? '' : 's');
@@ -341,7 +342,12 @@ function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
   };
 
   const escolher = async () => {
-    const p = await escolherPasta('Escolha onde guardar as aulas baixadas');
+    let p: string | null;
+    try {
+      p = await escolherPasta('Escolha onde guardar as aulas baixadas');
+    } catch {
+      return onNotice('Não foi possível abrir o seletor de pastas.');
+    }
     if (p && p !== data?.pasta) setTrocando(p);
   };
   const trocar = async () => {
@@ -539,6 +545,7 @@ export default function Settings() {
       )}
 
       <SecaoConta />
+      <PainelDownloads />
       <SecaoAutoDownload />
       <SecaoPomodoro />
 

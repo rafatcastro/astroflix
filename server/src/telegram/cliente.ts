@@ -52,6 +52,11 @@ export interface ClienteTelegram {
   mensagens(peer: PeerTelegram): Promise<MensagemTelegram[]>;
   /** Blocos de BLOCO bytes a partir de `offset` (múltiplo de BLOCO), até o fim do arquivo ou o abort. */
   baixar(peer: PeerTelegram, msgId: number, offset: number, signal: AbortSignal): AsyncIterable<Buffer>;
-  /** A maior miniatura que o Telegram guarda com a mídia; null se não houver. */
+  /**
+   * Lê de uma vez (até 100) as mensagens cujas miniaturas vão ser pedidas: um
+   * pedido ao Telegram no lugar de um por capa. Opcional (os clientes falsos não têm).
+   */
+  prepararMiniaturas?(peer: PeerTelegram, msgIds: number[]): Promise<void>;
+  /** A maior miniatura que o Telegram guarda com a mídia; null se não houver. Espera a vez dos pedidos da pessoa. */
   miniatura(peer: PeerTelegram, msgId: number): Promise<Buffer | null>;
 }

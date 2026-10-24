@@ -132,23 +132,48 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
   type Arquivo = { local: TiposApi.TypeInputFileLocation; tamanho: number; dcId: number };
   const documentos = new Map<string, { msg: TiposApi.Message; doc: TiposApi.Document | null; arquivo: Arquivo; ate: number }>();
 
+  // Primeiro plano é o que a pessoa está esperando (importar, prévia, tocar a
+  // aula). As capas vêm aos milhares e são enfeite: cada pedido delas espera não
+  // haver nenhum desses em andamento. Sem isso, a importação seguinte ficava atrás
+  // das capas da anterior (e do flood que elas provocam) e só andava reabrindo o app.
+  let emPrimeiroPlano = 0;
+  let aoLiberar: Array<() => void> = [];
+  async function vezDoFundo(): Promise<void> {
+    while (emPrimeiroPlano > 0) await new Promise<void>((r) => aoLiberar.push(r));
+  }
+
   // Toda saída para o Telegram passa por aqui: o erro vira FalhaTelegram, e a
   // sessão revogada em outro aparelho é esquecida, para o status não mentir.
-  async function chamar<T>(fn: () => Promise<T>): Promise<T> {
+  async function chamar<T>(fn: () => Promise<T>, fundo = false): Promise<T> {
+    if (fundo) await vezDoFundo();
+    else emPrimeiroPlano++;
     try {
       return await fn();
     } catch (e) {
       const f = falhaDoErro(e);
       if (f.tipo === 'nao-autorizado') aoPerderSessao();
       throw f;
+    } finally {
+      if (!fundo && --emPrimeiroPlano === 0) {
+        const esperando = aoLiberar;
+        aoLiberar = [];
+        for (const r of esperando) r();
+      }
     }
   }
 
-  async function documento(peer: PeerTelegram, msgId: number, renovar = false) {
+  async function documento(peer: PeerTelegram, msgId: number, renovar = false, fundo = false) {
     const chave = `${peer.id}:${msgId}`;
     const guardado = documentos.get(chave);
     if (!renovar && guardado && guardado.ate > Date.now()) return guardado;
-    const [msg] = await chamar(() => client.getMessages(inputPeer(Api, peer), { ids: [msgId] }));
+    const [msg] = await chamar(() => client.getMessages(inputPeer(Api, peer), { ids: [msgId] }), fundo);
+    const novo = guardar(peer, msgId, msg);
+    if (!novo) throw new FalhaTelegram('removido');
+    return novo;
+  }
+
+  function guardar(peer: PeerTelegram, msgId: number, msg: TiposApi.Message | undefined) {
+    const chave = `${peer.id}:${msgId}`;
     const media = msg?.media;
     let doc: TiposApi.Document | null = null;
     let arquivo: Arquivo | null = null;
@@ -172,7 +197,7 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
     }
     if (!msg || !arquivo) {
       documentos.delete(chave);
-      throw new FalhaTelegram('removido');
+      return null;
     }
     const novo = { msg, doc, arquivo, ate: Date.now() + VALIDADE_DOCUMENTO_MS };
     documentos.set(chave, novo);
@@ -492,9 +517,14 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
       }
     },
 
+    prepararMiniaturas: async (peer, msgIds) => {
+      const msgs = await chamar(() => client.getMessages(inputPeer(Api, peer), { ids: msgIds }), true);
+      msgIds.forEach((id, i) => guardar(peer, id, msgs[i]));
+    },
+
     miniatura: (peer, msgId) =>
       chamar(async () => {
-        const { msg, doc } = await documento(peer, msgId);
+        const { msg, doc } = await documento(peer, msgId, false, true);
         // Foto: a miniatura é um tamanho menor da própria foto (~800 px).
         if (!doc) {
           const media = msg.media as TiposApi.MessageMediaPhoto;
@@ -512,7 +542,7 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         if (!melhor) return null;
         const r = await client.downloadMedia(msg, { thumb: melhor });
         return Buffer.isBuffer(r) && r.length ? r : null;
-      }),
+      }, true),
   };
 }
 

@@ -212,7 +212,8 @@ export const TOPICOS: Topico[] = [
         texto: (
           <>
             <b>Excluir uma categoria não apaga nada.</b> Os cursos, PDFs e questões dela vão para{' '}
-            <b>Sem categoria</b>, com todo o progresso intacto.
+            <b>Sem categoria</b>, com todo o progresso intacto. No menu principal ela fica oculta: aperte{' '}
+            <b>⌘⇧.</b> (Ctrl+Shift+. no Windows) para mostrar ou esconder.
           </>
         ),
       },

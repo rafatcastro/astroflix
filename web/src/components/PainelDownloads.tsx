@@ -1,17 +1,14 @@
-import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, type DownloadCurso } from '../api/client';
 import { useDownloads } from '../api/hooks';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
-import { formatBytes, formatRestante, percent } from '../lib/format';
-import { getPref, setPref } from '../lib/prefs';
-import { Download, X } from './icons';
+import { formatBytes, formatRestante } from '../lib/format';
+import { X } from './icons';
 
-// Os "Baixar" em andamento, em qualquer tela: o download de um
-// curso leva horas, e a pessoa continua usando o app enquanto isso. Fica no canto
-// esquerdo (o direito é do pomodoro), recolhido numa pílula ou aberto com cada
-// curso. Some quando não há nada na lista.
+// Os "Baixar" de cada curso, numa seção das Configurações: o download leva horas
+// e corre em segundo plano; quem quer acompanhar (velocidade, fila, cancelar,
+// continuar) abre aqui, sem um painel por cima das outras telas.
 
 const fracao = (e: DownloadCurso) => (e.bytesTotal > 0 ? e.bytesFeitos / e.bytesTotal : e.total > 0 ? e.feitos / e.total : 0);
 
@@ -103,39 +100,22 @@ function Item({ e }: { e: DownloadCurso }) {
 
 export default function PainelDownloads() {
   const { data } = useDownloads();
-  const [aberto, setAberto] = useState(() => getPref<boolean>('downloads.aberto', true));
   const itens = data?.itens ?? [];
-  if (!itens.length) return null;
-
-  const alternar = () => {
-    setAberto(!aberto);
-    setPref('downloads.aberto', !aberto);
-  };
   const ativos = itens.filter((e) => e.ativo);
-  const somaFeitos = itens.reduce((s, e) => s + e.bytesFeitos, 0);
-  const somaTotal = itens.reduce((s, e) => s + e.bytesTotal, 0);
   const velocidade = ativos.reduce((s, e) => s + (e.velocidade ?? 0), 0);
-  const resumo = ativos.length
-    ? `Baixando ${ativos.length} curso${ativos.length === 1 ? '' : 's'}${velocidade > 0 ? ` · ${formatBytes(velocidade)}/s` : ''}`
-    : 'Downloads';
 
   return (
-    <div className="fixed bottom-4 left-4 z-30 w-[min(22rem,calc(100vw-2rem))] rounded-xl border border-neutral-800 bg-neutral-900/95 shadow-lg shadow-black/50">
-      <button
-        type="button"
-        onClick={alternar}
-        aria-expanded={aberto}
-        className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-      >
-        <Download size={16} className="shrink-0 text-neutral-400" />
-        <span className="min-w-0 flex-1 truncate text-sm text-neutral-200">{resumo}</span>
-        <span className="shrink-0 text-xs tabular-nums text-neutral-400">{percent(somaFeitos, somaTotal)}%</span>
-        <span className="shrink-0 text-xs text-neutral-500" aria-hidden>
-          {aberto ? '▾' : '▴'}
-        </span>
-      </button>
-      {aberto ? (
-        <ul className="max-h-[50vh] divide-y divide-neutral-800 overflow-y-auto border-t border-neutral-800 px-3 py-3">
+    <section className="mb-8">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">Downloads</h2>
+      <p className="mb-3 text-sm text-neutral-400">
+        {ativos.length
+          ? `Baixando ${ativos.length} curso${ativos.length === 1 ? '' : 's'}${velocidade > 0 ? ` · ${formatBytes(velocidade)}/s` : ''}.`
+          : itens.length
+            ? 'Nenhum download em andamento.'
+            : 'Nenhum download. Use "Baixar" no menu ⋯ de um curso do Drive ou do Telegram.'}
+      </p>
+      {itens.length > 0 && (
+        <ul className="divide-y divide-neutral-800 rounded-xl border border-neutral-800 bg-neutral-900 px-3 py-3">
           {itens.map((e) => (
             <Item key={e.courseId} e={e} />
           ))}
@@ -144,13 +124,7 @@ export default function PainelDownloads() {
             <li className="pt-3 text-xs text-neutral-500">Pode fechar a janela: o download continua e o app sai sozinho quando terminar.</li>
           )}
         </ul>
-      ) : (
-        ativos.length > 0 && (
-          <div className="px-3 pb-2.5">
-            <Barra valor={somaTotal > 0 ? somaFeitos / somaTotal : 0} />
-          </div>
-        )
       )}
-    </div>
+    </section>
   );
 }

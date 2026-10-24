@@ -12,7 +12,10 @@ cursos): o menu principal lista as categorias (a última aberta primeiro) e cada
 Cursos, PDFs e Questões (flashcards do Anki), sem outra divisão dentro (o antigo "tipo" do PDF
 não aparece mais). A categoria tem nome e emoji (v9), editados pelo lápis no cabeçalho dela ou pelo
 botão direito no cartão (`DialogoCategoria.tsx`); o lápis em "Sem categoria" a transforma numa
-categoria com tudo o que estava sem.
+categoria com tudo o que estava sem. No menu principal, "Sem categoria" fica oculta (como arquivo
+oculto no Finder) e ⌘⇧. / Ctrl+Shift+. mostra ou esconde (`inicio.mostrarSemCategoria`); sem
+nenhuma categoria ela aparece sempre. Os downloads ("Baixar") são acompanhados numa seção das
+Configurações (`PainelDownloads.tsx`), não num painel flutuante.
 
 O Astroflix é distribuído como **app desktop** (Tauri, em `desktop/`): quem usa baixa o instalador
 da release e não precisa de terminal nem de Node. A janela sobe o próprio servidor como sidecar e
