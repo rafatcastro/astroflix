@@ -9,7 +9,7 @@ const TEXTOS: Record<string, string> = {
   removido: 'Este vídeo foi removido do grupo.',
   'nao-autorizado': 'A conexão com o Telegram caiu.',
   'sem-conexao': 'Sem conexão com o Telegram.',
-  'sem-credenciais': 'O app do Telegram não está configurado. Configure um app próprio em Configurações → Telegram.',
+  'sem-credenciais': 'Esta versão do Astroflix foi gerada sem o app do Telegram. Instale a versão oficial pela página de releases.',
 };
 
 export function mensagemErroTelegram(erro: string, esperaSeg?: number): string {

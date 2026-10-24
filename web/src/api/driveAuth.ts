@@ -13,7 +13,7 @@ export const TEXTOS_ERRO_DRIVE: Record<string, string> = {
   'sem-espaco': 'Não há espaço no disco para o próximo arquivo (o app deixa 2 GB livres). Libere espaço ou troque a pasta em Configurações → Armazenamento, e clique em Continuar.',
   'nao-e-pdf': 'Esse link não é de um PDF nem de uma pasta. Cole o link de um PDF ou de uma pasta do Google Drive.',
   carregando: 'A pasta ainda está sendo lida. Espere terminar e tente de novo.',
-  'sem-credenciais': 'O app do Google não está configurado. Configure um app próprio em Configurações → Google Drive.',
+  'sem-credenciais': 'Esta versão do Astroflix foi gerada sem o app do Google. Instale a versão oficial pela página de releases.',
 };
 
 export const mensagemErroDrive = (erro: string): string =>
