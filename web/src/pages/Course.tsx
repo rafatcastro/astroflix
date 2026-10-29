@@ -1,4 +1,4 @@
-import { useState, useEffect, type MouseEvent } from 'react';
+import { useState, useEffect, type MouseEvent, type ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
@@ -7,6 +7,7 @@ import { getPref, setPref } from '../lib/prefs';
 import { api } from '../api/client';
 import type { LessonDTO } from '../api/client';
 import LessonGrid from '../components/LessonGrid';
+import { montarArvore, type No } from '../lib/arvore';
 import MaterialsSection from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
@@ -37,7 +38,7 @@ export default function Course() {
   const navigate = useNavigate();
   const [view, setView] = useState<'list' | 'grid'>(() => getPref<'list' | 'grid'>('course.view', 'list'));
   const [gridSize, setGridSize] = useState<number>(() => getPref<number>('course.gridSize', 200));
-  // Módulos recolhidos, por curso (nome do módulo); lembrado entre aberturas.
+  // Pastas recolhidas, por curso (caminho da pasta); lembrado entre aberturas.
   const [recolhidos, setRecolhidos] = useState<Record<string, string[]>>(() =>
     getPref<Record<string, string[]>>('course.collapsed', {}),
   );
@@ -114,6 +115,128 @@ export default function Course() {
           e.preventDefault();
           setMenuAula({ l, x: e.clientX, y: e.clientY });
         };
+  const arvore = montarArvore(allLessons);
+  const linhaDaAula = (l: LessonDTO, titulo: string) => (
+    <div
+      key={l.id}
+      className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
+      title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}
+      onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
+    >
+      <Link
+        to={`/lesson/${l.id}`}
+        className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+      >
+        <img
+          src={api.lessonThumbUrl(l.id)}
+          alt=""
+          className={`aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover ${l.baixada === false ? 'opacity-40 grayscale' : ''}`}
+          loading="lazy"
+          onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
+        />
+        <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
+        {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
+        <span className={`flex-1 truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{titulo}</span>
+        <span className="shrink-0 text-xs text-neutral-500">{formatDuration(l.durationSec)}</span>
+        <span className="w-auto shrink-0 text-right text-xs sm:w-28">
+          {l.missing ? (
+            <span className="text-amber-300" title="arquivo não encontrado">
+              <span className="sm:hidden">⚠</span>
+              <span className="hidden sm:inline">arquivo não encontrado</span>
+            </span>
+          ) : l.completed ? (
+            <span className="text-neutral-400" title="concluída">
+              <span className="sm:hidden">✓</span>
+              <span className="hidden sm:inline">✓ concluída</span>
+            </span>
+          ) : l.position > 0 ? (
+            <span className="text-neutral-400" title="em progresso">
+              <span className="sm:hidden">▓</span>
+              <span className="hidden sm:inline">em progresso</span>
+            </span>
+          ) : null}
+        </span>
+      </Link>
+      <label className="grid h-11 w-11 shrink-0 place-items-center" title="Marcar como concluída">
+        <input
+          type="checkbox"
+          checked={l.completed}
+          onChange={(e) => onToggle(l.id, e.target.checked)}
+          className="h-4 w-4 accent-blue-600"
+          aria-label="Marcar como concluída"
+        />
+      </label>
+    </div>
+  );
+  // Aulas seguidas do mesmo nível viram um bloco (lista ou grade); cada pasta é
+  // uma seção recolhível com as dela dentro, recuada um pouco a cada nível.
+  const nivel = (nos: No[], profundidade: number): ReactNode[] => {
+    const saida: ReactNode[] = [];
+    let soltas: { aula: LessonDTO; titulo: string }[] = [];
+    const fecharSoltas = () => {
+      if (!soltas.length) return;
+      const lote = soltas;
+      soltas = [];
+      saida.push(
+        view === 'grid' ? (
+          <LessonGrid
+            key={`aulas-${lote[0].aula.id}`}
+            lessons={lote.map((s) => s.aula)}
+            titulos={new Map(lote.map((s) => [s.aula.id, s.titulo]))}
+            size={gridSize}
+            onToggleComplete={onToggle}
+            onMenu={abrirMenuAula}
+          />
+        ) : (
+          <div key={`aulas-${lote[0].aula.id}`} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
+            {lote.map((s) => linhaDaAula(s.aula, s.titulo))}
+          </div>
+        ),
+      );
+    };
+    for (const no of nos) {
+      if (no.tipo === 'aula') {
+        soltas.push(no);
+        continue;
+      }
+      fecharSoltas();
+      const recolhido = recolhidosDoCurso.includes(no.chave);
+      const concluidas = no.aulas.filter((l) => l.completed).length;
+      const id = `pasta-${no.chave}`;
+      saida.push(
+        <section key={no.chave} className={profundidade ? 'ml-2 border-l border-neutral-800 pl-3' : ''}>
+          <h2 className="mb-1">
+            <button
+              type="button"
+              onClick={() => alternarModulo(no.chave)}
+              aria-expanded={!recolhido}
+              aria-controls={id}
+              className={`flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left font-semibold text-neutral-300 hover:bg-neutral-900 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
+                profundidade ? 'text-xs' : 'text-sm'
+              }`}
+            >
+              <ChevronRight
+                size={16}
+                className={`shrink-0 text-neutral-500 transition-transform motion-reduce:transition-none ${recolhido ? '' : 'rotate-90'}`}
+              />
+              <span className="min-w-0 flex-1 truncate">{no.nome}</span>
+              <span className="shrink-0 text-xs font-normal text-neutral-500">
+                {concluidas}/{no.aulas.length}
+              </span>
+            </button>
+          </h2>
+          {!recolhido && (
+            <div id={id} className="space-y-2 pb-3">
+              {nivel(no.filhos, profundidade + 1)}
+            </div>
+          )}
+        </section>,
+      );
+    }
+    fecharSoltas();
+    return saida;
+  };
+
   const acaoAula = (l: LessonDTO) => {
     setMenuAula(null);
     const pedido = l.baixada ? api.excluirDownloadAula(l.id) : api.baixarAula(l.id);
@@ -308,98 +431,7 @@ export default function Course() {
         )}
       </div>
 
-      <div className="mt-6 space-y-7">
-        {data.modules.map((m, i) => {
-          const recolhido = !!m.name && recolhidosDoCurso.includes(m.name);
-          const concluidas = m.lessons.filter((l) => l.completed).length;
-          return (
-            <section key={m.name ?? '__flat__'}>
-              {m.name && (
-                <h2 className="mb-2">
-                  <button
-                    type="button"
-                    onClick={() => alternarModulo(m.name!)}
-                    aria-expanded={!recolhido}
-                    aria-controls={`modulo-${i}`}
-                    className="flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-left text-sm font-semibold text-neutral-300 hover:bg-neutral-900 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                  >
-                    <ChevronRight
-                      size={16}
-                      className={`shrink-0 text-neutral-500 transition-transform motion-reduce:transition-none ${recolhido ? '' : 'rotate-90'}`}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                    <span className="shrink-0 text-xs font-normal text-neutral-500">
-                      {concluidas}/{m.lessons.length}
-                    </span>
-                  </button>
-                </h2>
-              )}
-              {!recolhido && (
-                <div id={`modulo-${i}`}>
-                  {view === 'grid' ? (
-                    <LessonGrid lessons={m.lessons} size={gridSize} onToggleComplete={onToggle} onMenu={abrirMenuAula} />
-                  ) : (
-                    <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
-                      {m.lessons.map((l) => (
-                        <div
-                          key={l.id}
-                          className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
-                          title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}
-                          onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
-                        >
-                          <Link
-                            to={`/lesson/${l.id}`}
-                            className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-                          >
-                            <img
-                              src={api.lessonThumbUrl(l.id)}
-                              alt=""
-                              className={`aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover ${l.baixada === false ? 'opacity-40 grayscale' : ''}`}
-                              loading="lazy"
-                              onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-                            />
-                            <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
-                            {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
-                            <span className={`flex-1 truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{l.title}</span>
-                            <span className="shrink-0 text-xs text-neutral-500">{formatDuration(l.durationSec)}</span>
-                            <span className="w-auto shrink-0 text-right text-xs sm:w-28">
-                              {l.missing ? (
-                                <span className="text-amber-300" title="arquivo não encontrado">
-                                  <span className="sm:hidden">⚠</span>
-                                  <span className="hidden sm:inline">arquivo não encontrado</span>
-                                </span>
-                              ) : l.completed ? (
-                                <span className="text-neutral-400" title="concluída">
-                                  <span className="sm:hidden">✓</span>
-                                  <span className="hidden sm:inline">✓ concluída</span>
-                                </span>
-                              ) : l.position > 0 ? (
-                                <span className="text-neutral-400" title="em progresso">
-                                  <span className="sm:hidden">▓</span>
-                                  <span className="hidden sm:inline">em progresso</span>
-                                </span>
-                              ) : null}
-                            </span>
-                          </Link>
-                          <label className="grid h-11 w-11 shrink-0 place-items-center" title="Marcar como concluída">
-                            <input
-                              type="checkbox"
-                              checked={l.completed}
-                              onChange={(e) => onToggle(l.id, e.target.checked)}
-                              className="h-4 w-4 accent-blue-600"
-                              aria-label="Marcar como concluída"
-                            />
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-          );
-        })}
-      </div>
+      <div className="mt-6 space-y-2">{nivel(arvore, 0)}</div>
 
       <MaterialsSection materials={data.materials} />
       </div>

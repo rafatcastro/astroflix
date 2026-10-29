@@ -239,6 +239,9 @@ export default function Lesson() {
     const velocidade = getPref('player.velocidade', 1);
     v.defaultPlaybackRate = velocidade;
     v.playbackRate = velocidade;
+    // O volume também: cada aula abria no 100%, e quem tinha baixado o som levava um susto.
+    v.volume = getPref('player.volume', 1);
+    v.muted = getPref('player.mudo', false);
     if (lesson && !lesson.completed && lesson.position > 0) v.currentTime = lesson.position;
   };
 
@@ -246,6 +249,13 @@ export default function Lesson() {
   const onRateChange = () => {
     const v = videoRef.current;
     if (v && !boostRef.current) setPref('player.velocidade', v.playbackRate);
+  };
+
+  const onVolumeChange = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    setPref('player.volume', v.volume);
+    setPref('player.mudo', v.muted);
   };
 
   const mandarAssistido = useCallback(
@@ -890,6 +900,7 @@ export default function Lesson() {
             playsInline
             onLoadedMetadata={onLoaded}
             onRateChange={onRateChange}
+            onVolumeChange={onVolumeChange}
             onTimeUpdate={onTimeUpdate}
             onPlay={() => {
               ultimoTique.current = Date.now();

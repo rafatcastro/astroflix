@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import type { DatabaseSync as TipoDoBanco } from 'node:sqlite';
 import { SCHEMA_V1 } from './schema';
+import { compararCaminhos, compararNomes } from '../scan/natural-sort';
 
 // node:sqlite entra por require(), e não por import estático, para o aviso de
 // "feature experimental" poder ser silenciado (ver quiet.ts).
@@ -90,7 +91,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 12;
+const ULTIMA_VERSAO = 13;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -424,6 +425,28 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
     transaction(db, () => {
       db.exec('ALTER TABLE pastas_baixadas ADD COLUMN conectada INTEGER NOT NULL DEFAULT 0');
       pragma(db, 'user_version = 12');
+    });
+  }
+
+  // v13: as aulas passam a seguir o número de cada pasta, nível por nível
+  // (compararCaminhos). Só um novo escaneio refazia a ordem, então os cursos já
+  // importados ficariam na antiga. O Telegram fica de fora: a ordem dele é a de
+  // postagem e a dos tópicos, que o escaneio dele monta. As faltantes mantêm o
+  // lugar no fim (order_index ≥ 100000, ver reconcile.ts).
+  if (version < 13 && ate >= 13) {
+    transaction(db, () => {
+      const cursos = db.prepare("SELECT id FROM courses WHERE source != 'telegram'").all() as { id: string }[];
+      const aulasDo = db.prepare('SELECT id, rel_path, module FROM lessons WHERE course_id=? AND missing=0');
+      const ordenar = db.prepare('UPDATE lessons SET order_index=?, module_order=? WHERE id=?');
+      for (const { id } of cursos) {
+        const aulas = aulasDo.all(id) as { id: string; rel_path: string; module: string | null }[];
+        const modulos = [...new Set(aulas.map((a) => a.module))].sort((a, b) =>
+          a === null ? -1 : b === null ? 1 : compararNomes(a, b),
+        );
+        aulas.sort((a, b) => modulos.indexOf(a.module) - modulos.indexOf(b.module) || compararCaminhos(a.rel_path, b.rel_path));
+        aulas.forEach((a, i) => ordenar.run(i, modulos.indexOf(a.module), a.id));
+      }
+      pragma(db, 'user_version = 13');
     });
   }
 }

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { naturalCompare } from './natural-sort';
+import { compararCaminhos, compararNomes } from './natural-sort';
 
 export { naturalCompare } from './natural-sort';
 
@@ -56,7 +56,7 @@ export function deriveCourse(videoFiles: ScannedFile[]): DerivedCourse {
   moduleNames.sort((a, b) => {
     if (a === null) return -1;
     if (b === null) return 1;
-    return naturalCompare(a, b);
+    return compararNomes(a, b);
   });
 
   const lessons: DerivedLesson[] = [];
@@ -65,7 +65,7 @@ export function deriveCourse(videoFiles: ScannedFile[]): DerivedCourse {
   moduleNames.forEach((moduleName, moduleOrder) => {
     const inModule = videoFiles
       .filter((f) => moduleOf(f.relPath) === moduleName)
-      .sort((a, b) => naturalCompare(a.relPath, b.relPath));
+      .sort((a, b) => compararCaminhos(a.relPath, b.relPath));
 
     for (const file of inModule) {
       const segs = segments(file.relPath);
