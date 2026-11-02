@@ -91,7 +91,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 13;
+const ULTIMA_VERSAO = 14;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -447,6 +447,35 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
         aulas.forEach((a, i) => ordenar.run(i, modulos.indexOf(a.module), a.id));
       }
       pragma(db, 'user_version = 13');
+    });
+  }
+
+  // v14: o cache automático das aulas remotas e o estado das capas. As duas são
+  // só desta máquina, sem gatilho da nuvem: o arquivo do cache e a capa moram
+  // neste disco, e outra máquina monta os seus.
+  // - cache_aulas: a aula aberta e as próximas, baixadas para abrir sem esperar.
+  //   Diferente de `baixados` (o "Baixar", que é da pessoa e nunca sai sozinho),
+  //   o cache tem limite e o app apaga o mais antigo (cache-aulas.ts).
+  // - capas_estado: a capa que falhou e quando tentar de novo. Sem isso, cada tela
+  //   pedia de novo ao Drive ou ao Telegram a capa que não existe (fila-capas.ts).
+  if (version < 14 && ate >= 14) {
+    transaction(db, () => {
+      db.exec(`
+        CREATE TABLE cache_aulas (
+          lesson_id TEXT PRIMARY KEY REFERENCES lessons(id) ON DELETE CASCADE,
+          arquivo TEXT NOT NULL,
+          bytes INTEGER NOT NULL,
+          convertido INTEGER NOT NULL DEFAULT 0,
+          usado_em INTEGER NOT NULL
+        );
+        CREATE TABLE capas_estado (
+          lesson_id TEXT PRIMARY KEY REFERENCES lessons(id) ON DELETE CASCADE,
+          tentativas INTEGER NOT NULL,
+          proxima_em INTEGER NOT NULL,
+          motivo TEXT NOT NULL
+        );
+      `);
+      pragma(db, 'user_version = 14');
     });
   }
 }

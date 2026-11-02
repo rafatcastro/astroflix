@@ -25,7 +25,7 @@ process.env.PATH = pathComExtras(process.env.PATH ?? '', process.platform, fs.ex
 // criaria um banco vazio e a herança nunca aconteceria.
 const heranca = herdarDadosDoV1(process.cwd(), config.dataDir);
 
-for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config.downloadsDir]) {
+for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config.downloadsDir, config.cacheDir]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 

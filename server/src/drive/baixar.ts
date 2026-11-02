@@ -19,22 +19,28 @@ import {
   type ItemBaixavel,
 } from '../armazenamento';
 import { FalhaDrive } from './tipos';
+import { arquivoEmCache, caminhoNoCache, liberarCache, limiteDoCache, promoverDoCache, registrarEmCache } from '../cache-aulas';
 import { FalhaTelegram } from '../telegram/tipos';
 
-// Os downloads das aulas e materiais do Drive e do Telegram, todos para a pasta
-// de armazenamento (armazenamento.ts), numa fila só. Assistir pela rede dependia
-// da cota do Google (que bloqueia pastas muito acessadas), de conexão boa e do
-// seek ir e voltar ao Drive; com o arquivo local, o player é o mesmo dos cursos
-// do disco. Enquanto uma aula não chega, ela continua tocando pela rede.
+// Os downloads das aulas e materiais do Drive e do Telegram, numa fila só.
+// Assistir pela rede dependia da cota do Google (que bloqueia pastas muito
+// acessadas), de conexão boa e do seek ir e voltar ao Drive; com o arquivo local,
+// o player é o mesmo dos cursos do disco. Enquanto uma aula não chega, ela
+// continua tocando pela rede.
 //
 // Dois tipos de pedido, na mesma fila para nunca baixarem o mesmo arquivo ao
 // mesmo tempo (antes eram duas filas, e isso acontecia):
-// - a janela: abrir uma aula baixa ela e as JANELA seguintes. É o que passa na
-//   frente: abrir a aula 30 no meio do curso inteiro interrompe o arquivo atual
-//   (o `.part` fica), baixa a 30 e as próximas, e volta de onde parou;
-// - o curso inteiro ("Baixar"), aulas e materiais, um curso por
-//   vez, com progresso, retomada ao abrir o app e novas tentativas sozinho.
-// Nada é apagado aqui: o que foi baixado fica até a pessoa remover.
+// - a janela: abrir uma aula traz ela e as JANELA seguintes para o CACHE
+//   automático (cache-aulas.ts), que tem limite e se limpa sozinho. É o que passa
+//   na frente: abrir a aula 30 no meio do curso inteiro interrompe o arquivo
+//   atual (o `.part` fica), baixa a 30 e as próximas, e volta de onde parou.
+//   Antes a janela gravava na pasta de armazenamento, e o disco enchia de aulas
+//   que a pessoa nunca pediu para guardar;
+// - o "Baixar" (a aula, o curso inteiro com aulas e materiais), para a pasta de
+//   armazenamento, permanente: um curso por vez, com progresso, retomada ao abrir
+//   o app e novas tentativas sozinho. A aula que já está no cache é movida de lá,
+//   sem baixar de novo.
+// O que o "Baixar" trouxe nunca é apagado aqui; só o cache se limpa sozinho.
 
 const CHAVE_HEVC = 'player.hevc';
 /** Aulas seguintes à aberta que já vão sendo baixadas. */
@@ -153,6 +159,10 @@ export interface Baixador {
   pararTudo(esquecer: boolean): Promise<string[]>;
   /** Para os testes: espera a fila esvaziar. */
   aguardar(): Promise<void>;
+  /** A aula aberta e as próximas da janela: o cache nunca as apaga. */
+  janelaAtual(): Set<string>;
+  /** "Limpar cache": tira da janela o que ia para o cache e espera parar o arquivo em andamento. */
+  pararCache(): Promise<void>;
 }
 
 // Os cursos inteiros pedidos e ainda não terminados, na ordem do pedido. Ficam no
@@ -209,6 +219,8 @@ export function criarBaixador(deps: {
   // O arquivo sendo gravado agora, de qualquer pedido.
   let atual: { item: ItemBaixavel; ac: AbortController } | null = null;
   let cursoAtual: { id: string; ac: AbortController } | null = null;
+  // A última aula aberta: protegida no cache mesmo depois de sair da janela.
+  let ultimaPedida: string | null = null;
   let rodando: Promise<void> | null = null;
   // A fonte é montada uma vez por volta da fila: no Telegram ela abre a conexão.
   const fontes = new Map<string, Promise<BaixarArquivo | null>>();
@@ -247,8 +259,8 @@ export function criarBaixador(deps: {
     return f;
   };
 
-  const espacoLivre = () => {
-    const raiz = pastaDeArmazenamento(db, config);
+  const espacoLivre = (destino?: string) => {
+    const raiz = destino?.startsWith(config.cacheDir) ? config.cacheDir : pastaDeArmazenamento(db, config);
     try {
       const s = fs.statfsSync(fs.existsSync(raiz) ? raiz : path.dirname(raiz));
       return s.bavail * s.bsize;
@@ -257,14 +269,77 @@ export function criarBaixador(deps: {
     }
   };
 
-  const itemDe = (tipo: ItemBaixavel['tipo'], courseId: string, l: Linha): ItemBaixavel => ({
+  const itemDe = (
+    tipo: ItemBaixavel['tipo'],
+    courseId: string,
+    l: Linha,
+    destino: NonNullable<ItemBaixavel['destino']> = 'armazenamento',
+  ): ItemBaixavel => ({
     tipo,
     id: l.id,
     courseId,
     relPath: l.rel_path,
     remoteId: l.remote_id,
     tamanho: Number(l.size_bytes ?? 0),
+    destino,
   });
+
+  const protegidas = (): Set<string> => {
+    const ids = new Set(janela.filter((it) => it.destino === 'cache').map((it) => it.id));
+    if (ultimaPedida) ids.add(ultimaPedida);
+    if (atual?.item.destino === 'cache') ids.add(atual.item.id);
+    return ids;
+  };
+
+  // Arquivo a arquivo, e não o curso todo de uma vez: antes, um curso de 188 GB
+  // num disco com 148 GB livres nem começava ("sem espaço" com o disco longe de
+  // cheio). Agora baixa o que cabe e para só quando o próximo não cabe mais.
+  async function gravar(item: ItemBaixavel, destino: string, signal: AbortSignal): Promise<void> {
+    let jaTem = 0;
+    try {
+      jaTem = fs.statSync(`${destino}.part`).size;
+    } catch {
+      /* sem `.part` */
+    }
+    if (Math.max(item.tamanho - jaTem, 0) + FOLGA_NO_DISCO > espacoLivre(destino)) throw Object.assign(new Error('sem espaço'), { code: 'ENOSPC' });
+    const baixar = await fonte(item.courseId);
+    if (!baixar) throw new FalhaDrive('sem-conexao');
+    fs.mkdirSync(path.dirname(destino), { recursive: true });
+    await baixar(item.remoteId, destino, item.tamanho, signal);
+  }
+
+  const inteiro = (item: ItemBaixavel, destino: string) =>
+    fs.existsSync(destino) && (item.tamanho <= 0 || fs.statSync(destino).size === item.tamanho);
+
+  // A janela: a aula vai para o cache, com o id no nome. Converte lá mesmo, para a
+  // aula em formato que não toca ficar pronta sozinha.
+  async function baixarParaCache(item: ItemBaixavel, signal: AbortSignal): Promise<void> {
+    if (arquivoEmCache(db, item.id)) return;
+    // Maior que o cache inteiro: guardá-la apagaria todo o resto. Toca pela rede.
+    if (item.tamanho > limiteDoCache(db)) return;
+    const ext = path.extname(item.relPath).slice(1).toLowerCase();
+    const destino = caminhoNoCache(config, item.id, ext);
+    if (!inteiro(item, destino)) await gravar(item, destino, signal);
+    let final = destino;
+    let convertido = false;
+    if (!FOTO_EXTS.has(`.${ext}`)) {
+      try {
+        const saida = path.join(config.cacheDir, `${item.id}.convertendo.mp4`);
+        if (await prepararParaTocar(destino, saida, capacidadesSalvas(db))) {
+          final = caminhoNoCache(config, item.id, 'mp4');
+          fs.renameSync(saida, final);
+          if (final !== destino) fs.rmSync(destino, { force: true });
+          convertido = true;
+          db.prepare('UPDATE lessons SET playable=1 WHERE id=?').run(item.id);
+        }
+      } catch {
+        // Conversão que falha não perde o arquivo: o player tenta o original e,
+        // se não tocar, oferece converter de novo.
+      }
+    }
+    registrarEmCache(db, item.id, final, convertido);
+    liberarCache(db, protegidas());
+  }
 
   // Na ordem do curso (as primeiras aulas, que a pessoa assiste primeiro, chegam
   // antes); os materiais por último.
@@ -279,25 +354,16 @@ export function criarBaixador(deps: {
   }
 
   async function baixarItem(item: ItemBaixavel, destino: string, signal: AbortSignal): Promise<void> {
-    // Já está lá inteiro (o app fechou entre gravar e registrar): só registra.
-    const inteiro = fs.existsSync(destino) && (item.tamanho <= 0 || fs.statSync(destino).size === item.tamanho);
-    if (!inteiro) {
-      // Arquivo a arquivo, e não o curso todo de uma vez: antes, um curso de 188 GB
-      // num disco com 148 GB livres nem começava ("sem espaço" com o disco longe de
-      // cheio). Agora baixa o que cabe e para só quando o próximo não cabe mais.
-      let jaTem = 0;
-      try {
-        jaTem = fs.statSync(`${destino}.part`).size;
-      } catch {
-        /* sem `.part` */
-      }
-      if (Math.max(item.tamanho - jaTem, 0) + FOLGA_NO_DISCO > espacoLivre()) throw Object.assign(new Error('sem espaço'), { code: 'ENOSPC' });
-      const baixar = await fonte(item.courseId);
-      if (!baixar) throw new FalhaDrive('sem-conexao');
-      fs.mkdirSync(path.dirname(destino), { recursive: true });
-      await baixar(item.remoteId, destino, item.tamanho, signal);
+    // Já está no cache: vai de lá para a pasta de armazenamento, sem baixar de novo.
+    const promovido = item.tipo === 'aula' ? promoverDoCache(db, config, item) : null;
+    if (promovido) {
+      if (arquivoBaixado(db, config, 'aula', item.id)?.convertido) return;
+      destino = promovido;
+    } else {
+      // Já está lá inteiro (o app fechou entre gravar e registrar): só registra.
+      if (!inteiro(item, destino)) await gravar(item, destino, signal);
+      registrarBaixado(db, item, destino);
     }
-    registrarBaixado(db, item, destino);
     // Foto não passa pelo ffmpeg: ele a "converteria" num vídeo de um quadro.
     if (item.tipo !== 'aula' || FOTO_EXTS.has(path.extname(destino).toLowerCase())) return;
     try {
@@ -319,7 +385,9 @@ export function criarBaixador(deps: {
       const ac = new AbortController();
       atual = { item, ac };
       try {
-        if (!arquivoBaixado(db, config, 'aula', item.id)) await baixarItem(item, destinoDe(db, config, item), ac.signal);
+        if (item.destino === 'cache') {
+          if (!arquivoBaixado(db, config, 'aula', item.id)) await baixarParaCache(item, ac.signal);
+        } else if (!arquivoBaixado(db, config, 'aula', item.id)) await baixarItem(item, destinoDe(db, config, item), ac.signal);
         est.erro = null;
         if (janela[0] === item) janela.shift();
         avulsas = avulsas.filter((a) => a.id !== item.id);
@@ -491,6 +559,7 @@ export function criarBaixador(deps: {
         .prepare("SELECT l.course_id, l.order_index FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id=? AND c.source IN ('drive','telegram')")
         .get(lessonId) as { course_id: string; order_index: number } | undefined;
       if (!aula || !config.downloadsDir) return;
+      ultimaPedida = lessonId;
       // A aberta e as próximas ainda não concluídas: a concluída a pessoa já viu, e
       // baixá-la só ocuparia disco.
       const linhas = db
@@ -501,7 +570,10 @@ export function criarBaixador(deps: {
            ORDER BY l.order_index LIMIT ?`,
         )
         .all(aula.course_id, aula.order_index, lessonId, JANELA + 1) as Linha[];
-      janela = linhas.map((l) => itemDe('aula', aula.course_id, l)).filter((it) => !arquivoBaixado(db, config, 'aula', it.id));
+      // Para o cache; a já baixada ("Baixar") ou já no cache não vai de novo.
+      janela = linhas
+        .map((l) => itemDe('aula', aula.course_id, l, 'cache'))
+        .filter((it) => !arquivoBaixado(db, config, 'aula', it.id) && !arquivoEmCache(db, it.id));
       avulsas = avulsas.filter((a) => !arquivoBaixado(db, config, 'aula', a.id));
       janela.push(...avulsas.filter((a) => !janela.some((it) => it.id === a.id)));
       for (const [id, e] of janelas) if (id !== aula.course_id) e.ativo = false;
@@ -523,7 +595,11 @@ export function criarBaixador(deps: {
       if (!l || !config.downloadsDir || arquivoBaixado(db, config, 'aula', l.id)) return;
       const item = itemDe('aula', l.course_id, l);
       if (!avulsas.some((a) => a.id === l.id)) avulsas.push(item);
-      if (!janela.some((it) => it.tipo === 'aula' && it.id === l.id)) janela.push(item);
+      const naJanela = janela.find((it) => it.tipo === 'aula' && it.id === l.id && it !== atual?.item);
+      // Ia para o cache e ainda não começou: passa a ir para a pasta de armazenamento.
+      // A que está sendo gravada no cache termina lá e é movida pelo pedido novo.
+      if (naJanela) naJanela.destino = 'armazenamento';
+      else janela.push(item);
       const e = janelas.get(l.course_id);
       if (e) Object.assign(e, { ativo: true, erro: null });
       else janelas.set(l.course_id, { ativo: true, erro: null });
@@ -616,6 +692,15 @@ export function criarBaixador(deps: {
     },
     async aguardar() {
       while (rodando) await rodando;
+    },
+    janelaAtual: () => protegidas(),
+    async pararCache() {
+      janela = janela.filter((it) => it.destino !== 'cache');
+      if (atual?.item.destino === 'cache') {
+        const it = atual.item;
+        atual.ac.abort(PARAR);
+        while (atual?.item === it) await new Promise((r) => setTimeout(r, 50));
+      }
     },
   };
   return baixador;

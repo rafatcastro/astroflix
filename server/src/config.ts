@@ -18,6 +18,8 @@ export interface AppConfig {
   convertedDir: string;
   /** Cópias locais dos cursos do Google Drive (uma pasta por curso). */
   downloadsDir: string;
+  /** O cache automático das aulas remotas (cache-aulas.ts): limitado, o app limpa sozinho. */
+  cacheDir: string;
 }
 
 // Raízes navegáveis padrão no seletor de pastas. No macOS, compartilhamentos de
@@ -76,5 +78,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     thumbsDir: path.join(dataDir, 'thumbs'),
     convertedDir: path.join(dataDir, 'converted'),
     downloadsDir: path.join(dataDir, 'downloads'),
+    cacheDir: path.join(dataDir, 'cache'),
   };
 }

@@ -4,9 +4,10 @@ import type { Db } from './db';
 import type { AppConfig } from './config';
 
 // A pasta onde ficam as aulas e os materiais baixados do Drive e do Telegram,
-// com os nomes reais: <raiz>/<curso>/<rel_path>. É a única cópia que o app faz
-// (antes havia o cache com o id no nome e, à parte, o "Baixar para Downloads",
-// que baixava tudo de novo). A pessoa pode abrir a pasta e levar os arquivos
+// com os nomes reais: <raiz>/<curso>/<rel_path>. É a cópia que a pessoa pediu
+// ("Baixar"). A outra cópia que o app faz é o cache automático da aula aberta e
+// das próximas (cache-aulas.ts), que tem limite e se limpa sozinho; "Baixar" uma
+// aula que está lá move o arquivo para cá em vez de baixar de novo. A pessoa pode abrir a pasta e levar os arquivos
 // embora: o que não está mais lá volta a aparecer como não baixado, e toca pela
 // rede. O app nunca apaga nada sozinho; só quando a pessoa pede (Configurações,
 // menu do curso) ou exclui o curso.
@@ -26,6 +27,11 @@ export interface ItemBaixavel {
   relPath: string;
   remoteId: string;
   tamanho: number;
+  /**
+   * Para onde vai: o cache automático (a janela da aula aberta, cache-aulas.ts) ou
+   * a pasta de armazenamento (o "Baixar", permanente). Omitido = armazenamento.
+   */
+  destino?: 'cache' | 'armazenamento';
 }
 
 export function pastaDeArmazenamento(db: Db, config: AppConfig): string {
@@ -146,6 +152,8 @@ export function registrarBaixado(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' 
     `INSERT INTO baixados (tipo, item_id, course_id, arquivo, convertido) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(tipo, item_id) DO UPDATE SET course_id=excluded.course_id, arquivo=excluded.arquivo, convertido=excluded.convertido`,
   ).run(item.tipo, item.id, item.courseId, arquivo, convertido ? 1 : 0);
+  // Agora há arquivo local: a capa que tinha falhado pode sair dele.
+  if (item.tipo === 'aula') db.prepare('DELETE FROM capas_estado WHERE lesson_id=?').run(item.id);
 }
 
 /**
