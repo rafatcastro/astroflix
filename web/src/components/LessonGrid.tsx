@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { formatDuration } from '../lib/format';
 import type { LessonDTO } from '../api/client';
 import { IconeOffline } from './IconeOffline';
+import { CapaAula } from './CapaAula';
 
 export default function LessonGrid({
   lessons,
@@ -27,13 +28,7 @@ export default function LessonGrid({
           <Link to={`/lesson/${l.id}`}>
             {/* Tocar pela rede é o normal da aula remota: nada de cinza. Só a que falta no disco fica apagada. */}
             <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : ''}`}>
-              <img
-                src={api.lessonThumbUrl(l.id)}
-                alt=""
-                className="absolute inset-0 h-full w-full object-cover"
-                loading="lazy"
-                onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-              />
+              <CapaAula src={api.lessonThumbUrl(l.id)} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
               {l.missing && <span className="absolute left-1 top-1 rounded bg-amber-900/80 px-1 text-[10px] text-amber-200">não encontrada</span>}
             </div>
             <div className="p-2">

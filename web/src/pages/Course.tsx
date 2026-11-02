@@ -17,6 +17,7 @@ import HelpLink from '../components/HelpLink';
 import { IconeOffline } from '../components/IconeOffline';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
 import { ArrowLeft, Play, Check, List, LayoutGrid, Cards, ChevronRight } from '../components/icons';
+import { CapaAula } from '../components/CapaAula';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
   const notCompleted = lessons.filter((l) => !l.completed && !l.missing && l.playable);
@@ -127,13 +128,7 @@ export default function Course() {
         to={`/lesson/${l.id}`}
         className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
       >
-        <img
-          src={api.lessonThumbUrl(l.id)}
-          alt=""
-          className="aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover"
-          loading="lazy"
-          onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-        />
+        <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover" loading="lazy" />
         <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate">{titulo}</span>
@@ -262,12 +257,7 @@ export default function Course() {
           studio-black — o conteúdo ilumina o palco (cinema pessoal). Puramente
           decorativo (aria-hidden); some sozinho quando não há capa. */}
       <div className="pointer-events-none absolute inset-x-0 top-0 h-[26rem] overflow-hidden" aria-hidden>
-        <img
-          src={api.courseCoverUrl(id)}
-          alt=""
-          className="h-full w-full scale-110 object-cover opacity-35 blur-2xl"
-          onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
-        />
+        <CapaAula src={api.courseCoverUrl(id)} className="h-full w-full scale-110 object-cover opacity-35 blur-2xl" ocultar="display" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-studio-black/40 to-studio-black" />
       </div>
 
@@ -363,11 +353,9 @@ export default function Course() {
           className="mt-6 flex w-full items-center gap-4 rounded-xl bg-neutral-900/80 p-4 text-left outline-none backdrop-blur-sm transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600 sm:gap-5"
         >
           <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-neutral-800 sm:w-44">
-            <img
+            <CapaAula
               src={api.lessonThumbUrl(cont.id)}
-              alt=""
               className="absolute inset-0 h-full w-full object-cover"
-              onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
             />
           </div>
           <div className="min-w-0 flex-1">

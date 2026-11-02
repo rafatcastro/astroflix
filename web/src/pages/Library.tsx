@@ -16,6 +16,7 @@ import { api, type BatchImportResult, type Collection, type CourseRoot, type Cou
 import FfmpegBanner from '../components/FfmpegBanner';
 import Banner from '../components/Banner';
 import { Check, Play, Settings as SettingsIcon } from '../components/icons';
+import { CapaAula } from '../components/CapaAula';
 
 // Parede de capas responsiva sem cliffs de breakpoint: as colunas se ajustam ao
 // espaço, mantendo o tamanho do card constante (auto-fill).
@@ -72,14 +73,11 @@ function CourseCard({
       <div className="absolute inset-0 grid place-items-center bg-neutral-900 text-neutral-700">
         <Play size={featured ? 48 : 32} />
       </div>
-      <img
+      <CapaAula
         src={api.courseCoverUrl(c.id)}
-        alt=""
         className="absolute inset-0 h-full w-full object-cover transition duration-200 ease-out group-hover:scale-[1.03] group-hover:brightness-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100"
         loading="lazy"
-        onError={(e) => {
-          (e.currentTarget as HTMLImageElement).style.display = 'none';
-        }}
+        ocultar="display"
       />
       {/* Canto superior: seleção (esquerda) e menu ⋯ (direita), sobre a capa. */}
       {selectable && (
@@ -165,13 +163,7 @@ function CourseRow({
         <div className="absolute inset-0 grid place-items-center text-neutral-700">
           <Play size={20} />
         </div>
-        <img
-          src={api.courseCoverUrl(c.id)}
-          alt=""
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-        />
+        <CapaAula src={api.courseCoverUrl(c.id)} loading="lazy" className="absolute inset-0 h-full w-full object-cover" ocultar="display" />
       </div>
       <div className="min-w-0 flex-1">
         {eyebrow && <div className="text-xs uppercase tracking-wide text-blue-400">Continuar</div>}

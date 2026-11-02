@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { formatDuration } from '../lib/format';
 import { caminhoDaAula, montarArvore, type No } from '../lib/arvore';
 import { ChevronRight } from './icons';
+import { CapaAula } from './CapaAula';
 
 // Lista de aulas ao lado do vídeo (estilo YouTube): fica sempre à vista, então
 // trocar de aula não pede abrir painel nem sair da tela cheia. A aula atual vem
@@ -99,13 +100,7 @@ export default function PlaylistSidebar({
             {estado || posicao.get(l.id)}
           </span>
           <span className="relative shrink-0">
-            <img
-              src={api.lessonThumbUrl(l.id)}
-              alt=""
-              className="aspect-video w-24 rounded bg-neutral-800 object-cover"
-              loading="lazy"
-              onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
-            />
+            <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-24 rounded bg-neutral-800 object-cover" loading="lazy" />
             {l.durationSec != null && (
               <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
                 {formatDuration(l.durationSec)}
