@@ -50,7 +50,7 @@ export function registrarFalhaDeCapa(db: Db, lessonId: string, motivo: Exclude<R
 }
 
 export function criarFilaCapas(
-  deps: Omit<DepsCapa, 'porta' | 'esperarSemVideo'>,
+  deps: Omit<DepsCapa, 'porta' | 'videoTocando'>,
 ): FilaCapas & { definirPorta(porta: number): void; aguardar(): Promise<void> } {
   const { db } = deps;
   // O fim da lista é o topo: o último pedido sai primeiro.
@@ -61,10 +61,7 @@ export function criarFilaCapas(
   let ultimoVideo = 0;
   let vazia: Array<() => void> = [];
 
-  const esperarSemVideo = async () => {
-    while (Date.now() - ultimoVideo < SILENCIO_DO_VIDEO) await new Promise((r) => setTimeout(r, 5000));
-  };
-  const depsCapa: DepsCapa = { ...deps, porta: () => porta, esperarSemVideo };
+  const depsCapa: DepsCapa = { ...deps, porta: () => porta, videoTocando: () => Date.now() - ultimoVideo < SILENCIO_DO_VIDEO };
 
   async function gerar(lessonId: string): Promise<void> {
     let r: ResultadoCapa;

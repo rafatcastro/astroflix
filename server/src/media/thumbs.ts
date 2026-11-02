@@ -71,8 +71,8 @@ export interface DepsCapa {
   telegram?: ServicosTelegram;
   /** A porta em que o servidor escuta (o ffmpeg lê o stream por ela); null antes de escutar. */
   porta: () => number | null;
-  /** Espera não haver vídeo remoto tocando, para o ffmpeg não disputar a banda com a aula. */
-  esperarSemVideo: () => Promise<void>;
+  /** Há vídeo remoto tocando: o ffmpeg não lê pela rede agora, para não disputar a banda com a aula. */
+  videoTocando: () => boolean;
 }
 
 // Rede para a origem: o Drive aguenta algumas ao mesmo tempo; o Telegram, uma (limite de flood).
@@ -162,8 +162,11 @@ export async function gerarCapa(deps: DepsCapa, lessonId: string): Promise<Resul
   if (!hasFfmpeg()) return 'sem-ffmpeg';
   const porta = deps.porta();
   if (!porta) return 'rede';
+  // Esperar aqui prenderia os trabalhadores da fila, e nem as miniaturas da origem
+  // andariam enquanto a pessoa assiste: devolve 'rede' e tenta daqui a 5 minutos.
+  if (deps.videoTocando()) return 'rede';
   return limiteFfmpegRemoto(async () => {
-    await deps.esperarSemVideo();
+    if (deps.videoTocando()) return 'rede';
     try {
       await extractFrame(`http://127.0.0.1:${porta}/api/lessons/${lessonId}/stream`, pickFrameTimestamp(row.duration_sec), out, {
         timeoutMs: 30_000,

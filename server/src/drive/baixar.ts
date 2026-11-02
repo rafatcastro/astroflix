@@ -337,6 +337,8 @@ export function criarBaixador(deps: {
         // se não tocar, oferece converter de novo.
       }
     }
+    // "Limpar cache" no meio de uma conversão: o arquivo já não existe.
+    if (!fs.existsSync(final)) return;
     registrarEmCache(db, item.id, final, convertido);
     liberarCache(db, protegidas());
   }
@@ -699,7 +701,11 @@ export function criarBaixador(deps: {
       if (atual?.item.destino === 'cache') {
         const it = atual.item;
         atual.ac.abort(PARAR);
-        while (atual?.item === it) await new Promise((r) => setTimeout(r, 50));
+        // O download para na hora; uma conversão em andamento não tem como ser
+        // interrompida e pode levar minutos. Não prende o "Limpar cache" por ela:
+        // o arquivo apagado no meio só faz aquela aula não entrar no cache.
+        const ate = Date.now() + 10_000;
+        while (atual?.item === it && Date.now() < ate) await new Promise((r) => setTimeout(r, 50));
       }
     },
   };
