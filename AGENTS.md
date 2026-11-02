@@ -86,7 +86,8 @@ Lidas em `server/src/config.ts`:
 - `PORT`: padrão 7777. Se estiver ocupada, o app anda para a próxima (ver `listen.ts`).
 - `BIND`: padrão 127.0.0.1.
 - `DATA_DIR`: padrão `~/.astroflix`, ou `%LOCALAPPDATA%\Astroflix` no Windows. Guarda `app.db`,
-  `thumbs/`, `converted/` e `downloads/` (pasta de armazenamento padrão dos cursos do Drive e do Telegram).
+  `thumbs/`, `converted/`, `downloads/` (pasta de armazenamento padrão dos cursos do Drive e do Telegram)
+  e `cache/` (o cache automático das aulas remotas, com limite).
 - `ALLOWED_ROOTS`: separado por `:` ou `;`. O padrão é a home do usuário, mais `/Volumes` no macOS,
   `/media` e `/mnt` no Linux, e as unidades detectadas sob demanda no Windows (`roots.ts`).
 - `AUTOCOMPLETE_THRESHOLD`: padrão 0.9.
@@ -152,16 +153,23 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   mapeiam os erros, `credenciais` resolve a precedência acima e `servicos` monta tudo para as rotas.
   `routes/drive.ts` expõe a API e `scan/scan-drive.ts` ingere a pasta como `scan-course` faz com a
   local. Colar o link cria o curso assim que a raiz responde; a listagem continua em segundo plano
-  (`importacaoDrive`). **Downloads** (`drive/baixar.ts`, Drive e Telegram, uma fila só): todo
-  arquivo vai para a **pasta de armazenamento** (`armazenamento.ts`; padrão `DATA_DIR/downloads`,
-  configurável em Configurações → Armazenamento) com o nome real, `<raiz>/<curso>/<rel_path>`,
-  registrado na tabela `baixados` (v11, só local, sem nuvem). Dois pedidos: **abrir uma aula**
-  (`GET /api/lessons/:id` → `baixador.pedirAula`) baixa ela e as `JANELA` (2) seguintes não
-  concluídas e passa na frente (interrompe o arquivo atual, o `.part` fica); **"Baixar"**
-  (menu ⋯ do curso, do cartão e da categoria) traz aulas e materiais, com o painel de
-  downloads, retomada ao abrir o app e novas tentativas. Retoma `.part` com Range; aula que não toca
-  é convertida (`media/preparar.ts`) e o `.mp4` toma o lugar do original. **Nada é apagado
-  sozinho**: só "Remover download" (curso) ou "Limpar tudo" (Configurações). Excluir o curso deixa
+  (`importacaoDrive`). **Downloads** (`drive/baixar.ts`, Drive e Telegram, uma fila só), dois
+  pedidos com destinos diferentes. **Abrir uma aula** (`GET /api/lessons/:id` →
+  `baixador.pedirAula`) traz ela e as `JANELA` (2) seguintes não concluídas para o **cache
+  automático** (`cache-aulas.ts`, `DATA_DIR/cache/<lessonId>.<ext>`, tabela `cache_aulas` v14, só
+  local) e passa na frente (interrompe o arquivo atual, o `.part` fica). O cache tem limite
+  (padrão 10 GB, de 2 a 100 GB, Configurações → Armazenamento) e é a **única coisa que o app apaga
+  sozinho**: passou do limite, saem as concluídas e depois as usadas há mais tempo; a aula aberta e
+  a janela nunca. Aula maior que o limite não entra e toca pela rede. Excluir o curso apaga o cache
+  dele; `varrerCache` tira o que ficou sem dono ao abrir. **"Baixar"** (botão direito da aula, menu ⋯
+  do curso, do cartão e da categoria) grava na **pasta de armazenamento** (`armazenamento.ts`;
+  padrão `DATA_DIR/downloads`, configurável) com o nome real, `<raiz>/<curso>/<rel_path>`,
+  registrado na tabela `baixados` (v11, só local, sem nuvem), com o painel de downloads, retomada
+  ao abrir o app e novas tentativas; a aula que já está no cache é movida de lá
+  (`promoverDoCache`), sem baixar de novo. Retoma `.part` com Range; aula que não toca é convertida
+  (`media/preparar.ts`) e o `.mp4` toma o lugar do original (no cache, também). O stream prefere o
+  baixado, depois o cache, depois a origem. **O que foi baixado nunca é apagado sozinho**: só
+  "Remover download" (curso) ou "Limpar tudo" (Configurações), que não toca o cache. Excluir o curso deixa
   os arquivos; importá-lo de novo (mesmo nome, mesma pasta) os adota em vez de baixar outra vez
   (`adotarArquivosDaPasta`, ao abrir o curso). **Conectar a uma pasta** (menu ⋯ do curso
   remoto, v12 `pastas_baixadas.conectada`): uma pasta da pessoa vira a pasta do curso. O que já está
@@ -231,7 +239,16 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   interface (`web/src/lib/pomodoro.tsx`, estado com a hora do fim da fase no localStorage): na pausa,
   a aula para e não toca (`BloqueioDaPausa`) até acabar ou ser pulada; o fim da pausa espera a
   pessoa começar o próximo foco.
-- `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas.
+- `media/`: `ffmpeg.ts` detecta ffmpeg/ffprobe e `thumbs.ts` gera as capas. As rotas de capa só
+  respondem com o que está no disco (`capaNoDisco`) e, se falta, pedem à `fila-capas.ts` e devolvem
+  404 na hora (esperar a rede prendia as conexões da janela). A fila é LIFO (o que está na tela
+  primeiro), até 500 pedidos, e gera nesta ordem: ffmpeg sobre o arquivo local (aula local, baixada
+  ou no cache), miniatura da origem (Drive, Telegram) e ffmpeg lendo um quadro do próprio stream
+  (`http://127.0.0.1:<porta>`, 30 s de limite, uma por vez, pausado enquanto há vídeo remoto
+  tocando). A falha fica em `capas_estado` (v14, só local): `rede` tenta de novo em 5 min,
+  `sem-capa` em 1 h, 6 h, 24 h e depois a cada 7 dias, `sem-ffmpeg` quando o app abrir com ffmpeg.
+  Na interface, `CapaAula.tsx` tenta de novo em 5, 15 e 45 s. `varrerCapas` tira as órfãs de
+  `thumbs/` ao abrir.
 - `listen.ts`, `banner.ts`, `desktop.ts`: porta ocupada, mensagem de boot, PATH do ffmpeg e a linha
   `LEARNFLIX_URL=`.
 - `routes/`: um plugin por arquivo. SQL cru com prepared statements do `node:sqlite`, mapeando as
@@ -283,6 +300,8 @@ re-apontar preserva o histórico.
   ao Anki. Entram no backup (`flashcards` por curso, `flashcardsGerais`).
 - `progress` é uma tabela por aula, com `position_sec`, `furthest_sec` e
   `completed`/`auto_completed`.
+- `cache_aulas` e `capas_estado` (v14) são só desta máquina, sem gatilho da nuvem: o cache
+  automático das aulas remotas e o estado das capas que falharam.
 - As aulas são apagadas em cascata.
 - `courses.poster_lesson_id` aponta para a aula da capa.
 - `courses.collection_id` é `ON DELETE SET NULL`: excluir a biblioteca preserva os cursos.
