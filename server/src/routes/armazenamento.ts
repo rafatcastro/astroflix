@@ -7,7 +7,8 @@ import type { AppConfig } from '../config';
 import type { ServicosDrive } from '../drive/servicos';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
-import { apagarBaixados, definirPastaDeArmazenamento, pastaDeArmazenamento, usoDoArmazenamento } from '../armazenamento';
+import { apagarBaixados, definirPastaDeArmazenamento, pastaDeArmazenamento, usoDoArmazenamento as usoDosDownloads } from '../armazenamento';
+import { definirLimiteDoCache, liberarCache, limparCache, usoDoCache } from '../cache-aulas';
 
 // A seção Armazenamento das Configurações: quanto ocupa o que foi baixado, onde
 // fica (dá para trocar), abrir a pasta no Finder/Explorer e limpar.
@@ -24,6 +25,8 @@ function abrirNoSistema(pasta: string): void {
 
 export async function armazenamentoRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
   const { db, config, drive } = opts;
+  // O que foi baixado e, à parte, o cache automático (cache-aulas.ts).
+  const usoDoArmazenamento = (d: Db, c: AppConfig) => ({ ...usoDosDownloads(d, c), cache: usoDoCache(d) });
 
   app.get('/api/armazenamento', async () => usoDoArmazenamento(db, config));
 
@@ -72,6 +75,21 @@ export async function armazenamentoRoutes(app: FastifyInstance, opts: { db: Db; 
     fs.mkdirSync(pasta, { recursive: true });
     abrirNoSistema(pasta);
     return reply.code(204).send();
+  });
+
+  // O limite do cache automático. Baixar o limite apaga o que passou dele na hora.
+  app.put('/api/armazenamento/cache', async (req, reply) => {
+    const limite = (req.body as { limite?: unknown } | undefined)?.limite;
+    if (typeof limite !== 'number' || !definirLimiteDoCache(db, limite)) return reply.code(400).send({ error: 'limite-invalido' });
+    liberarCache(db, drive?.baixador.janelaAtual() ?? new Set());
+    return usoDoArmazenamento(db, config);
+  });
+
+  // "Limpar cache": só o cache automático; o que foi baixado fica.
+  app.delete('/api/armazenamento/cache', async () => {
+    await drive?.baixador.pararCache();
+    limparCache(db, config);
+    return usoDoArmazenamento(db, config);
   });
 
   // Limpar: para todos os downloads e apaga tudo o que o app baixou na pasta atual.

@@ -8,6 +8,7 @@ import { arquivoDoCurso, isWithinRoots } from './fs';
 import type { ServicosDrive } from '../drive/servicos';
 import { repassarDoDrive } from '../drive/stream';
 import { arquivoBaixado } from '../armazenamento';
+import { arquivoEmCache, tocarCache } from '../cache-aulas';
 import { resourceKeyDoCurso } from '../drive/status';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { repassarDoTelegram } from '../telegram/stream';
@@ -62,6 +63,12 @@ export async function streamRoutes(
       const copia = path.join(config.convertedDir, `${id}.mp4`);
       if (!baixada.convertido && fs.existsSync(copia)) return servirArquivo(req, reply, copia, 'video/mp4');
       return servirArquivo(req, reply, baixada.arquivo, baixada.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
+    }
+    // No cache automático (a aula aberta e as próximas): toca do disco também.
+    const emCache = remota ? arquivoEmCache(db, id) : null;
+    if (emCache) {
+      tocarCache(db, id);
+      return servirArquivo(req, reply, emCache.arquivo, emCache.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
     }
 
     // Ainda não baixada: o vídeo vem direto do Drive. Raízes permitidas não se

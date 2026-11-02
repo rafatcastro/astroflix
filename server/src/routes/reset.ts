@@ -38,7 +38,7 @@ export async function resetRoutes(app: FastifyInstance, opts: { db: Db; config: 
       db.prepare('DELETE FROM courses').run();
       db.prepare('DELETE FROM collections').run();
     });
-    for (const dir of [config.thumbsDir, config.convertedDir]) {
+    for (const dir of [config.thumbsDir, config.convertedDir, config.cacheDir]) {
       try {
         for (const f of fs.readdirSync(dir)) fs.rmSync(path.join(dir, f), { recursive: true, force: true });
       } catch {

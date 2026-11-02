@@ -11,6 +11,7 @@ import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
+import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
 
 // Só os três valores conhecidos saem na API; qualquer outra coisa é curso local.
@@ -385,6 +386,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     // outra vez (ver adotarArquivosDaPasta). Para apagar, "Remover download" antes.
     drive?.baixador.cancelar(id);
     await drive?.baixador.soltar(id);
+    // O cache é do app, ao contrário do que foi baixado: sem o curso, só ocuparia disco.
+    apagarCacheDoCurso(db, id);
     db.prepare('DELETE FROM courses WHERE id=?').run(id); // cascata remove lessons/progress/materials
     // Convertidos de curso local: sem o curso, só ocupariam disco.
     for (const lid of lessonIds) fs.rmSync(path.join(config.convertedDir ?? '', `${lid}.mp4`), { force: true });

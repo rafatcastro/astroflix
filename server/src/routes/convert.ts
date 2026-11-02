@@ -7,6 +7,7 @@ import { arquivoDoCurso } from './fs';
 import { classifyPlayback, hasFfmpeg, probeDurationSec, probeFormat, remuxToMp4, transcodeToMp4, type Capacidades } from '../media/ffmpeg';
 import { converterPara as gerarConvertido, naFilaDeRecodificacao } from '../media/preparar';
 import { adotarConvertido, arquivoBaixado, saidaDaConversao } from '../armazenamento';
+import { arquivoEmCache, caminhoNoCache, registrarEmCache } from '../cache-aulas';
 import { salvarCapacidades } from '../drive/baixar';
 
 // Verificação e conversão de reprodução. A extensão .mp4 mente no acervo real
@@ -28,14 +29,17 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
 
   // A aula do Drive ou do Telegram já baixada tem arquivo local como qualquer
   // outra: o que vale para ela é a cópia na pasta de armazenamento.
-  const lessonPath = (id: string): { file: string; courseId: string; remota?: boolean } | null => {
+  const lessonPath = (id: string): { file: string; courseId: string; remota?: boolean; cache?: boolean } | null => {
     const row = db
       .prepare('SELECT l.rel_path, l.course_id, c.root_path, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ?')
       .get(id) as any;
     if (!row) return null;
     if (row.source === 'drive' || row.source === 'telegram') {
       const local = arquivoBaixado(db, config, 'aula', id);
-      return local && !local.convertido ? { file: local.arquivo, courseId: row.course_id, remota: true } : null;
+      if (local) return !local.convertido ? { file: local.arquivo, courseId: row.course_id, remota: true } : null;
+      // No cache automático: converte lá mesmo, e a cópia convertida fica no cache.
+      const emCache = arquivoEmCache(db, id);
+      return emCache && !emCache.convertido ? { file: emCache.arquivo, courseId: row.course_id, cache: true } : null;
     }
     const file = arquivoDoCurso(row.root_path, row.rel_path);
     return file ? { file, courseId: row.course_id } : null;
@@ -48,7 +52,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
       .prepare("SELECT l.playable, l.rel_path, l.course_id, c.source FROM lessons l JOIN courses c ON c.id = l.course_id WHERE l.id = ? AND c.source IN ('drive','telegram')")
       .get(id) as { playable: number; rel_path: string; course_id: string; source: string } | undefined;
     if (!r) return null;
-    if (arquivoBaixado(db, config, 'aula', id)) return null;
+    if (arquivoBaixado(db, config, 'aula', id) || arquivoEmCache(db, id)) return null;
     return { playable: !!r.playable };
   };
 
@@ -61,9 +65,19 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
   const converterPara = async (
     id: string,
     gerar: (tmp: string) => Promise<void>,
-    loc: { file: string; courseId: string; remota?: boolean },
+    loc: { file: string; courseId: string; remota?: boolean; cache?: boolean },
     cap: Capacidades,
   ) => {
+    if (loc.cache) {
+      const final = caminhoNoCache(config, id, 'mp4');
+      const tmp = path.join(config.cacheDir, `${id}.convertendo.mp4`);
+      await gerarConvertido(loc.file, tmp, gerar, cap);
+      fs.renameSync(tmp, final);
+      if (final !== loc.file) fs.rmSync(loc.file, { force: true });
+      registrarEmCache(db, id, final, true);
+      setPlayable.run(1, id);
+      return;
+    }
     if (loc.remota) {
       const out = saidaDaConversao(db, config, id, loc.file);
       await gerarConvertido(loc.file, out, gerar, cap);
@@ -91,7 +105,7 @@ export async function convertRoutes(app: FastifyInstance, opts: { db: Db; config
     if (noDrive) return { playable: noDrive.playable, reason: noDrive.playable ? null : 'formato', remuxable: false, semArquivo: true };
     const id = (req.params as { id: string }).id;
     // Já convertido: o stream serve a cópia, então a aula toca (o original continua igual).
-    if (fs.existsSync(path.join(config.convertedDir, `${id}.mp4`)) || arquivoBaixado(db, config, 'aula', id)?.convertido) {
+    if (fs.existsSync(path.join(config.convertedDir, `${id}.mp4`)) || arquivoBaixado(db, config, 'aula', id)?.convertido || arquivoEmCache(db, id)?.convertido) {
       setPlayable.run(1, id);
       return { playable: true };
     }

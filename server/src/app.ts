@@ -38,6 +38,7 @@ import { contaRoutes } from './routes/conta';
 import { documentosRoutes } from './routes/documentos';
 import { credenciaisGoogle, descartarCredenciaisSalvas } from './drive/credenciais';
 import { migrarCacheAntigo } from './armazenamento';
+import { varrerCache } from './cache-aulas';
 import { descartarCredenciaisTelegram } from './telegram/credenciais';
 import { armazenamentoRoutes } from './routes/armazenamento';
 
@@ -165,6 +166,8 @@ export function buildApp(
     app.addHook('onReady', async () => {
       // O cache antigo (nomes por id) vira a pasta de armazenamento antes de a fila começar.
       migrarCacheAntigo(db, config);
+      // O cache sem dono (curso apagado pela sincronização, troca de conta, `.part` antigo).
+      varrerCache(db, config, drive.baixador.janelaAtual());
       // O app próprio do Google Cloud saiu das Configurações: a conexão feita com ele não vale mais.
       if (descartarCredenciaisSalvas(db)) await drive.auth.desconectar({ revogar: false });
       // O mesmo com o app próprio do Telegram; sem esperar, porque encerrar a sessão vai à rede.
