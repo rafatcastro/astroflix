@@ -30,11 +30,13 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config
 }
 
 const db = openDb(config.dbPath);
+let portaReal: number | null = null;
 if (mudanca?.movida) corrigirCaminhos(db, mudanca.antiga, config.dataDir);
 const app = buildApp(config, db, {
   retomarDownloads: true,
   exigirConta: true,
   aoBaixar: (baixando) => console.log(linhaDeDownload(baixando)),
+  porta: () => portaReal,
 });
 
 const shutdown = () => {
@@ -48,6 +50,7 @@ process.on('SIGINT', shutdown);
 async function subir(): Promise<void> {
   try {
     const { port, trocou } = await escutarComFallback(app, config.port, config.bind);
+    portaReal = port;
     const url = `http://localhost:${port}`;
 
     console.log(

@@ -6,6 +6,7 @@ import type { Fetch, LinkDrive } from '../drive/tipos';
 import { walkDrive, type ArquivoRemoto, type WalkDriveResult } from '../drive/walk';
 import { FalhaDrive } from '../drive/tipos';
 import { gravarCapaAtomico, lessonThumbPath } from '../media/thumbs';
+import { podeTentarCapa, registrarFalhaDeCapa } from '../media/fila-capas';
 import { deriveCourse } from './derive';
 import { aplicarReconcile, planReconcile, type ExistingLesson, type ReconcileResult } from './reconcile';
 import { inserirCursoDerivado, type ExtraRemoto } from './scan-course';
@@ -174,13 +175,17 @@ export async function baixarCapasFaltando(
   const aulas = db
     .prepare('SELECT id, rel_path, mtime FROM lessons WHERE course_id=?')
     .all(courseId) as Array<{ id: string; rel_path: string; mtime: number }>;
-  const fila = aulas.filter((a) => capas.has(a.rel_path));
+  // A que falhou há pouco espera a vez dela (capas_estado), como na fila sob demanda.
+  const fila = aulas.filter((a) => capas.has(a.rel_path) && podeTentarCapa(db, a.id));
   const gravar = db.prepare('UPDATE lessons SET thumb_path=? WHERE id=?');
 
   async function baixarUma(aula: { id: string; rel_path: string; mtime: number }): Promise<void> {
     try {
       const bytes = await baixarImagemDoGoogle(deps, capas.get(aula.rel_path)!);
-      if (!bytes) return;
+      if (!bytes) {
+        registrarFalhaDeCapa(db, aula.id, 'rede');
+        return;
+      }
       const destino = lessonThumbPath(deps.config, aula.id, aula.mtime);
       gravarCapaAtomico(destino, bytes);
       gravar.run(destino, aula.id);

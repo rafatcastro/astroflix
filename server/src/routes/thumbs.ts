@@ -3,9 +3,8 @@ import { existsSync } from 'node:fs';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
-import type { ServicosDrive } from '../drive/servicos';
-import { getOrCreateLessonThumb, setCourseCover } from '../media/thumbs';
-import type { ServicosTelegram } from '../telegram/servicos';
+import { capaNoDisco, setCourseCover } from '../media/thumbs';
+import type { FilaCapas } from '../media/fila-capas';
 
 function sendImage(reply: FastifyReply, filePath: string) {
   reply.header('Content-Type', 'image/jpeg');
@@ -15,13 +14,22 @@ function sendImage(reply: FastifyReply, filePath: string) {
 
 export async function thumbsRoutes(
   app: FastifyInstance,
-  opts: { db: Db; config: AppConfig; drive?: ServicosDrive; telegram?: ServicosTelegram },
+  opts: { db: Db; config: AppConfig; capas: FilaCapas },
 ): Promise<void> {
-  const { db, config, drive, telegram } = opts;
+  const { db, config, capas } = opts;
+
+  // Responde só com o que já está no disco. Sem capa, pede à fila e devolve 404 na
+  // hora: a interface tenta de novo daqui a pouco (CapaAula.tsx). Esperar a rede
+  // aqui prendia as conexões da janela com o servidor (ver fila-capas.ts).
+  const capaOuPedir = (lessonId: string): string | null => {
+    const out = capaNoDisco(db, config, lessonId);
+    if (!out) capas.pedir(lessonId);
+    return out;
+  };
 
   app.get('/api/lessons/:id/thumb', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    const out = await getOrCreateLessonThumb(db, config, id, drive, telegram);
+    const out = capaOuPedir(id);
     if (!out) return reply.code(404).send({ error: 'no_thumb' });
     return sendImage(reply, out);
   });
@@ -32,7 +40,7 @@ export async function thumbsRoutes(
     if (!course) return reply.code(404).send({ error: 'not_found' });
     if (course.cover_path && existsSync(course.cover_path)) return sendImage(reply, course.cover_path);
     if (course.poster_lesson_id) {
-      const out = await getOrCreateLessonThumb(db, config, course.poster_lesson_id, drive, telegram);
+      const out = capaOuPedir(course.poster_lesson_id);
       if (out) return sendImage(reply, out);
     }
     return reply.code(404).send({ error: 'no_cover' });

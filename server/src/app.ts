@@ -39,6 +39,9 @@ import { documentosRoutes } from './routes/documentos';
 import { credenciaisGoogle, descartarCredenciaisSalvas } from './drive/credenciais';
 import { migrarCacheAntigo } from './armazenamento';
 import { varrerCache } from './cache-aulas';
+import { criarFilaCapas } from './media/fila-capas';
+import { varrerCapas } from './media/thumbs';
+import { hasFfmpeg } from './media/ffmpeg';
 import { descartarCredenciaisTelegram } from './telegram/credenciais';
 import { armazenamentoRoutes } from './routes/armazenamento';
 
@@ -59,6 +62,8 @@ export function buildApp(
     exigirConta?: boolean;
     /** Só o app de verdade: avisa a casca desktop quando um "Baixar" começa ou termina. */
     aoBaixar?: (baixando: boolean) => void;
+    /** A porta em que o servidor acabou escutando (a 7777 pode estar ocupada): o ffmpeg das capas lê o stream por ela. */
+    porta?: () => number | null;
   },
 ): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -72,6 +77,22 @@ export function buildApp(
   // Uma instância só: a fila de envio ao Anki não pode ter duas cópias correndo.
   // Nada fala com o Anki até alguém abrir os flashcards.
   const anki = criarServicosAnki(db, opts?.anki ?? criarClienteAnki());
+  // Uma instância só: a fila das capas que faltam, com o registro das que falharam.
+  const capas = criarFilaCapas({ db, config, drive, telegram });
+  if (opts?.porta) {
+    const porta = opts.porta;
+    app.addHook('onReady', async () => {
+      // A porta só existe depois do listen; a fila pergunta quando precisar.
+      const conferir = setInterval(() => {
+        const p = porta();
+        if (p) {
+          capas.definirPorta(p);
+          clearInterval(conferir);
+        }
+      }, 500);
+      conferir.unref();
+    });
+  }
 
   // Conta e nuvem (nuvem/). Sem projeto Supabase no build, o app roda sem conta.
   const cfgNuvem = configSupabase();
@@ -142,9 +163,9 @@ export function buildApp(
   app.register(fsRoutes, { config, db });
   app.register(coursesRoutes, { db, config, drive });
   app.register(lessonsRoutes, { db, config, drive });
-  app.register(streamRoutes, { db, config, drive, telegram });
+  app.register(streamRoutes, { db, config, drive, telegram, capas });
   app.register(infoRoutes);
-  app.register(thumbsRoutes, { db, config, drive, telegram });
+  app.register(thumbsRoutes, { db, config, capas });
   app.register(migrationRoutes, { db, config, drive, telegram });
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
@@ -168,6 +189,9 @@ export function buildApp(
       migrarCacheAntigo(db, config);
       // O cache sem dono (curso apagado pela sincronização, troca de conta, `.part` antigo).
       varrerCache(db, config, drive.baixador.janelaAtual());
+      varrerCapas(db, config);
+      // Instalaram o ffmpeg desde a última vez: as capas que esperavam por ele tentam de novo.
+      if (hasFfmpeg()) db.prepare("DELETE FROM capas_estado WHERE motivo='sem-ffmpeg'").run();
       // O app próprio do Google Cloud saiu das Configurações: a conexão feita com ele não vale mais.
       if (descartarCredenciaisSalvas(db)) await drive.auth.desconectar({ revogar: false });
       // O mesmo com o app próprio do Telegram; sem esperar, porque encerrar a sessão vai à rede.

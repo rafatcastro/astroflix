@@ -182,6 +182,7 @@ export function aplicarReconcile(
     INSERT INTO lessons (id, course_id, rel_path, module, title, order_index, module_order, duration_sec, size_bytes, mtime, container, playable, thumb_path, missing, remote_id)
     VALUES (@id, @course_id, @rel_path, @module, @title, @order_index, @module_order, @duration_sec, @size_bytes, @mtime, @container, @playable, NULL, 0, @remote_id)
   `);
+  const esquecerFalhaDeCapa = db.prepare('DELETE FROM capas_estado WHERE lesson_id=? AND (SELECT mtime FROM lessons WHERE id=?) <> ?');
   const markMissing = db.prepare('UPDATE lessons SET missing=1, order_index=@order_index WHERE id=@id');
   // Upsert por (course_id, rel_path): mantém o ID ESTÁVEL de materiais que já
   // existiam. Apagar+reinserir a cada rescan trocava os ids toda vez — e como a
@@ -197,6 +198,8 @@ export function aplicarReconcile(
   transaction(db, () => {
     for (const m of [...plan.matched, ...plan.relinked]) {
       const d = m.derived;
+      // Arquivo reenviado (mtime novo): a capa que tinha falhado pode existir agora.
+      esquecerFalhaDeCapa.run(m.id, m.id, d.mtime);
       updateLesson.run({
         id: m.id, rel_path: d.relPath, module: d.module, title: d.title, order_index: d.orderIndex,
         module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime, container: d.container,

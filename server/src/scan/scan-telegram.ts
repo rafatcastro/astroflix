@@ -5,6 +5,7 @@ import type { ClienteTelegram, GrupoTelegram } from '../telegram/cliente';
 import { montarCurso, pastasDosTopicos, type CursoTelegram } from '../telegram/mensagens';
 import { FalhaTelegram, type PeerTelegram, type TopicoTelegram } from '../telegram/tipos';
 import { gravarCapaAtomico, lessonThumbPath } from '../media/thumbs';
+import { podeTentarCapa, registrarFalhaDeCapa } from '../media/fila-capas';
 import { deriveCourse, type DerivedCourse } from './derive';
 import { aplicarReconcile, planReconcile, type ExistingLesson, type ReconcileResult } from './reconcile';
 import { inserirCursoDerivado, type ExtraRemoto } from './scan-course';
@@ -138,7 +139,7 @@ async function baixarCapas(db: Db, deps: DepsTelegram, courseId: string, peer: P
       remote_id: string | null;
       thumb_path: string | null;
     }>
-  ).filter((a) => a.remote_id && comMiniatura.has(a.rel_path) && !(a.thumb_path && fs.existsSync(a.thumb_path)));
+  ).filter((a) => a.remote_id && comMiniatura.has(a.rel_path) && !(a.thumb_path && fs.existsSync(a.thumb_path)) && podeTentarCapa(db, a.id));
 
   // Em lotes de LOTE_CAPAS: as mensagens do lote vêm num pedido só, e só então as capas dele.
   for (let inicio = 0; inicio < aulas.length; inicio += LOTE_CAPAS) {
@@ -167,6 +168,11 @@ async function baixarLote(
         gravar.run(destino, aula.id);
       } catch {
         // Capa que falha (rede, mensagem apagada) vira placeholder; não bloqueia o curso.
+        try {
+          registrarFalhaDeCapa(db, aula.id, 'rede');
+        } catch {
+          /* aula apagada no meio */
+        }
       }
     }
   };

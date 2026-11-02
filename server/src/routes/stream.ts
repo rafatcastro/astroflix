@@ -13,6 +13,8 @@ import { resourceKeyDoCurso } from '../drive/status';
 import type { ServicosTelegram } from '../telegram/servicos';
 import { repassarDoTelegram } from '../telegram/stream';
 import type { PeerTelegram } from '../telegram/tipos';
+import type { FilaCapas } from '../media/fila-capas';
+import { CABECALHO_CAPA } from '../media/thumbs';
 
 const CONTENT_TYPES: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
@@ -43,9 +45,9 @@ export function parseRange(header: string | undefined, size: number): { start: n
 
 export async function streamRoutes(
   app: FastifyInstance,
-  opts: { db: Db; config: AppConfig; drive?: ServicosDrive; telegram?: ServicosTelegram },
+  opts: { db: Db; config: AppConfig; drive?: ServicosDrive; telegram?: ServicosTelegram; capas?: FilaCapas },
 ): Promise<void> {
-  const { db, config, drive, telegram } = opts;
+  const { db, config, drive, telegram, capas } = opts;
 
   app.get('/api/lessons/:id/stream', async (req, reply) => {
     const id = (req.params as { id: string }).id;
@@ -70,6 +72,9 @@ export async function streamRoutes(
       tocarCache(db, id);
       return servirArquivo(req, reply, emCache.arquivo, emCache.convertido ? 'video/mp4' : (CONTENT_TYPES[row.container] ?? 'application/octet-stream'));
     }
+
+    // Vai pela rede: o ffmpeg das capas espera, para não disputar a banda com a aula.
+    if (remota && !req.headers[CABECALHO_CAPA]) capas?.videoRemotoTocando();
 
     // Ainda não baixada: o vídeo vem direto do Drive. Raízes permitidas não se
     // aplicam (não há caminho do disco).

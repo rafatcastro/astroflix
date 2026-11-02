@@ -207,14 +207,46 @@ export async function validateConverted(
   return Math.abs(dOrig - dConv) <= 2;
 }
 
-export function extractFrame(videoPath: string, atSec: number, outPath: string, width = 480): Promise<void> {
+/**
+ * Um quadro do vídeo como JPEG. `entrada` pode ser um arquivo ou uma URL HTTP (a
+ * capa da aula remota sai do próprio stream do app, lendo só alguns MB com Range).
+ * `timeoutMs`: mata o ffmpeg e rejeita com Error('timeout'), para uma rede lenta
+ * não segurar a fila de capas para sempre.
+ */
+export function extractFrame(
+  entrada: string,
+  atSec: number,
+  outPath: string,
+  opts: { width?: number; timeoutMs?: number; headers?: string } = {},
+): Promise<void> {
+  const width = opts.width ?? 480;
   return extractLimit(
     () =>
       new Promise<void>((resolve, reject) => {
-        const args = ['-ss', String(atSec), '-i', videoPath, '-frames:v', '1', '-update', '1', '-vf', `scale='min(${width},iw)':-2`, '-y', outPath];
+        const args = [
+          '-ss', String(atSec),
+          ...(opts.headers ? ['-headers', opts.headers] : []),
+          '-i', entrada,
+          '-frames:v', '1', '-update', '1', '-vf', `scale='min(${width},iw)':-2`, '-y', outPath,
+        ];
         const p = spawn('ffmpeg', args, { stdio: 'ignore' });
-        p.on('error', reject);
-        p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg saiu com código ${code}`))));
+        let estourou = false;
+        const t = opts.timeoutMs
+          ? setTimeout(() => {
+              estourou = true;
+              p.kill('SIGKILL');
+            }, opts.timeoutMs)
+          : null;
+        p.on('error', (e) => {
+          if (t) clearTimeout(t);
+          reject(e);
+        });
+        p.on('close', (code) => {
+          if (t) clearTimeout(t);
+          if (estourou) reject(new Error('timeout'));
+          else if (code === 0) resolve();
+          else reject(new Error(`ffmpeg saiu com código ${code}`));
+        });
       }),
   );
 }
