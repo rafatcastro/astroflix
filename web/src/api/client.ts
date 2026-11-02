@@ -22,7 +22,7 @@ export interface LessonDTO {
   playable: boolean; missing: boolean;
   position: number; furthest: number; completed: boolean;
   progressUpdatedAt: string | null;
-  /** Está na pasta de armazenamento (curso local: sempre). Fora dela, a aula toca pela rede. */
+  /** Curso remoto: está na pasta de armazenamento ("Baixar"), toca sem internet. Curso local: ausente. */
   baixada?: boolean;
 }
 export interface LessonFull extends LessonDTO {
@@ -80,6 +80,8 @@ export interface Armazenamento {
   /** Espaço livre no disco da pasta; null se não deu para medir. */
   livre: number | null;
   cursos: Array<{ courseId: string; titulo: string; bytes: number; arquivos: number; pasta: string | null }>;
+  /** O cache automático da aula aberta e das próximas (DATA_DIR/cache), em bytes. */
+  cache: { bytes: number; limite: number };
 }
 // Flashcards (ver server/src/anki). `noAnki` = já chegou ao Anki e não há nada pendente.
 export interface Flashcard {
@@ -488,6 +490,8 @@ export const api = {
   abrirArmazenamento: (courseId?: string) =>
     jsonFetch<void>('/api/armazenamento/abrir', { method: 'POST', body: JSON.stringify(courseId ? { courseId } : {}) }),
   limparArmazenamento: () => jsonFetch<Armazenamento>('/api/armazenamento', { method: 'DELETE' }),
+  limiteDoCache: (limite: number) => jsonFetch<Armazenamento>('/api/armazenamento/cache', { method: 'PUT', body: JSON.stringify({ limite }) }),
+  limparCache: () => jsonFetch<Armazenamento>('/api/armazenamento/cache', { method: 'DELETE' }),
   getSettings: () => jsonFetch<Settings>('/api/settings'),
   patchSettings: (body: Settings) => jsonFetch<Settings>('/api/settings', { method: 'PATCH', body: JSON.stringify(body) }),
   verifyPlayback: (id: string) => jsonFetch<PlaybackVerdict>(`/api/lessons/${id}/verify-playback${capacidades}`, { method: 'POST' }),

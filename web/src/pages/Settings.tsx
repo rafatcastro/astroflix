@@ -300,8 +300,10 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
 }
 
 // Onde ficam as aulas e os materiais baixados do Drive e do Telegram, quanto
-// ocupam e o que fazer com eles. O app nunca apaga nada sozinho: é aqui (ou no
-// menu do curso) que a pessoa libera espaço.
+// ocupam e o que fazer com eles. O que foi baixado o app nunca apaga sozinho: é
+// aqui (ou no menu do curso) que a pessoa libera espaço. O cache automático, à
+// parte, tem limite e se limpa sozinho.
+const LIMITES_DO_CACHE = [2, 5, 10, 20, 50, 100];
 function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ['armazenamento'], queryFn: api.armazenamento });
@@ -350,6 +352,27 @@ function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
       onNotice('Não deu para limpar. Tente de novo.');
     }
   };
+  const [limiteEscolhido, setLimiteEscolhido] = useState<number | null>(null);
+  const trocarLimite = async (gb: number) => {
+    setLimiteEscolhido(gb);
+    try {
+      await api.limiteDoCache(gb * 1024 ** 3);
+      depois();
+    } catch {
+      onNotice('Não deu para trocar o limite do cache. Tente de novo.');
+    }
+    // Falhou: o seletor volta ao valor que o servidor tem.
+    setLimiteEscolhido(null);
+  };
+  const limparOCache = async () => {
+    try {
+      await api.limparCache();
+      depois();
+      onNotice('Cache limpo. As aulas voltam para ele quando forem abertas.');
+    } catch {
+      onNotice('Não deu para limpar o cache. Tente de novo.');
+    }
+  };
   const remover = async () => {
     const r = removendo;
     setRemovendo(null);
@@ -370,7 +393,7 @@ function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
     <section className="mb-8">
       <h2 className="mb-1 text-sm font-semibold text-neutral-300">Armazenamento</h2>
       <p className="mb-3 text-sm text-neutral-500">
-        As aulas do Drive e do Telegram são baixadas para esta pasta, com os nomes originais. Pode abrir e levar os arquivos para onde
+        O que você baixar do Drive e do Telegram vai para esta pasta, com os nomes originais. Pode abrir e levar os arquivos para onde
         quiser: o que sair dela volta a tocar pela internet.
       </p>
       <div className="rounded-lg bg-neutral-900 px-3 py-2 text-sm">
@@ -400,6 +423,41 @@ function SecaoArmazenamento({ onNotice }: { onNotice: (m: string) => void }) {
           </div>
         </div>
       </div>
+
+      {data?.cache && (
+        <div className="mt-2 rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="text-neutral-200">Cache de aulas</div>
+              <div className="text-xs tabular-nums text-neutral-500">
+                {formatBytes(data.cache.bytes)} de {formatBytes(data.cache.limite)}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 text-neutral-400">
+                <span>Limite</span>
+                <select
+                  className="min-h-[44px] rounded-lg bg-neutral-800 px-2 text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                  value={limiteEscolhido ?? Math.round(data.cache.limite / 1024 ** 3)}
+                  onChange={(e) => void trocarLimite(Number(e.target.value))}
+                >
+                  {LIMITES_DO_CACHE.map((gb) => (
+                    <option key={gb} value={gb}>
+                      {gb} GB
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" className={botao} disabled={data.cache.bytes === 0} onClick={() => void limparOCache()}>
+                Limpar cache
+              </button>
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            Guarda a aula aberta e as próximas para abrirem sem esperar. Quando passa do limite, o app apaga as mais antigas sozinho.
+          </p>
+        </div>
+      )}
 
       {data && data.cursos.length > 0 && (
         <div className="mt-2 space-y-1">

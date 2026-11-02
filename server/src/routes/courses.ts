@@ -209,7 +209,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         progressUpdatedAt: r.p_updated ?? null,
         // Curso local: o arquivo é o da pasta. Remoto: se está na pasta de
         // armazenamento (a pessoa pode ter tirado de lá).
-        baixada: !remoto || baixadas.has(r.id),
+        // Só no curso remoto: no local a aula sempre está no disco, e não há o que marcar.
+        baixada: remoto ? baixadas.has(r.id) : undefined,
       };
       let mod = modules.find((m) => m.name === r.module);
       if (!mod) { mod = { name: r.module, lessons: [] }; modules.push(mod); }

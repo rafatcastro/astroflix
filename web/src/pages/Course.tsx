@@ -14,6 +14,7 @@ import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
+import { IconeOffline } from '../components/IconeOffline';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
 import { ArrowLeft, Play, Check, List, LayoutGrid, Cards, ChevronRight } from '../components/icons';
 
@@ -120,7 +121,6 @@ export default function Course() {
     <div
       key={l.id}
       className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
-      title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}
       onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
     >
       <Link
@@ -130,13 +130,15 @@ export default function Course() {
         <img
           src={api.lessonThumbUrl(l.id)}
           alt=""
-          className={`aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover ${l.baixada === false ? 'opacity-40 grayscale' : ''}`}
+          className="aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover"
           loading="lazy"
           onError={(e) => ((e.currentTarget as HTMLImageElement).style.visibility = 'hidden')}
         />
         <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
-        {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
-        <span className={`flex-1 truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{titulo}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="truncate">{titulo}</span>
+          {l.baixada === true && <IconeOffline />}
+        </span>
         <span className="shrink-0 text-xs text-neutral-500">{formatDuration(l.durationSec)}</span>
         <span className="w-auto shrink-0 text-right text-xs sm:w-28">
           {l.missing ? (

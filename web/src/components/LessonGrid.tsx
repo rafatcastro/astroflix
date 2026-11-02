@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { formatDuration } from '../lib/format';
 import type { LessonDTO } from '../api/client';
+import { IconeOffline } from './IconeOffline';
 
 export default function LessonGrid({
   lessons,
@@ -23,9 +24,9 @@ export default function LessonGrid({
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${size}px, 45vw), 1fr))` }}>
       {lessons.map((l) => (
         <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative" onContextMenu={onMenu ? (e) => onMenu(l, e) : undefined}>
-          <Link to={`/lesson/${l.id}`} title={l.baixada === false ? 'Não baixada: toca pela internet' : undefined}>
-            {/* Cinza = não está na pasta de armazenamento (nunca baixada, ou a pessoa tirou de lá). */}
-            <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : l.baixada === false ? 'opacity-40 grayscale' : ''}`}>
+          <Link to={`/lesson/${l.id}`}>
+            {/* Tocar pela rede é o normal da aula remota: nada de cinza. Só a que falta no disco fica apagada. */}
+            <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : ''}`}>
               <img
                 src={api.lessonThumbUrl(l.id)}
                 alt=""
@@ -36,7 +37,10 @@ export default function LessonGrid({
               {l.missing && <span className="absolute left-1 top-1 rounded bg-amber-900/80 px-1 text-[10px] text-amber-200">não encontrada</span>}
             </div>
             <div className="p-2">
-              <div className={`text-sm truncate ${l.baixada === false ? 'text-neutral-500' : ''}`}>{titulos?.get(l.id) ?? l.title}</div>
+              <div className="flex items-center gap-1 text-sm">
+                <span className="truncate">{titulos?.get(l.id) ?? l.title}</span>
+                {l.baixada === true && <IconeOffline />}
+              </div>
               <div className="text-xs text-neutral-500 flex justify-between">
                 <span>{formatDuration(l.durationSec)}</span>
                 <span>{l.completed ? '✓' : l.position > 0 ? '▓' : '○'}</span>
