@@ -5,10 +5,10 @@ import { useCourse, useSetComplete } from '../api/hooks';
 import { formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { api } from '../api/client';
-import type { LessonDTO } from '../api/client';
+import type { LessonDTO, MaterialDTO } from '../api/client';
 import LessonGrid from '../components/LessonGrid';
 import { montarArvore, type No } from '../lib/arvore';
-import MaterialsSection from '../components/MaterialsSection';
+import { LinhaMaterial, VisualizadorMaterial, type Visualizado } from '../components/MaterialsSection';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
@@ -46,6 +46,7 @@ export default function Course() {
   );
   const qc = useQueryClient();
   const [rootIssue, setRootIssue] = useState(false);
+  const [visualizado, setVisualizado] = useState<Visualizado>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
@@ -117,7 +118,7 @@ export default function Course() {
           e.preventDefault();
           setMenuAula({ l, x: e.clientX, y: e.clientY });
         };
-  const arvore = montarArvore(allLessons);
+  const arvore = montarArvore(allLessons, data.materials);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
       key={l.id}
@@ -170,7 +171,21 @@ export default function Course() {
   const nivel = (nos: No[], profundidade: number): ReactNode[] => {
     const saida: ReactNode[] = [];
     let soltas: { aula: LessonDTO; titulo: string }[] = [];
+    let arquivos: MaterialDTO[] = [];
+    const fecharArquivos = () => {
+      if (!arquivos.length) return;
+      const lote = arquivos;
+      arquivos = [];
+      saida.push(
+        <div key={`arquivos-${lote[0].id}`} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
+          {lote.map((m) => (
+            <LinhaMaterial key={m.id} m={m} onAbrir={setVisualizado} />
+          ))}
+        </div>,
+      );
+    };
     const fecharSoltas = () => {
+      fecharArquivos();
       if (!soltas.length) return;
       const lote = soltas;
       soltas = [];
@@ -193,7 +208,13 @@ export default function Course() {
     };
     for (const no of nos) {
       if (no.tipo === 'aula') {
+        fecharArquivos();
         soltas.push(no);
+        continue;
+      }
+      if (no.tipo === 'material') {
+        if (soltas.length) fecharSoltas();
+        arquivos.push(no.material);
         continue;
       }
       fecharSoltas();
@@ -218,7 +239,7 @@ export default function Course() {
               />
               <span className="min-w-0 flex-1 truncate">{no.nome}</span>
               <span className="shrink-0 text-xs font-normal text-neutral-500">
-                {concluidas}/{no.aulas.length}
+                {no.aulas.length ? `${concluidas}/${no.aulas.length}` : `${no.materiais} arquivo${no.materiais === 1 ? '' : 's'}`}
               </span>
             </button>
           </h2>
@@ -423,7 +444,7 @@ export default function Course() {
 
       <div className="mt-6 space-y-2">{nivel(arvore, 0)}</div>
 
-      <MaterialsSection materials={data.materials} />
+      {visualizado && <VisualizadorMaterial viewer={visualizado} onFechar={() => setVisualizado(null)} />}
       </div>
       {menuAula && (
         <>

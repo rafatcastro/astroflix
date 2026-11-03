@@ -52,6 +52,8 @@ export default function PlaylistSidebar({
     nos.map((no) => {
       // Cada nível recua um pouco: com a árvore toda aberta, dá para ver de que pasta é cada aula.
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
+      // A lista ao lado do vídeo só tem aulas: os arquivos ficam na página do curso.
+      if (no.tipo === 'material') return null;
       if (no.tipo === 'pasta') {
         const aberto = abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
