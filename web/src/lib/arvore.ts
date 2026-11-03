@@ -15,6 +15,13 @@ export interface Pasta {
 
 const pastasDe = (relPath: string) => relPath.split('/').filter(Boolean).slice(0, -1);
 const nomeDe = (relPath: string) => relPath.split('/').filter(Boolean).pop() ?? relPath;
+// "02. Seu 1º Projeto Python - Automação…" e "02. Seu 1º Projeto Python - Automação… - Telegram @x.mp4" começam igual.
+const comparavel = (t: string) =>
+  t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 const comparar = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' }).compare;
 
 // O curso como as pastas dele: A > [B, C, D], em qualquer profundidade. A ordem
@@ -58,8 +65,45 @@ export function montarArvore(aulas: LessonDTO[], materiais: MaterialDTO[] = []):
     const titulo = caminho.length > 1 && l.title.startsWith(prefixo) ? l.title.slice(prefixo.length) : l.title;
     pasta.filhos.push({ tipo: 'aula', aula: l, titulo });
   });
+  // Arquivos guardados numa pasta com o nome da aula ("Módulo/materiais/02. Seu 1º
+  // Projeto/Gabarito.ipynb", ao lado de "Módulo/02. Seu 1º Projeto….mp4") são dessa
+  // aula: entram logo depois dela, na pasta dela, e a pasta "materiais" não aparece.
+  const aulasPorPasta = new Map<string, Array<{ nome: string; no: No }>>();
+  const percorrer = (nos: No[]) => {
+    for (const no of nos) {
+      if (no.tipo === 'pasta') percorrer(no.filhos);
+      else if (no.tipo === 'aula') {
+        const chave = pastasDe(no.aula.relPath).join('/');
+        const lista = aulasPorPasta.get(chave) ?? [];
+        lista.push({ nome: comparavel(nomeDe(no.aula.relPath)), no });
+        aulasPorPasta.set(chave, lista);
+      }
+    }
+  };
+  percorrer(raiz.filhos);
+  const aulaDaPasta = (caminho: string[]): { caminho: string[]; no: No } | null => {
+    const pastaDoArquivo = comparavel(caminho[caminho.length - 1] ?? '');
+    if (pastaDoArquivo.length < 4) return null;
+    // A pasta da aula pode estar logo acima ("Módulo/02. Aula/arquivo") ou com uma
+    // pasta de materiais no meio ("Módulo/materiais/02. Aula/arquivo").
+    for (const subir of [1, 2]) {
+      const acima = caminho.slice(0, caminho.length - subir);
+      const achada = aulasPorPasta.get(acima.join('/'))?.find((a) => a.nome.startsWith(pastaDoArquivo));
+      if (achada) return { caminho: acima, no: achada.no };
+    }
+    return null;
+  };
+
   // O arquivo entra entre as aulas da pasta pela ordem do nome, como no Finder.
   materiais.forEach((m) => {
+    const daAula = aulaDaPasta(pastasDe(m.relPath));
+    if (daAula) {
+      const pasta = pastaDe(daAula.caminho, (p) => p.materiais++, false);
+      let i = pasta.filhos.indexOf(daAula.no) + 1;
+      while (pasta.filhos[i]?.tipo === 'material') i++;
+      pasta.filhos.splice(i, 0, { tipo: 'material', material: m });
+      return;
+    }
     const pasta = pastaDe(pastasDe(m.relPath), (p) => p.materiais++, true);
     const nome = nomeDe(m.relPath);
     const depois = pasta.filhos.findIndex(
