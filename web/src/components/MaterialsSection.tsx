@@ -1,56 +1,15 @@
 import { materialUrl, type MaterialDTO } from '../api/client';
 import { cliqueFora } from '../lib/desktop';
 
-// Os arquivos do curso que não são vídeo (pdf/zip/imagem/doc), mostrados na pasta
-// onde estão, entre as aulas. Acesso apenas: abrir (PDF no leitor embutido,
-// imagem no visualizador) e baixar — nunca toca no arquivo no disco.
-
-function fmtSize(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
+// Os arquivos do curso que não são vídeo (pdf/zip/imagem/doc) entram na lista
+// como itens, entre as aulas. Aqui ficam o rótulo do tipo e o visualizador de PDF
+// e imagem. Acesso apenas: nunca toca no arquivo no disco.
 
 export const KIND_LABEL: Record<MaterialDTO['kind'], string> = {
   pdf: 'PDF', zip: 'ZIP', archive: 'ARQ', doc: 'DOC', image: 'IMG', other: 'ARQ',
 };
 
 export type Visualizado = { kind: 'pdf' | 'image'; id: string; name: string } | null;
-
-export function LinhaMaterial({ m, onAbrir }: { m: MaterialDTO; onAbrir: (v: Visualizado) => void }) {
-  const canView = m.kind === 'pdf' || m.kind === 'image';
-  return (
-    <div className="flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2">
-      <span className="grid h-9 w-11 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
-        {KIND_LABEL[m.kind]}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm text-neutral-200">{m.name}</div>
-        <div className="text-xs text-neutral-500">{fmtSize(m.sizeBytes)}</div>
-      </div>
-      <div className="flex shrink-0 gap-1.5">
-        {canView && (
-          <button
-            type="button"
-            onClick={() => onAbrir({ kind: m.kind === 'pdf' ? 'pdf' : 'image', id: m.id, name: m.name })}
-            className="min-h-[44px] rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700"
-          >
-            Abrir
-          </button>
-        )}
-        <a
-          href={materialUrl(m.id, true)}
-          download={m.name}
-          onClick={(e) => cliqueFora(e, materialUrl(m.id, true))}
-          className="inline-flex min-h-[44px] items-center rounded-lg bg-neutral-800 px-3 text-sm text-neutral-200 hover:bg-neutral-700"
-        >
-          Baixar
-        </a>
-      </div>
-    </div>
-  );
-}
 
 export function VisualizadorMaterial({ viewer, onFechar }: { viewer: NonNullable<Visualizado>; onFechar: () => void }) {
   return (

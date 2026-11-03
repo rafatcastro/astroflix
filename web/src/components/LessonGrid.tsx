@@ -1,29 +1,56 @@
 import type { MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api/client';
-import { formatDuration } from '../lib/format';
-import type { LessonDTO } from '../api/client';
+import { api, materialUrl } from '../api/client';
+import { formatBytes, formatDuration } from '../lib/format';
+import type { LessonDTO, MaterialDTO } from '../api/client';
+import { KIND_LABEL } from './MaterialsSection';
 import { IconeOffline } from './IconeOffline';
 import { CapaAula } from './CapaAula';
 
+// Aula ou arquivo (PDF, imagem, anexo) da pasta, na ordem em que estão nela.
+const ehArquivo = (it: LessonDTO | MaterialDTO): it is MaterialDTO => 'kind' in it;
+
 export default function LessonGrid({
-  lessons,
+  itens,
   titulos,
   size,
   onToggleComplete,
   onMenu,
+  onAbrirArquivo,
 }: {
-  lessons: LessonDTO[];
+  itens: Array<LessonDTO | MaterialDTO>;
   /** O título dentro da árvore de pastas (sem o prefixo da pasta); sem ele, o da aula. */
   titulos?: Map<string, string>;
   size: number;
   onToggleComplete: (id: string, completed: boolean) => void;
   /** Botão direito na aula (Baixar / Excluir download); só nos cursos do Drive e do Telegram. */
   onMenu?: (l: LessonDTO, e: MouseEvent) => void;
+  /** Clique num arquivo: PDF e imagem abrem no visualizador, o resto é baixado. */
+  onAbrirArquivo: (m: MaterialDTO, e: MouseEvent) => void;
 }) {
   return (
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(${size}px, 45vw), 1fr))` }}>
-      {lessons.map((l) => (
+      {itens.map((l) =>
+        ehArquivo(l) ? (
+          <a
+            key={l.id}
+            href={materialUrl(l.id, true)}
+            download={l.name}
+            onClick={(e) => onAbrirArquivo(l, e)}
+            className="overflow-hidden rounded-lg bg-neutral-900 hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            <div className="grid aspect-video place-items-center bg-neutral-800 text-sm font-semibold tracking-wide text-neutral-400">
+              {KIND_LABEL[l.kind]}
+            </div>
+            <div className="p-2">
+              <div className="truncate text-sm">{l.name}</div>
+              <div className="flex justify-between text-xs text-neutral-500">
+                <span>{formatBytes(l.sizeBytes)}</span>
+                <span>{l.kind === 'pdf' || l.kind === 'image' ? 'Abrir' : 'Baixar'}</span>
+              </div>
+            </div>
+          </a>
+        ) : (
         <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative" onContextMenu={onMenu ? (e) => onMenu(l, e) : undefined}>
           <Link to={`/lesson/${l.id}`}>
             {/* Tocar pela rede é o normal da aula remota: nada de cinza. Só a que falta no disco fica apagada. */}
@@ -55,7 +82,8 @@ export default function LessonGrid({
             />
           </label>
         </div>
-      ))}
+        ),
+      )}
     </div>
   );
 }

@@ -2,13 +2,14 @@ import { useState, useEffect, type MouseEvent, type ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
-import { formatDuration, percent } from '../lib/format';
+import { formatBytes, formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
-import { api } from '../api/client';
+import { api, materialUrl } from '../api/client';
 import type { LessonDTO, MaterialDTO } from '../api/client';
 import LessonGrid from '../components/LessonGrid';
 import { montarArvore, type No } from '../lib/arvore';
-import { LinhaMaterial, VisualizadorMaterial, type Visualizado } from '../components/MaterialsSection';
+import { KIND_LABEL, VisualizadorMaterial, type Visualizado } from '../components/MaterialsSection';
+import { cliqueFora } from '../lib/desktop';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
 import { mensagemErroDrive } from '../api/driveAuth';
@@ -166,55 +167,64 @@ export default function Course() {
       </label>
     </div>
   );
-  // Aulas seguidas do mesmo nível viram um bloco (lista ou grade); cada pasta é
-  // uma seção recolhível com as dela dentro, recuada um pouco a cada nível.
+  // O arquivo que não é vídeo é um item da lista como a aula, no mesmo formato:
+  // PDF e imagem abrem no visualizador, o resto é baixado.
+  const abrirArquivo = (m: MaterialDTO, e: MouseEvent) => {
+    if (m.kind === 'pdf' || m.kind === 'image') {
+      e.preventDefault();
+      setVisualizado({ kind: m.kind === 'pdf' ? 'pdf' : 'image', id: m.id, name: m.name });
+    } else cliqueFora(e, materialUrl(m.id, true));
+  };
+  const linhaDoArquivo = (m: MaterialDTO) => (
+    <a
+      key={m.id}
+      href={materialUrl(m.id, true)}
+      download={m.name}
+      onClick={(e) => abrirArquivo(m, e)}
+      className="flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+    >
+      <span className="grid aspect-video w-16 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
+        {KIND_LABEL[m.kind]}
+      </span>
+      <span className="w-8 shrink-0" />
+      <span className="min-w-0 flex-1 truncate">{m.name}</span>
+      <span className="shrink-0 text-xs text-neutral-500">{formatBytes(m.sizeBytes)}</span>
+      <span className="grid h-11 w-11 shrink-0 place-items-center text-xs text-neutral-500 sm:w-auto sm:min-w-28 sm:justify-end">
+        {m.kind === 'pdf' || m.kind === 'image' ? 'Abrir' : 'Baixar'}
+      </span>
+    </a>
+  );
+  // Aulas e arquivos seguidos do mesmo nível viram um bloco (lista ou grade), na
+  // ordem da pasta; cada pasta é uma seção recolhível, recuada um pouco a cada nível.
   const nivel = (nos: No[], profundidade: number): ReactNode[] => {
     const saida: ReactNode[] = [];
-    let soltas: { aula: LessonDTO; titulo: string }[] = [];
-    let arquivos: MaterialDTO[] = [];
-    const fecharArquivos = () => {
-      if (!arquivos.length) return;
-      const lote = arquivos;
-      arquivos = [];
-      saida.push(
-        <div key={`arquivos-${lote[0].id}`} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
-          {lote.map((m) => (
-            <LinhaMaterial key={m.id} m={m} onAbrir={setVisualizado} />
-          ))}
-        </div>,
-      );
-    };
+    let soltas: Array<Exclude<No, { tipo: 'pasta' }>> = [];
     const fecharSoltas = () => {
-      fecharArquivos();
       if (!soltas.length) return;
       const lote = soltas;
       soltas = [];
+      const chave = `itens-${lote[0].tipo === 'aula' ? lote[0].aula.id : lote[0].material.id}`;
       saida.push(
         view === 'grid' ? (
           <LessonGrid
-            key={`aulas-${lote[0].aula.id}`}
-            lessons={lote.map((s) => s.aula)}
-            titulos={new Map(lote.map((s) => [s.aula.id, s.titulo]))}
+            key={chave}
+            itens={lote.map((s) => (s.tipo === 'aula' ? s.aula : s.material))}
+            titulos={new Map(lote.flatMap((s) => (s.tipo === 'aula' ? [[s.aula.id, s.titulo] as const] : [])))}
             size={gridSize}
             onToggleComplete={onToggle}
             onMenu={abrirMenuAula}
+            onAbrirArquivo={abrirArquivo}
           />
         ) : (
-          <div key={`aulas-${lote[0].aula.id}`} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
-            {lote.map((s) => linhaDaAula(s.aula, s.titulo))}
+          <div key={chave} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
+            {lote.map((s) => (s.tipo === 'aula' ? linhaDaAula(s.aula, s.titulo) : linhaDoArquivo(s.material)))}
           </div>
         ),
       );
     };
     for (const no of nos) {
-      if (no.tipo === 'aula') {
-        fecharArquivos();
+      if (no.tipo !== 'pasta') {
         soltas.push(no);
-        continue;
-      }
-      if (no.tipo === 'material') {
-        if (soltas.length) fecharSoltas();
-        arquivos.push(no.material);
         continue;
       }
       fecharSoltas();
