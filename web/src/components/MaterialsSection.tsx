@@ -12,7 +12,7 @@ function fmtSize(bytes: number): string {
   return `${bytes} B`;
 }
 
-const KIND_LABEL: Record<MaterialDTO['kind'], string> = {
+export const KIND_LABEL: Record<MaterialDTO['kind'], string> = {
   pdf: 'PDF', zip: 'ZIP', archive: 'ARQ', doc: 'DOC', image: 'IMG', other: 'ARQ',
 };
 

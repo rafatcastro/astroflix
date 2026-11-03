@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCourse } from '../api/hooks';
-import { api } from '../api/client';
+import { api, materialUrl } from '../api/client';
+import { cliqueFora } from '../lib/desktop';
+import { KIND_LABEL, VisualizadorMaterial, type Visualizado } from './MaterialsSection';
 import { formatDuration } from '../lib/format';
 import { caminhoDaAula, montarArvore, type No } from '../lib/arvore';
 import { ChevronRight } from './icons';
@@ -23,7 +25,8 @@ export default function PlaylistSidebar({
   const { data } = useCourse(courseId);
   const atualRef = useRef<HTMLButtonElement>(null);
   const todas = data ? data.modules.flatMap((m) => m.lessons) : [];
-  const arvore = montarArvore(todas);
+  const arvore = montarArvore(todas, data?.materials ?? []);
+  const [visualizado, setVisualizado] = useState<Visualizado>(null);
   const caminhoAtual = caminhoDaAula(arvore, currentLessonId).join('\n');
   const [abertos, setAbertos] = useState<string[]>([]);
 
@@ -52,8 +55,33 @@ export default function PlaylistSidebar({
     nos.map((no) => {
       // Cada nível recua um pouco: com a árvore toda aberta, dá para ver de que pasta é cada aula.
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
-      // A lista ao lado do vídeo só tem aulas: os arquivos ficam na página do curso.
-      if (no.tipo === 'material') return null;
+      // O arquivo fica na pasta dele, como na página do curso: PDF e imagem abrem
+      // por cima do vídeo; o resto é baixado.
+      if (no.tipo === 'material') {
+        const m = no.material;
+        const abre = m.kind === 'pdf' || m.kind === 'image';
+        return (
+          <a
+            key={m.id}
+            href={materialUrl(m.id, true)}
+            download={m.name}
+            onClick={(e) => {
+              if (abre) {
+                e.preventDefault();
+                setVisualizado({ kind: m.kind === 'pdf' ? 'pdf' : 'image', id: m.id, name: m.name });
+              } else cliqueFora(e, materialUrl(m.id, true));
+            }}
+            style={recuo}
+            className="flex w-full items-center gap-2 py-2 pr-3 text-left text-sm hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+          >
+            <span className="w-5 shrink-0" />
+            <span className="grid aspect-video w-24 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
+              {KIND_LABEL[m.kind]}
+            </span>
+            <span className="line-clamp-2 min-w-0 flex-1 text-neutral-200">{m.name}</span>
+          </a>
+        );
+      }
       if (no.tipo === 'pasta') {
         const aberto = abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
@@ -76,7 +104,7 @@ export default function PlaylistSidebar({
               />
               <span className="min-w-0 flex-1 truncate font-medium text-neutral-300">{no.nome}</span>
               <span className="shrink-0 text-neutral-500">
-                {feitas}/{no.aulas.length}
+                {no.aulas.length ? `${feitas}/${no.aulas.length}` : `${no.materiais} arquivo${no.materiais === 1 ? '' : 's'}`}
               </span>
             </button>
             {aberto && <div id={id}>{nivel(no.filhos, profundidade + 1)}</div>}
@@ -116,5 +144,10 @@ export default function PlaylistSidebar({
       );
     });
 
-  return <div>{nivel(arvore, 0)}</div>;
+  return (
+    <div>
+      {nivel(arvore, 0)}
+      {visualizado && <VisualizadorMaterial viewer={visualizado} onFechar={() => setVisualizado(null)} />}
+    </div>
+  );
 }
