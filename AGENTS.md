@@ -29,8 +29,9 @@ guarda os metadados da pessoa (cursos, aulas, progresso, bibliotecas e flashcard
 GitHub redireciona o nome antigo, então o atualizador de quem tem uma versão velha continua achando
 as releases). Ficaram com o nome antigo, de propósito, os identificadores que dão continuidade: o
 `identifier` do Tauri, o formato do
-backup (`learnflix-library`), o tipo de nota "Learnflix" do Anki, o sidecar `learnflix-server` e a
-linha `LEARNFLIX_URL=`. A pasta de dados virou `~/.astroflix` (`%LOCALAPPDATA%\Astroflix`): a antiga
+backup (`learnflix-library`), o tipo de nota "Learnflix" do Anki e a linha `LEARNFLIX_URL=`. O que o build gera
+(o executável `astroflix`, o sidecar `astroflix-server`, `dist/astroflix.cjs`) usa o nome novo:
+o atualizador troca o pacote inteiro. A pasta de dados virou `~/.astroflix` (`%LOCALAPPDATA%\Astroflix`): a antiga
 (`~/.learnflix`, `%LOCALAPPDATA%\Learnflix`) é movida na primeira abertura e os caminhos dos
 downloads no banco são corrigidos (`pasta-de-dados.ts`). Os baralhos `Learnflix::…` são movidos sozinhos para `Astroflix::…`.
 
@@ -51,8 +52,8 @@ workspaces (`pnpm-workspace.yaml`): `server`, `web` e `desktop`. Para o app desk
 ```bash
 pnpm install               # primeira vez
 pnpm dev                   # janela do Tauri sobre o Vite (:5173, /api → :7777) + Fastify, hot reload
-pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/learnflix.cjs
-pnpm start                 # roda dist/learnflix.cjs (precisa do build antes)
+pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/astroflix.cjs
+pnpm start                 # roda dist/astroflix.cjs (precisa do build antes)
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
 pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
 pnpm run repo              # audita onde o nome do repositório GitHub aparece (o `pnpm repo` puro é um comando do próprio pnpm)
@@ -265,7 +266,7 @@ SQLite. A SPA React conversa com ele por uma API JSON.
 
 ### Desktop (`desktop/`)
 
-- `src-tauri/src/lib.rs`: instância única, sobe o sidecar `learnflix-server`, lê o stdout até
+- `src-tauri/src/lib.rs`: instância única, sobe o sidecar `astroflix-server`, lê o stdout até
   `LEARNFLIX_URL=` e navega a janela; em 20 s sem a linha, ou se o servidor morrer, mostra a tela de
   erro (`carregando/index.html?erro=`) com "Tentar de novo" (comando `reiniciar`). Mata o sidecar ao
   sair. Cada subida tem uma geração: eventos de um processo antigo não mexem mais na janela.

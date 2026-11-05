@@ -150,7 +150,7 @@ fn parar_servidor(app: &AppHandle) {
 fn subir_servidor(app: &AppHandle) {
     parar_servidor(app);
 
-    let comando = match app.shell().sidecar("learnflix-server") {
+    let comando = match app.shell().sidecar("astroflix-server") {
         Ok(c) => c,
         Err(e) => return mostrar_erro(app, &format!("servidor não encontrado: {e}")),
     };
@@ -249,7 +249,7 @@ fn parar_servidor_para_atualizar(app: AppHandle) {
 #[cfg(target_os = "macos")]
 fn renomear_pacote_antigo() -> bool {
     let Ok(exe) = std::env::current_exe() else { return false };
-    // .../Learnflix.app/Contents/MacOS/learnflix
+    // .../Learnflix.app/Contents/MacOS/<executável>
     let Some(pacote) = exe.ancestors().nth(3) else { return false };
     if pacote.file_name().and_then(|n| n.to_str()) != Some("Learnflix.app") {
         return false;

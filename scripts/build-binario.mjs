@@ -7,7 +7,7 @@
 // baixa não precisa ter Node, nem npm, nem nada. Dois cliques, ou um comando.
 //
 // Pré-requisitos: `pnpm build` já ter rodado (o executável embute o
-// dist/learnflix.cjs).
+// dist/astroflix.cjs).
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
@@ -16,17 +16,17 @@ import url from 'node:url';
 
 const raiz = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const build = path.join(raiz, 'build');
-const bundle = path.join(raiz, 'dist', 'learnflix.cjs');
+const bundle = path.join(raiz, 'dist', 'astroflix.cjs');
 
 if (!fs.existsSync(bundle)) {
-  console.error('dist/learnflix.cjs não existe — rode `pnpm build` antes.');
+  console.error('dist/astroflix.cjs não existe — rode `pnpm build` antes.');
   process.exit(1);
 }
 
 const ehWindows = process.platform === 'win32';
 const ehMac = process.platform === 'darwin';
 const alvo = `${process.platform}-${process.arch}`;
-const executavel = path.join(build, ehWindows ? 'learnflix.exe' : 'learnflix');
+const executavel = path.join(build, ehWindows ? 'astroflix.exe' : 'astroflix');
 
 fs.rmSync(build, { recursive: true, force: true });
 fs.mkdirSync(build, { recursive: true });
@@ -38,7 +38,7 @@ fs.writeFileSync(
   JSON.stringify(
     {
       main: bundle,
-      output: path.join(build, 'learnflix.blob'),
+      output: path.join(build, 'astroflix.blob'),
       // Sem isto o app cospe um aviso de "SEA é experimental" a cada execução —
       // ruído sobre o qual quem só quer assistir aula não pode agir.
       disableExperimentalSEAWarning: true,
@@ -80,7 +80,7 @@ const argsPostject = [
   postject,
   executavel,
   'NODE_SEA_BLOB',
-  path.join(build, 'learnflix.blob'),
+  path.join(build, 'astroflix.blob'),
   '--sentinel-fuse',
   'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
 ];

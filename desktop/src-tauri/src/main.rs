@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    learnflix_lib::run()
+    astroflix_lib::run()
 }

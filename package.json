@@ -29,7 +29,7 @@
     "dev": "pnpm --filter desktop tauri dev --config src-tauri/tauri.dev.conf.json",
     "dev:servicos": "node scripts/gerar-bundled.mjs && concurrently -k -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
     "build": "pnpm --filter web build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",
-    "start": "node dist/learnflix.cjs",
+    "start": "node dist/astroflix.cjs",
     "build:binario": "node scripts/build-binario.mjs",
     "repo": "node scripts/definir-repo.mjs",
     "desktop:preparar": "pnpm build && pnpm build:binario && node scripts/preparar-sidecar.mjs && node scripts/sincronizar-versao.mjs",

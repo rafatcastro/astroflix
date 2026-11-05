@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Coloca o executável do servidor (pnpm build:binario) onde o Tauri procura o
-// sidecar: desktop/src-tauri/binaries/learnflix-server-<target-triple>[.exe].
+// sidecar: desktop/src-tauri/binaries/astroflix-server-<target-triple>[.exe].
 // O Tauri exige o target triple do Rust no nome — é como ele escolhe o binário
 // certo de cada plataforma no bundle.
 import { execFileSync } from 'node:child_process';
@@ -10,7 +10,7 @@ import url from 'node:url';
 
 const raiz = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
 const ehWindows = process.platform === 'win32';
-const origem = path.join(raiz, 'build', ehWindows ? 'learnflix.exe' : 'learnflix');
+const origem = path.join(raiz, 'build', ehWindows ? 'astroflix.exe' : 'astroflix');
 
 if (!fs.existsSync(origem)) {
   console.error(`${path.relative(raiz, origem)} não existe — rode \`pnpm build:binario\` antes.`);
@@ -26,7 +26,7 @@ if (!triple) {
 
 const pasta = path.join(raiz, 'desktop', 'src-tauri', 'binaries');
 fs.mkdirSync(pasta, { recursive: true });
-const destino = path.join(pasta, `learnflix-server-${triple}${ehWindows ? '.exe' : ''}`);
+const destino = path.join(pasta, `astroflix-server-${triple}${ehWindows ? '.exe' : ''}`);
 fs.copyFileSync(origem, destino);
 fs.chmodSync(destino, 0o755);
 console.log(`sidecar: ${path.relative(raiz, destino)}`);

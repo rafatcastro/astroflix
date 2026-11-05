@@ -1,11 +1,11 @@
 [package]
-name = "learnflix"
+name = "astroflix"
 version = "2.1.0"
 description = "Astroflix — cursos das suas pastas, com progresso confiável"
 edition = "2021"
 
 [lib]
-name = "learnflix_lib"
+name = "astroflix_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

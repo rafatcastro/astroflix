@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Junta o servidor inteiro — código, dependências e a interface embutida — num
-// único dist/learnflix.cjs.
+// único dist/astroflix.cjs.
 //
 // É esse arquivo que o `pnpm start` executa e que, mais adiante, vira o
 // executável único (o sidecar do app desktop). Nada de node_modules no
@@ -11,7 +11,7 @@ import path from 'node:path';
 import url from 'node:url';
 
 const raiz = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
-const saida = path.join(raiz, 'dist', 'learnflix.cjs');
+const saida = path.join(raiz, 'dist', 'astroflix.cjs');
 
 // Limpa a pasta antes: sobra de um build anterior (outro formato, outro nome)
 // seria publicada junto e dobraria o download sem servir para nada.
@@ -45,7 +45,7 @@ fs.chmodSync(saida, 0o755);
 
 const tamanho = fs.statSync(saida).size;
 const web = fs.existsSync(path.join(raiz, 'web', 'dist'));
-console.log(`\ndist/learnflix.cjs — ${(tamanho / 1024 / 1024).toFixed(2)} MB${web ? '' : '  (ATENÇÃO: sem a interface embutida)'}`);
+console.log(`\ndist/astroflix.cjs — ${(tamanho / 1024 / 1024).toFixed(2)} MB${web ? '' : '  (ATENÇÃO: sem a interface embutida)'}`);
 
 // Um require() que o esbuild não conseguiu resolver vira erro só em produção,
 // na máquina de outra pessoa. Melhor descobrir aqui.
