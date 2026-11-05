@@ -37,37 +37,87 @@ const DESCRICAO = /\.(txt|md|markdown|pdf|docx)$/i;
 // "0000000123-Aula 1.mp4" e "0000000124-Aula 1.txt" (Telegram) também são o mesmo nome.
 const baseDe = (relPath: string) => comparavel(nomeDe(relPath).replace(/\.[^.]+$/, '').replace(/^\d{10}-/, ''));
 
+// "01. Aula 01 - Introdução - Descrição - Catálogo….txt" é a descrição de
+// "01. Aula 01 - Introdução - Catálogo….mp4": a palavra "Descrição" não conta.
+const semDescricao = (base: string) => base.replace(/descric(ao|oes)|description|resumo/g, '');
+// "Aula 01", "aula 1", "Aula-1": o número da aula, para ligar quando o resto do nome muda.
+const numeroDaAula = (relPath: string): number | null => {
+  const m = nomeDe(relPath)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .match(/\baula\s*[-_.#]?\s*0*(\d+)/i);
+  return m ? Number(m[1]) : null;
+};
+
 /**
  * O arquivo de texto com o mesmo nome do vídeo ("A.mp4" e "A.txt", ao lado dele,
  * dentro de uma pasta como "materiais/" ou "materiais/A/", ou em qualquer lugar do
  * curso se só uma aula se chama assim) é a descrição da aula:
- * aparece embaixo do vídeo, e não como item da lista. Um por aula.
+ * aparece embaixo do vídeo, e não como item da lista. Um por aula. Na falta do
+ * mesmo nome, vale o nome sem a palavra "Descrição" e, por último, o mesmo
+ * "Aula N" na mesma pasta (quando só uma aula da pasta tem esse número).
  */
 export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[]): Map<string, MaterialDTO> {
-  const porNome = new Map<string, LessonDTO>();
-  for (const l of aulas) porNome.set(`${pastasDe(l.relPath).join('/')}\n${baseDe(l.relPath)}`, l);
+  const chaves: Array<(relPath: string) => string | null> = [
+    (r) => baseDe(r),
+    (r) => semDescricao(baseDe(r)) || null,
+    // Só texto: "Aula 1 - Slides.pdf" é material, não a descrição.
+    (r) => {
+      if (!/\.(txt|md|markdown)$/i.test(r)) return null;
+      const n = numeroDaAula(r);
+      return n === null ? null : `aula#${n}`;
+    },
+  ];
+  // Por pasta e por chave; null quando duas aulas da pasta dão a mesma chave.
+  const indices = chaves.map((chave) => {
+    const porPasta = new Map<string, LessonDTO | null>();
+    for (const l of aulas) {
+      const k = chave(l.relPath);
+      if (!k) continue;
+      const id = `${pastasDe(l.relPath).join('/')}\n${k}`;
+      porPasta.set(id, porPasta.has(id) ? null : l);
+    }
+    return porPasta;
+  });
   // Sem achar por perto, vale o nome no curso todo, se só uma aula tem esse nome
   // ("Docker/Materiais de apoio/1/1.11. O que é Docker Hub.txt" é da aula
   // "Docker/01 Primeiros passos/1.11. O que é Docker Hub.mp4").
   const noCurso = new Map<string, LessonDTO | null>();
   for (const l of aulas) {
-    const b = baseDe(l.relPath);
+    const b = semDescricao(baseDe(l.relPath));
     noCurso.set(b, noCurso.has(b) ? null : l);
   }
+  const candidatos = materiais.filter((m) => DESCRICAO.test(m.relPath));
   const descricoes = new Map<string, MaterialDTO>();
-  for (const m of materiais) {
-    if (!DESCRICAO.test(m.relPath)) continue;
-    const pastas = pastasDe(m.relPath);
-    const base = baseDe(m.relPath);
-    let aula: LessonDTO | null | undefined;
-    for (const subir of [0, 1, 2]) {
-      if (subir > pastas.length) break;
-      aula = porNome.get(`${pastas.slice(0, pastas.length - subir).join('/')}\n${base}`);
-      if (aula) break;
+  const usados = new Set<string>();
+  const ligar = (aula: LessonDTO | null | undefined, m: MaterialDTO) => {
+    if (!aula || descricoes.has(aula.id) || usados.has(m.id)) return;
+    descricoes.set(aula.id, m);
+    usados.add(m.id);
+  };
+  // Uma passada por regra, da mais exata para a mais solta: o "A.txt" ganha do
+  // "Aula 1 - slides.pdf" mesmo que o PDF venha antes na lista.
+  chaves.forEach((chave, i) => {
+    for (const m of candidatos) {
+      const k = chave(m.relPath);
+      if (!k) continue;
+      const pastas = pastasDe(m.relPath);
+      for (const subir of [0, 1, 2]) {
+        if (subir > pastas.length) break;
+        const aula = indices[i].get(`${pastas.slice(0, pastas.length - subir).join('/')}\n${k}`);
+        if (aula) {
+          ligar(aula, m);
+          break;
+        }
+      }
     }
-    if (!aula && base.length >= 6) aula = noCurso.get(base);
-    if (aula && !descricoes.has(aula.id)) descricoes.set(aula.id, m);
-  }
+    if (i === 1) {
+      for (const m of candidatos) {
+        const b = semDescricao(baseDe(m.relPath));
+        if (b.length >= 6) ligar(noCurso.get(b), m);
+      }
+    }
+  });
   return descricoes;
 }
 
