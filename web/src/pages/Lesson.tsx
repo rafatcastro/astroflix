@@ -8,6 +8,7 @@ import { mensagemErroTelegram } from '../api/telegramTextos';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import { getPref, setPref } from '../lib/prefs';
 import PlaylistSidebar from '../components/PlaylistSidebar';
+import DescricaoDaAula from '../components/DescricaoDaAula';
 import EndOfLessonCountdown from '../components/EndOfLessonCountdown';
 import HelpLink from '../components/HelpLink';
 import { ATALHOS } from '../help/content';
@@ -994,6 +995,7 @@ export default function Lesson() {
               </div>
             )}
           </div>
+          <DescricaoDaAula courseId={lesson.courseId} lessonId={id} />
         </div>
       </main>
 

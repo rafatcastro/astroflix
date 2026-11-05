@@ -228,7 +228,7 @@ function Pdf({ id }: { id: string }) {
   );
 }
 
-function Conteudo({ viewer, tipo }: { viewer: NonNullable<Visualizado>; tipo: TipoDeVisualizacao }) {
+function Conteudo({ viewer, tipo, descricao }: { viewer: NonNullable<Visualizado>; tipo: TipoDeVisualizacao; descricao?: boolean }) {
   const [pronto, setPronto] = useState<ReactNode>(null);
   const [erro, setErro] = useState(false);
   useEffect(() => {
@@ -252,6 +252,15 @@ function Conteudo({ viewer, tipo }: { viewer: NonNullable<Visualizado>; tipo: Ti
           </div>
         );
       }
+      // Como descrição da aula, o texto corre como o de uma página, sem cara de código.
+      if (descricao) {
+        return (
+          <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-neutral-300">
+            {aviso}
+            {texto.trim()}
+          </div>
+        );
+      }
       return (
         <div className="mx-auto max-w-5xl">
           {aviso}
@@ -265,7 +274,7 @@ function Conteudo({ viewer, tipo }: { viewer: NonNullable<Visualizado>; tipo: Ti
     return () => {
       vivo = false;
     };
-  }, [viewer.id, tipo]);
+  }, [viewer.id, tipo, descricao]);
 
   if (tipo === 'pdf') return <Pdf id={viewer.id} />;
   if (tipo === 'imagem') {
@@ -277,6 +286,12 @@ function Conteudo({ viewer, tipo }: { viewer: NonNullable<Visualizado>; tipo: Ti
   }
   if (erro) return <p className="text-sm text-amber-200">Não deu para abrir este arquivo. Tente baixar.</p>;
   return pronto ?? <p className="text-sm text-neutral-400">Abrindo…</p>;
+}
+
+/** O conteúdo do arquivo direto na página, sem a janela por cima (a descrição embaixo do vídeo). */
+export function ConteudoArquivo({ id, nome }: { id: string; nome: string }) {
+  const tipo = tipoDeVisualizacao(nome);
+  return tipo ? <Conteudo viewer={{ id, name: nome }} tipo={tipo} descricao /> : null;
 }
 
 export function VisualizadorArquivo({ viewer, onFechar }: { viewer: NonNullable<Visualizado>; onFechar: () => void }) {

@@ -32,7 +32,48 @@ const comparar = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 // Os arquivos que não são vídeo ficam na pasta onde estão, junto das aulas (antes
 // iam para "Materiais adicionais", e uma pasta só de PDFs sumia da lista), e a
 // pasta com um vídeo só continua pasta: o nome dela é o do módulo.
-export function montarArvore(aulas: LessonDTO[], materiais: MaterialDTO[] = []): No[] {
+// Os tipos que viram a descrição da aula (o texto embaixo do vídeo).
+const DESCRICAO = /\.(txt|md|markdown|pdf|docx)$/i;
+// "0000000123-Aula 1.mp4" e "0000000124-Aula 1.txt" (Telegram) também são o mesmo nome.
+const baseDe = (relPath: string) => comparavel(nomeDe(relPath).replace(/\.[^.]+$/, '').replace(/^\d{10}-/, ''));
+
+/**
+ * O arquivo de texto com o mesmo nome do vídeo ("A.mp4" e "A.txt", ao lado dele,
+ * dentro de uma pasta como "materiais/" ou "materiais/A/", ou em qualquer lugar do
+ * curso se só uma aula se chama assim) é a descrição da aula:
+ * aparece embaixo do vídeo, e não como item da lista. Um por aula.
+ */
+export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[]): Map<string, MaterialDTO> {
+  const porNome = new Map<string, LessonDTO>();
+  for (const l of aulas) porNome.set(`${pastasDe(l.relPath).join('/')}\n${baseDe(l.relPath)}`, l);
+  // Sem achar por perto, vale o nome no curso todo, se só uma aula tem esse nome
+  // ("Docker/Materiais de apoio/1/1.11. O que é Docker Hub.txt" é da aula
+  // "Docker/01 Primeiros passos/1.11. O que é Docker Hub.mp4").
+  const noCurso = new Map<string, LessonDTO | null>();
+  for (const l of aulas) {
+    const b = baseDe(l.relPath);
+    noCurso.set(b, noCurso.has(b) ? null : l);
+  }
+  const descricoes = new Map<string, MaterialDTO>();
+  for (const m of materiais) {
+    if (!DESCRICAO.test(m.relPath)) continue;
+    const pastas = pastasDe(m.relPath);
+    const base = baseDe(m.relPath);
+    let aula: LessonDTO | null | undefined;
+    for (const subir of [0, 1, 2]) {
+      if (subir > pastas.length) break;
+      aula = porNome.get(`${pastas.slice(0, pastas.length - subir).join('/')}\n${base}`);
+      if (aula) break;
+    }
+    if (!aula && base.length >= 6) aula = noCurso.get(base);
+    if (aula && !descricoes.has(aula.id)) descricoes.set(aula.id, m);
+  }
+  return descricoes;
+}
+
+export function montarArvore(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[] = []): No[] {
+  const descricoes = new Set([...descricoesDasAulas(aulas, todosOsMateriais).values()].map((m) => m.id));
+  const materiais = todosOsMateriais.filter((m) => !descricoes.has(m.id));
   const pastas = [...aulas.map((l) => pastasDe(l.relPath)), ...materiais.map((m) => pastasDe(m.relPath))];
   let comum = 0;
   while (pastas.length && pastas.every((p) => p.length > comum + 1 && p[comum] === pastas[0][comum])) comum++;

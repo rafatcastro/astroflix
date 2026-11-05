@@ -321,6 +321,10 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   `.docx` (`mammoth`) e planilhas/CSV (SheetJS, do tarball do cdn.sheetjs.com: o do npm parou na
   0.18). Tudo por import dinâmico e o HTML gerado passa pelo DOMPurify. O resto (zip, pptx, doc
   antigo) é baixado.
+  O arquivo de texto (txt, md, pdf, docx) com o mesmo nome de um vídeo, ao lado dele, numa pasta
+  como `materiais/` ou, se o nome for único, em qualquer lugar do curso, é a **descrição da aula**:
+  sai da lista e aparece embaixo dos botões do player (`descricoesDasAulas` em `lib/arvore.ts`,
+  `DescricaoDaAula.tsx`).
 - `lib/pdf.ts`: carrega o pdf.js (`pdfjs-dist`, build legacy, por import dinâmico) só quando
   alguém abre um PDF ou falta uma capa, e gera as capas uma de cada vez.
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o
