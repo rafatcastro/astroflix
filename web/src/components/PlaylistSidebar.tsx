@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useCourse } from '../api/hooks';
 import { api, materialUrl } from '../api/client';
 import { cliqueFora } from '../lib/desktop';
-import { KIND_LABEL, VisualizadorMaterial, type Visualizado } from './MaterialsSection';
+import { KIND_LABEL } from './MaterialsSection';
+import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from './VisualizadorArquivo';
 import { formatDuration } from '../lib/format';
 import { caminhoDaAula, montarArvore, type No } from '../lib/arvore';
 import { ChevronRight } from './icons';
@@ -27,6 +28,7 @@ export default function PlaylistSidebar({
   const todas = data ? data.modules.flatMap((m) => m.lessons) : [];
   const arvore = montarArvore(todas, data?.materials ?? []);
   const [visualizado, setVisualizado] = useState<Visualizado>(null);
+  const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const caminhoAtual = caminhoDaAula(arvore, currentLessonId).join('\n');
   const [abertos, setAbertos] = useState<string[]>([]);
 
@@ -55,11 +57,11 @@ export default function PlaylistSidebar({
     nos.map((no) => {
       // Cada nível recua um pouco: com a árvore toda aberta, dá para ver de que pasta é cada aula.
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
-      // O arquivo fica na pasta dele, como na página do curso: PDF e imagem abrem
-      // por cima do vídeo; o resto é baixado.
+      // O arquivo fica na pasta dele, como na página do curso: o que o app sabe
+      // mostrar abre por cima do vídeo; o resto é baixado.
       if (no.tipo === 'material') {
         const m = no.material;
-        const abre = m.kind === 'pdf' || m.kind === 'image';
+        const abre = !!tipoDeVisualizacao(m.name);
         return (
           <a
             key={m.id}
@@ -68,7 +70,7 @@ export default function PlaylistSidebar({
             onClick={(e) => {
               if (abre) {
                 e.preventDefault();
-                setVisualizado({ kind: m.kind === 'pdf' ? 'pdf' : 'image', id: m.id, name: m.name });
+                setVisualizado({ id: m.id, name: m.name });
               } else cliqueFora(e, materialUrl(m.id, true));
             }}
             style={recuo}
@@ -147,7 +149,7 @@ export default function PlaylistSidebar({
   return (
     <div>
       {nivel(arvore, 0)}
-      {visualizado && <VisualizadorMaterial viewer={visualizado} onFechar={() => setVisualizado(null)} />}
+      {visualizado && <VisualizadorArquivo viewer={visualizado} onFechar={fecharVisualizador} />}
     </div>
   );
 }

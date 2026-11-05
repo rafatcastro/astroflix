@@ -1,4 +1,4 @@
-import { useState, useEffect, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useState, useEffect, type MouseEvent, type ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
@@ -8,7 +8,8 @@ import { api, materialUrl } from '../api/client';
 import type { LessonDTO, MaterialDTO } from '../api/client';
 import LessonGrid from '../components/LessonGrid';
 import { montarArvore, type No } from '../lib/arvore';
-import { KIND_LABEL, VisualizadorMaterial, type Visualizado } from '../components/MaterialsSection';
+import { KIND_LABEL } from '../components/MaterialsSection';
+import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from '../components/VisualizadorArquivo';
 import { cliqueFora } from '../lib/desktop';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
@@ -48,6 +49,7 @@ export default function Course() {
   const qc = useQueryClient();
   const [rootIssue, setRootIssue] = useState(false);
   const [visualizado, setVisualizado] = useState<Visualizado>(null);
+  const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const [notice, setNotice] = useState<string | null>(null);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
@@ -168,11 +170,11 @@ export default function Course() {
     </div>
   );
   // O arquivo que não é vídeo é um item da lista como a aula, no mesmo formato:
-  // PDF e imagem abrem no visualizador, o resto é baixado.
+  // o que o app sabe mostrar (PDF, texto, Word, planilha…) abre no visualizador, o resto é baixado.
   const abrirArquivo = (m: MaterialDTO, e: MouseEvent) => {
-    if (m.kind === 'pdf' || m.kind === 'image') {
+    if (tipoDeVisualizacao(m.name)) {
       e.preventDefault();
-      setVisualizado({ kind: m.kind === 'pdf' ? 'pdf' : 'image', id: m.id, name: m.name });
+      setVisualizado({ id: m.id, name: m.name });
     } else cliqueFora(e, materialUrl(m.id, true));
   };
   const linhaDoArquivo = (m: MaterialDTO) => (
@@ -190,7 +192,7 @@ export default function Course() {
       <span className="min-w-0 flex-1 truncate">{m.name}</span>
       <span className="shrink-0 text-xs text-neutral-500">{formatBytes(m.sizeBytes)}</span>
       <span className="grid h-11 w-11 shrink-0 place-items-center text-xs text-neutral-500 sm:w-auto sm:min-w-28 sm:justify-end">
-        {m.kind === 'pdf' || m.kind === 'image' ? 'Abrir' : 'Baixar'}
+        {tipoDeVisualizacao(m.name) ? 'Abrir' : 'Baixar'}
       </span>
     </a>
   );
@@ -454,7 +456,7 @@ export default function Course() {
 
       <div className="mt-6 space-y-2">{nivel(arvore, 0)}</div>
 
-      {visualizado && <VisualizadorMaterial viewer={visualizado} onFechar={() => setVisualizado(null)} />}
+      {visualizado && <VisualizadorArquivo viewer={visualizado} onFechar={fecharVisualizador} />}
       </div>
       {menuAula && (
         <>

@@ -14,11 +14,15 @@
     "@tauri-apps/plugin-opener": "2.7.1",
     "@tauri-apps/plugin-process": "2.4.0",
     "@tauri-apps/plugin-updater": "2.13.3",
+    "dompurify": "3.2.6",
+    "mammoth": "1.9.1",
+    "marked": "15.0.12",
     "pdfjs-dist": "5.4.624",
     "qrcode": "1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^7.13.0"
+    "react-router-dom": "^7.13.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@fontsource-variable/inter": "^5.2.8",

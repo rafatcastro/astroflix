@@ -316,6 +316,11 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   `CabecalhoCategoria` é o nome e as abas. Além delas, `/course/:id` (Course), `/lesson/:id` (Lesson),
   `/settings` (Settings), `/flashcards` (Flashcards, `?curso=<id>`), `/pdfs` (Pdfs) e `/pdf/:id`
   (LeitorPdf).
+- `components/VisualizadorArquivo.tsx`: os arquivos do curso que não são vídeo abrem no app, por
+  cima da página: PDF pelo pdf.js, texto e código, Markdown (`marked`), notebook do Jupyter, Word
+  `.docx` (`mammoth`) e planilhas/CSV (SheetJS, do tarball do cdn.sheetjs.com: o do npm parou na
+  0.18). Tudo por import dinâmico e o HTML gerado passa pelo DOMPurify. O resto (zip, pptx, doc
+  antigo) é baixado.
 - `lib/pdf.ts`: carrega o pdf.js (`pdfjs-dist`, build legacy, por import dinâmico) só quando
   alguém abre um PDF ou falta uma capa, e gera as capas uma de cada vez.
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o

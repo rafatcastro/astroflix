@@ -23,9 +23,14 @@ function pdfjs() {
  * pedaços das páginas que desenha: um livro de 300 MB abre na hora.
  */
 export async function abrirPdf(id: string): Promise<PDFDocumentProxy> {
+  return abrirPdfDaUrl(api.documentoArquivoUrl(id));
+}
+
+/** O mesmo, para um PDF servido por outra rota (o material de um curso). */
+export async function abrirPdfDaUrl(url: string): Promise<PDFDocumentProxy> {
   const lib = await pdfjs();
   return lib.getDocument({
-    url: api.documentoArquivoUrl(id),
+    url,
     disableAutoFetch: true,
     rangeChunkSize: 256 * 1024,
     isEvalSupported: false,

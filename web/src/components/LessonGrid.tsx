@@ -4,6 +4,7 @@ import { api, materialUrl } from '../api/client';
 import { formatBytes, formatDuration } from '../lib/format';
 import type { LessonDTO, MaterialDTO } from '../api/client';
 import { KIND_LABEL } from './MaterialsSection';
+import { tipoDeVisualizacao } from './VisualizadorArquivo';
 import { IconeOffline } from './IconeOffline';
 import { CapaAula } from './CapaAula';
 
@@ -25,7 +26,7 @@ export default function LessonGrid({
   onToggleComplete: (id: string, completed: boolean) => void;
   /** Botão direito na aula (Baixar / Excluir download); só nos cursos do Drive e do Telegram. */
   onMenu?: (l: LessonDTO, e: MouseEvent) => void;
-  /** Clique num arquivo: PDF e imagem abrem no visualizador, o resto é baixado. */
+  /** Clique num arquivo: o que o app sabe mostrar abre no visualizador, o resto é baixado. */
   onAbrirArquivo: (m: MaterialDTO, e: MouseEvent) => void;
 }) {
   return (
@@ -46,7 +47,7 @@ export default function LessonGrid({
               <div className="truncate text-sm">{l.name}</div>
               <div className="flex justify-between text-xs text-neutral-500">
                 <span>{formatBytes(l.sizeBytes)}</span>
-                <span>{l.kind === 'pdf' || l.kind === 'image' ? 'Abrir' : 'Baixar'}</span>
+                <span>{tipoDeVisualizacao(l.name) ? 'Abrir' : 'Baixar'}</span>
               </div>
             </div>
           </a>
