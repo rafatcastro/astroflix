@@ -1,6 +1,6 @@
 [package]
 name = "astroflix"
-version = "2.1.0"
+version = "2.1.56"
 description = "Astroflix — cursos das suas pastas, com progresso confiável"
 edition = "2021"
 

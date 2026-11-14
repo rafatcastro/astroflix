@@ -48,7 +48,11 @@ seguidos.
 (`desktop/src-tauri/target/release/bundle`). É assim que o dono atualiza o app na máquina dele, sem
 depender da release do CI, que pode estar parada (em 11/2026 o GitHub Actions travou por cobrança
 e cinco releases seguidas falharam sem ninguém notar). Se o build falhar, conserte antes de dar a
-tarefa por encerrada.
+tarefa por encerrada. O `desktop:build` dá ao build a versão da última release + 1
+(`scripts/versao-local.mjs`, que grava no package.json, tauri.conf.json e Cargo.toml; commite junto):
+com a versão do package.json, o atualizador trocava o build pela release antiga ao abrir. Ele também
+pula o pacote assinado do atualizador (`tauri.local.conf.json`, a chave privada não fica nesta
+máquina) e a arrumação do `.dmg` pelo Finder (`--ci`, que falhava sem permissão de automação).
 
 ## Comandos
 

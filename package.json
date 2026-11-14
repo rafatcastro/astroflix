@@ -1,6 +1,6 @@
 {
   "name": "astroflix",
-  "version": "2.1.0",
+  "version": "2.1.56",
   "private": true,
   "type": "module",
   "description": "Programa desktop para assistir aos cursos que estão nas suas pastas, com progresso confiável.",
@@ -33,7 +33,7 @@
     "build:binario": "node scripts/build-binario.mjs",
     "repo": "node scripts/definir-repo.mjs",
     "desktop:preparar": "pnpm build && pnpm build:binario && node scripts/preparar-sidecar.mjs && node scripts/sincronizar-versao.mjs",
-    "desktop:build": "pnpm desktop:preparar && pnpm --filter desktop tauri build"
+    "desktop:build": "node scripts/versao-local.mjs && pnpm desktop:preparar && pnpm --filter desktop tauri build --ci --config src-tauri/tauri.local.conf.json"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

@@ -21,10 +21,11 @@ pnpm desktop:build   # installer for this machine
 - `macos/Astroflix.app`
 - `dmg/Astroflix_<version>_<arch>.dmg`
 
-At the end it signs the updater package. Without `TAURI_SIGNING_PRIVATE_KEY` set, that step fails
-with "A public key has been found, but no private key" and the command exits with an error, but the
-`.app` and the `.dmg` are already complete and work. Only the auto-updater needs the key, and the
-releases come from CI (`.github/workflows/release.yml`). The local build is not notarized: if you
+The local build gets a version one above the latest release (`scripts/versao-local.mjs`), so the
+auto-updater does not replace it with an older release when it opens. It skips the signed updater
+package (`tauri.local.conf.json`) and the Finder step of the `.dmg` (`--ci`), so it needs neither
+`TAURI_SIGNING_PRIVATE_KEY` nor Finder automation permission. Releases come from CI
+(`.github/workflows/release.yml`). The local build is not notarized: if you
 copy the `.dmg` to another Mac, macOS blocks it on first open until it is allowed in System
 Settings → Privacy & Security → Open Anyway.
 

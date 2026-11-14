@@ -58,7 +58,7 @@ dependencies = [
 
 [[package]]
 name = "astroflix"
-version = "2.1.0"
+version = "2.1.56"
 dependencies = [
  "objc2",
  "objc2-foundation",
