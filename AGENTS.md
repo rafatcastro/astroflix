@@ -43,6 +43,13 @@ opcionais). O commit vai **direto na `main`** (sem branch nem Pull Request). Cad
 uma release (~10 min, em fila), então junte as mudanças num commit só em vez de vários pushes
 seguidos.
 
+**Build depois de toda mudança:** ao terminar qualquer mudança de código, rode **`pnpm desktop:build`**
+(com o Rust no PATH, ver Comandos) e diga onde ficou o instalador
+(`desktop/src-tauri/target/release/bundle`). É assim que o dono atualiza o app na máquina dele, sem
+depender da release do CI, que pode estar parada (em 11/2026 o GitHub Actions travou por cobrança
+e cinco releases seguidas falharam sem ninguém notar). Se o build falhar, conserte antes de dar a
+tarefa por encerrada.
+
 ## Comandos
 
 Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com três
