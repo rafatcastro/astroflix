@@ -52,7 +52,12 @@ tarefa por encerrada. O `desktop:build` dá ao build a versão da última releas
 (`scripts/versao-local.mjs`, que grava no package.json, tauri.conf.json e Cargo.toml; commite junto):
 com a versão do package.json, o atualizador trocava o build pela release antiga ao abrir. Ele também
 pula o pacote assinado do atualizador (`tauri.local.conf.json`, a chave privada não fica nesta
-máquina) e a arrumação do `.dmg` pelo Finder (`--ci`, que falhava sem permissão de automação).
+máquina) e a arrumação do `.dmg` pelo Finder (`--ci`, que falhava sem permissão de automação), e
+ejeta antes o `.dmg` que ficou montado (`scripts/ejetar-dmg.mjs`: com ele aberto, o `bundle_dmg.sh`
+falha). **O build local precisa de `.google-oauth.local.json`, `.telegram.local.json` e
+`.supabase.local.json` na raiz** (ignorados pelo git): sem eles, o app sai sem conta, sem Telegram e
+com todo arquivo do Drive dando 502 `google` (o token não renova). Confira no `server/src/bundled.ts`
+que os `*_PADRAO` não estão `null`.
 
 ## Comandos
 
