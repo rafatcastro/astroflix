@@ -95,16 +95,33 @@ const CABECALHOS = {
   'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
 };
 
-/** O HTML da página, ou null se não for uma página (vídeo direto, erro, fora do ar). */
-export async function lerPagina(url: string, signal?: AbortSignal, login?: Cabecalho | null): Promise<{ html: string; url: string } | null> {
+/** O que voltou ao abrir a página: o log e o "print" (o HTML salvo) saem daqui. */
+export interface RespostaPagina {
+  /** O HTML, só quando é uma página que respondeu 2xx. */
+  html: string | null;
+  /** O endereço final, depois dos redirecionamentos. */
+  url: string;
+  status: number | null;
+  tipo: string | null;
+  bytes: number;
+  /** O corpo recebido (até 5 MB), mesmo num erro: a página de login ou de 403 também diz algo. */
+  corpo: string;
+  erro: string | null;
+}
+
+export async function lerPagina(url: string, signal?: AbortSignal, login?: Cabecalho | null): Promise<RespostaPagina> {
   try {
     const headers: Record<string, string> = { ...CABECALHOS };
     if (login) headers[login.nome] = login.valor;
     const res = await fetch(url, { headers, redirect: 'follow', signal: signal ?? AbortSignal.timeout(30_000) });
-    if (!res.ok || !(res.headers.get('content-type') ?? '').includes('html')) return null;
-    return { html: (await res.text()).slice(0, 5_000_000), url: res.url || url };
-  } catch {
-    return null;
+    const tipo = res.headers.get('content-type');
+    const ehTexto = !tipo || /html|text|json|xml/i.test(tipo);
+    const corpo = ehTexto ? (await res.text()).slice(0, 5_000_000) : '';
+    if (!ehTexto) await res.body?.cancel();
+    const pagina = res.ok && (tipo ?? '').includes('html');
+    return { html: pagina ? corpo : null, url: res.url || url, status: res.status, tipo, bytes: corpo.length, corpo, erro: null };
+  } catch (e) {
+    return { html: null, url, status: null, tipo: null, bytes: 0, corpo: '', erro: e instanceof Error ? `${e.name}: ${e.message}` : 'falhou' };
   }
 }
 
@@ -129,6 +146,9 @@ export function cabecalhoDeLogin(texto: string | null | undefined): Cabecalho | 
 }
 
 /** O login vai só para o site do link colado e para o player embutido na página dele. */
+/** Para o log: o nome do cabeçalho e só o fim do valor (o token nunca vai inteiro para o disco do log). */
+export const loginMascarado = (c: Cabecalho) => `${c.nome}: …${c.valor.slice(-4)} (${c.valor.length} caracteres)`;
+
 export function mandaLogin(url: string, link: string, embutidos: Set<string>): boolean {
   try {
     const h = new URL(url).hostname;

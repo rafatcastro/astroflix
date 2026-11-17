@@ -50,6 +50,13 @@ function rodar(args: string[], timeoutMs: number, signal?: AbortSignal): Promise
   });
 }
 
+/** As linhas que explicam a falha (ERROR primeiro), curtas o bastante para um log. */
+export const ultimasLinhas = (texto: string, n = 3) => {
+  const linhas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const erros = linhas.filter((l) => /ERROR/.test(l));
+  return (erros.length ? erros : linhas).slice(-n).join(' | ').slice(0, 1000);
+};
+
 const duracao = (d: unknown) => (typeof d === 'number' && Number.isFinite(d) && d > 0 ? Math.round(d) : null);
 
 /**
@@ -59,14 +66,17 @@ const duracao = (d: unknown) => (typeof d === 'number' && Number.isFinite(d) && 
  */
 export async function listar(
   url: string,
-  opts: { referer?: string; soUm?: boolean; timeoutMs?: number; signal?: AbortSignal; login?: Cabecalho | null } = {},
+  opts: { referer?: string; soUm?: boolean; timeoutMs?: number; signal?: AbortSignal; login?: Cabecalho | null; aoErro?: (msg: string) => void } = {},
 ): Promise<ResultadoListar | null> {
   const args = ['-J', '--flat-playlist'];
   if (opts.soUm) args.push('--no-playlist');
   if (opts.referer) args.push('--referer', opts.referer);
   if (opts.login) args.push('--add-headers', `${opts.login.nome}:${opts.login.valor}`);
   const r = await rodar([...args, url], opts.timeoutMs ?? 60_000, opts.signal);
-  if (r.codigo !== 0) return null;
+  if (r.codigo !== 0) {
+    opts.aoErro?.(ultimasLinhas(r.erro) || `saiu com ${r.codigo}`);
+    return null;
+  }
   let info: Record<string, unknown>;
   try {
     info = JSON.parse(r.saida) as Record<string, unknown>;
@@ -157,7 +167,7 @@ export function baixarVideo(
       opts.signal?.removeEventListener('abort', parar);
       if (opts.signal?.aborted) return reject(new Error('cancelado'));
       if (codigo === 0 && final) return resolve(final);
-      reject(new Error(erro.split('\n').filter((l) => l.includes('ERROR')).pop()?.trim() || 'falhou'));
+      reject(Object.assign(new Error(erro.split('\n').filter((l) => l.includes('ERROR')).pop()?.trim() || `saiu com ${codigo}`), { detalhe: erro.slice(-4000) }));
     });
   });
 }

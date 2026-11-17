@@ -51,6 +51,8 @@ export default function Course() {
   const [visualizado, setVisualizado] = useState<Visualizado>(null);
   const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const [notice, setNotice] = useState<string | null>(null);
+  // Curso importado por link que falhou: o log dos downloads, aberto pelo "Ver log".
+  const [logLink, setLogLink] = useState<string | null>(null);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
 
@@ -353,7 +355,19 @@ export default function Course() {
                 className="underline underline-offset-2 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 Tentar de novo
+              </button>{' '}
+              <button
+                type="button"
+                onClick={() => void api.linksLogDoCurso(data.id).then((t) => setLogLink(t ?? 'Nenhum log ainda.'))}
+                className="underline underline-offset-2 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Ver log
               </button>
+              {logLink !== null && (
+                <pre tabIndex={0} aria-label="Log dos downloads" className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-neutral-950 p-2 font-mono text-[11px] text-neutral-300">
+                  {logLink}
+                </pre>
+              )}
             </Banner>
           )}
         </div>

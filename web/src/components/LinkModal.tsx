@@ -15,6 +15,7 @@ const ERROS: Record<string, string> = {
   'link-invalido': 'Cole um link que comece com http:// ou https://.',
   'sem-videos': 'Nenhum vídeo nessa página nem nos links dela. Se a página pede login, essa parte ainda não está pronta.',
   'nao-abriu': 'Não foi possível abrir essa página.',
+  'sem-acesso': 'A página recusou o acesso (401/403): o token faltou, venceu ou não é desse site.',
 };
 
 const mensagemSemYtDlp = navigator.userAgent.includes('Windows')
@@ -48,6 +49,8 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
   // Curso assinado: o token da sessão no site, copiado do DevTools.
   const [token, setToken] = useState('');
   const [comLogin, setComLogin] = useState(false);
+  const [verLog, setVerLog] = useState(false);
+  const logRef = useRef<HTMLPreElement>(null);
   const idRef = useRef<string | null>(null);
   // O id da última leitura, para o "Importar" (idRef vira null quando ela acaba).
   const descobertaRef = useRef<string | null>(null);
@@ -127,7 +130,7 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
       const { id } = await api.linksDescobrir(l, comLogin ? token.trim() : undefined);
       idRef.current = id;
       descobertaRef.current = id;
-      setDescoberta({ fase: 'lendo', link: l, titulo: null, verificados: 0, total: 0, itens: [], erro: null });
+      setDescoberta({ fase: 'lendo', link: l, titulo: null, verificados: 0, total: 0, itens: [], erro: null, log: [] });
     } catch (e) {
       const m = e instanceof Error ? e.message : '';
       setErro(m === 'sem-ytdlp' ? mensagemSemYtDlp : (ERROS[m] ?? 'Não foi possível ler esse link.'));
@@ -139,6 +142,11 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
     idRef.current = null;
     setDescoberta((d) => (d ? { ...d, fase: 'pronto' } : d));
   };
+
+  // O log acompanha a última linha enquanto a leitura anda.
+  useEffect(() => {
+    if (verLog && logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+  }, [verLog, descoberta?.log.length]);
 
   const marcados = linhas?.filter((l) => l.marcado) ?? [];
 
@@ -262,6 +270,40 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
                 ? `${linhas.length} vídeo(s) achado(s). Desmarque o que não for aula e acerte os títulos.`
                 : null}
           </p>
+        )}
+
+        {descoberta && descoberta.log.length > 0 && (
+          <div className="mt-2">
+            <div className="flex items-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => setVerLog((v) => !v)}
+                aria-expanded={verLog}
+                className="text-neutral-400 underline decoration-neutral-700 underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                {verLog ? 'Esconder detalhes' : 'Detalhes'}
+              </button>
+              {descobertaRef.current && (
+                <button
+                  type="button"
+                  onClick={() => descobertaRef.current && void api.linksAbrirLog(descobertaRef.current).catch(() => undefined)}
+                  className="text-neutral-400 underline decoration-neutral-700 underline-offset-2 hover:text-neutral-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                >
+                  Abrir pasta do log (com o HTML recebido)
+                </button>
+              )}
+            </div>
+            {verLog && (
+              <pre
+                ref={logRef}
+                tabIndex={0}
+                aria-label="Log da leitura"
+                className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-neutral-950 p-2 font-mono text-[11px] leading-relaxed text-neutral-300"
+              >
+                {descoberta.log.join('\n')}
+              </pre>
+            )}
+          </div>
         )}
 
         {!!linhas?.length && (

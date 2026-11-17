@@ -228,7 +228,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   página e ao yt-dlp (`--add-headers`), mas só para o site do link e os players embutidos nela
   (`mandaLogin`; um YouTube linkado não recebe), e fica no manifesto para os downloads continuarem.
   O yt-dlp chama a página que ele não conhece de `Generic` ou `HTML5MediaEmbed` (`ehGenerico`): aí
-  os links dela também são abertos.
+  os links dela também são abertos. **Logs:** cada leitura registra o passo a passo (status HTTP, tipo e
+  tamanho da página, quantos `<a>`/`<script>`, o que o yt-dlp disse de cada link; o token só mascarado)
+  em `Descoberta.log` (a janela mostra em "Detalhes") e em `DATA_DIR/logs/links/<data> <host>/`,
+  com `leitura.log` e o HTML recebido (`pagina.html`, ou `resposta.txt` num erro), ficando as 30 mais
+  novas. Os downloads de cada curso vão para `.astroflix-link.log` na pasta dele ("Ver log" no aviso de
+  erro do curso).
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

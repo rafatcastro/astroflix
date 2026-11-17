@@ -7,9 +7,14 @@ import {
   criarCursoDeLinks,
   estadoDaDescoberta,
   iniciarDescoberta,
+  logDoCurso,
+  pastaDoLogDaDescoberta,
+  pastaDosLogs,
   retentarImportacao,
 } from '../links/importar';
+import fs from 'node:fs';
 import { temYtDlp } from '../links/ytdlp';
+import { abrirNoSistema } from './armazenamento';
 
 // Importar por link (links/importar.ts). A descoberta pode levar um minuto (abre
 // link por link da página), então é um trabalho em segundo plano que a janela
@@ -25,7 +30,7 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
     if (typeof link !== 'string' || !/^https?:\/\/\S+$/i.test(link.trim())) return reply.code(400).send({ error: 'link-invalido' });
     if (!temYtDlp()) return reply.code(424).send({ error: 'sem-ytdlp' });
     const token = typeof b?.token === 'string' && b.token.trim() ? b.token.trim() : null;
-    return reply.code(202).send({ id: iniciarDescoberta(link.trim(), token) });
+    return reply.code(202).send({ id: iniciarDescoberta(config, link.trim(), token) });
   });
 
   app.get('/api/links/descobrir/:id', async (req, reply) => {
@@ -57,6 +62,22 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
       itens,
     });
     return reply.code(201).send({ id });
+  });
+
+  // O log e o HTML recebido, no Finder/Explorer. O caminho vem do servidor, nunca da requisição.
+  app.post('/api/links/descobrir/:id/abrir-log', async (req, reply) => {
+    const pasta = pastaDoLogDaDescoberta((req.params as { id: string }).id) ?? pastaDosLogs(config);
+    fs.mkdirSync(pasta, { recursive: true });
+    abrirNoSistema(pasta);
+    return reply.code(204).send();
+  });
+
+  app.get('/api/links/cursos/:id/log', async (req, reply) => {
+    const arquivo = logDoCurso(db, (req.params as { id: string }).id);
+    if (!arquivo) return reply.code(404).send({ error: 'not_found' });
+    // As últimas linhas bastam para a janela; o arquivo inteiro fica na pasta do curso.
+    const texto = fs.readFileSync(arquivo, 'utf8');
+    return reply.type('text/plain; charset=utf-8').send(texto.slice(-20_000));
   });
 
   app.post('/api/links/cursos/:id/tentar-de-novo', async (req, reply) => {

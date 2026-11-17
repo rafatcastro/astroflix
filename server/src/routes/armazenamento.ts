@@ -15,7 +15,7 @@ import { definirLimiteDoCache, liberarCache, limparCache, usoDoCache } from '../
 
 // Abre no gerenciador de arquivos do sistema. O caminho nunca vem da requisição:
 // é a pasta de armazenamento ou a de um curso, as duas lidas do banco.
-function abrirNoSistema(pasta: string): void {
+export function abrirNoSistema(pasta: string): void {
   const [cmd, args] =
     process.platform === 'darwin' ? ['open', [pasta]] : process.platform === 'win32' ? ['explorer', [pasta]] : ['xdg-open', [pasta]];
   const p = spawn(cmd, args as string[], { detached: true, stdio: 'ignore', windowsHide: true });

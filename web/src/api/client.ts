@@ -230,6 +230,8 @@ export interface DescobertaLinks {
   total: number;
   itens: VideoAchado[];
   erro: string | null;
+  /** Passo a passo: status da página, o que o yt-dlp disse de cada link. */
+  log: string[];
 }
 
 // Rotas de migração respondem 409 com { status: 'root_unavailable' } (pasta indisponível / curso inexistente).
@@ -589,6 +591,11 @@ export const api = {
     itens: Array<{ url: string; titulo: string }>;
   }) =>
     jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
+  linksAbrirLog: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}/abrir-log`, { method: 'POST' }),
+  linksLogDoCurso: async (courseId: string): Promise<string | null> => {
+    const res = await fetch(`/api/links/cursos/${courseId}/log`);
+    return res.ok ? res.text() : null;
+  },
   linksTentarDeNovo: (courseId: string) => jsonFetch<void>(`/api/links/cursos/${courseId}/tentar-de-novo`, { method: 'POST' }),
   importLibrary: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import', { method: 'POST', body: JSON.stringify(data) }),
