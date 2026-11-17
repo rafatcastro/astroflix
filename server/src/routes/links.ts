@@ -14,6 +14,7 @@ import {
 } from '../links/importar';
 import fs from 'node:fs';
 import { temYtDlp } from '../links/ytdlp';
+import { abrirJanelaDeLogin, acharNavegador, janelaDeLoginAberta } from '../links/navegador';
 import { abrirNoSistema } from './armazenamento';
 
 // Importar por link (links/importar.ts). A descoberta pode levar um minuto (abre
@@ -22,7 +23,15 @@ import { abrirNoSistema } from './armazenamento';
 export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
   const { db, config } = opts;
 
-  app.get('/api/links/status', async () => ({ ytdlp: temYtDlp() }));
+  app.get('/api/links/status', async () => ({ ytdlp: temYtDlp(), navegador: !!acharNavegador(), janelaDeLogin: janelaDeLoginAberta() }));
+
+  // "Entrar no site": abre o Chrome com o perfil do Astroflix no link (ver navegador.ts).
+  app.post('/api/links/entrar', async (req, reply) => {
+    const link = (req.body as { link?: unknown } | undefined)?.link;
+    if (typeof link !== 'string' || !/^https?:\/\/\S+$/i.test(link.trim())) return reply.code(400).send({ error: 'link-invalido' });
+    const r = await abrirJanelaDeLogin(config.dataDir, link.trim());
+    return r === 'ok' ? reply.code(204).send() : reply.code(409).send({ error: r });
+  });
 
   app.post('/api/links/descobrir', async (req, reply) => {
     const b = req.body as { link?: unknown; token?: unknown } | undefined;

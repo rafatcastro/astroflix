@@ -591,6 +591,7 @@ export const api = {
     itens: Array<{ url: string; titulo: string; pagina?: string }>;
   }) =>
     jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
+  linksEntrar: (link: string) => jsonFetch<void>('/api/links/entrar', { method: 'POST', body: JSON.stringify({ link }) }),
   linksAbrirLog: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}/abrir-log`, { method: 'POST' }),
   linksLogDoCurso: async (courseId: string): Promise<string | null> => {
     const res = await fetch(`/api/links/cursos/${courseId}/log`);

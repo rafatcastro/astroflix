@@ -61,13 +61,22 @@ export interface Navegador {
     },
   ): Promise<PaginaRenderizada>;
   fechar(): void;
+  /** Resolve quando o processo do navegador terminou (o perfil fica livre). */
+  fechada: Promise<void>;
+  /** O processo morreu sozinho. */
+  viva(): boolean;
 }
 
 type Mensagem = { id?: number; method?: string; params?: any; result?: any; error?: { message: string }; sessionId?: string };
 
-/** Sobe um Chrome invisível com um perfil temporário (nada da pessoa é lido nem mexido). */
-export async function abrirNavegador(executavel: string, signal?: AbortSignal): Promise<Navegador> {
-  const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'astroflix-nav-'));
+/**
+ * Sobe um Chrome invisível. Com `perfil`, usa (e mantém) essa pasta: é o perfil
+ * do Astroflix, onde fica o login feito em "Entrar no site". Sem ele, um perfil
+ * temporário que some ao fechar.
+ */
+export async function abrirNavegador(executavel: string, opts: { perfil?: string } = {}): Promise<Navegador> {
+  const perfil = opts.perfil ?? fs.mkdtempSync(path.join(os.tmpdir(), 'astroflix-nav-'));
+  if (opts.perfil) fs.mkdirSync(perfil, { recursive: true });
   const proc: ChildProcess = spawn(
     executavel,
     [
@@ -83,15 +92,15 @@ export async function abrirNavegador(executavel: string, signal?: AbortSignal): 
     ],
     { stdio: ['ignore', 'ignore', 'pipe'] },
   );
+  const fechada = new Promise<void>((r) => proc.once('exit', () => r()));
   const fechar = () => {
     try {
       proc.kill('SIGKILL');
     } catch {
       /* já saiu */
     }
-    setTimeout(() => fs.rmSync(perfil, { recursive: true, force: true }), 1000).unref();
+    if (!opts.perfil) setTimeout(() => fs.rmSync(perfil, { recursive: true, force: true }), 1000).unref();
   };
-  signal?.addEventListener('abort', fechar);
 
   const endereco = await new Promise<string>((resolve, reject) => {
     let erro = '';
@@ -240,5 +249,109 @@ export async function abrirNavegador(executavel: string, signal?: AbortSignal): 
       }
       fechar();
     },
+    fechada,
+    viva: () => proc.exitCode === null && proc.signalCode === null,
   };
 }
+
+// ---------- O perfil do Astroflix: um navegador por vez ----------
+
+// Site feito em JavaScript (o do Ferretto, por exemplo) guarda a sessão no
+// localStorage e nos cookies do navegador, e não aceita só um token no
+// cabeçalho: sem sessão, a página manda para /login. "Entrar no site" abre uma
+// janela do Chrome com o perfil do Astroflix (DATA_DIR/navegador), a pessoa
+// entra uma vez, e a leitura invisível usa o mesmo perfil, já logada. Dois Chromes
+// não abrem o mesmo perfil ao mesmo tempo (o segundo entrega ao primeiro e sai),
+// então há um invisível compartilhado e a janela de login fecha-o antes de abrir.
+
+export const pastaDoPerfil = (dataDir: string) => path.join(dataDir, 'navegador');
+
+let compartilhado: { nav: Promise<Navegador>; usos: number; ocioso: NodeJS.Timeout | null } | null = null;
+let janelaDeLogin: ChildProcess | null = null;
+const OCIOSO_MS = 20_000;
+
+const janelaAberta = () => !!janelaDeLogin && janelaDeLogin.exitCode === null && janelaDeLogin.signalCode === null;
+
+async function fecharJanelaDeLogin(): Promise<void> {
+  const j = janelaDeLogin;
+  if (!j || !janelaAberta()) return;
+  // SIGTERM fecha direito (grava o localStorage no disco); se travar, mata.
+  const saiu = new Promise<void>((r) => j.once('exit', () => r()));
+  j.kill('SIGTERM');
+  const t = setTimeout(() => j.kill('SIGKILL'), 8000);
+  await saiu;
+  clearTimeout(t);
+  janelaDeLogin = null;
+}
+
+/** O navegador invisível do perfil do Astroflix; `soltar` ao terminar. Null sem Chrome instalado. */
+export async function obterNavegador(dataDir: string): Promise<{ nav: Navegador; soltar: () => void; exe: string } | null> {
+  const exe = acharNavegador();
+  if (!exe) return null;
+  await fecharJanelaDeLogin();
+  if (compartilhado) {
+    const atual = await compartilhado.nav.catch(() => null);
+    if (!atual?.viva()) compartilhado = null;
+  }
+  if (!compartilhado) {
+    const nav = abrirNavegador(exe, { perfil: pastaDoPerfil(dataDir) });
+    compartilhado = { nav, usos: 0, ocioso: null };
+  }
+  const c = compartilhado;
+  c.usos++;
+  if (c.ocioso) clearTimeout(c.ocioso);
+  c.ocioso = null;
+  let nav: Navegador;
+  try {
+    nav = await c.nav;
+  } catch (e) {
+    if (compartilhado === c) compartilhado = null;
+    throw e;
+  }
+  let solto = false;
+  return {
+    nav,
+    exe,
+    soltar: () => {
+      if (solto) return;
+      solto = true;
+      c.usos--;
+      if (c.usos <= 0)
+        c.ocioso = setTimeout(() => {
+          if (compartilhado === c) compartilhado = null;
+          nav.fechar();
+        }, OCIOSO_MS);
+    },
+  };
+}
+
+/**
+ * "Entrar no site": uma janela do Chrome, visível, com o perfil do Astroflix, no
+ * link do curso. A pessoa entra na conta e fecha (ou só volta ao app: a próxima
+ * leitura fecha a janela antes de começar).
+ */
+export async function abrirJanelaDeLogin(dataDir: string, url: string): Promise<'ok' | 'sem-navegador' | 'ocupado'> {
+  const exe = acharNavegador();
+  if (!exe) return 'sem-navegador';
+  if (compartilhado) {
+    if (compartilhado.usos > 0) return 'ocupado';
+    const c = compartilhado;
+    compartilhado = null;
+    if (c.ocioso) clearTimeout(c.ocioso);
+    const nav = await c.nav.catch(() => null);
+    if (nav) {
+      nav.fechar();
+      await nav.fechada;
+    }
+  }
+  await fecharJanelaDeLogin();
+  const perfil = pastaDoPerfil(dataDir);
+  fs.mkdirSync(perfil, { recursive: true });
+  janelaDeLogin = spawn(exe, [`--user-data-dir=${perfil}`, '--no-first-run', '--no-default-browser-check', '--new-window', url], {
+    stdio: 'ignore',
+  });
+  janelaDeLogin.on('error', () => (janelaDeLogin = null));
+  return 'ok';
+}
+
+export const janelaDeLoginAberta = janelaAberta;

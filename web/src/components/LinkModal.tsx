@@ -15,6 +15,7 @@ const ERROS: Record<string, string> = {
   'link-invalido': 'Cole um link que comece com http:// ou https://.',
   'sem-videos': 'Nenhum vídeo nessa página nem nos links dela. Se a página pede login, essa parte ainda não está pronta.',
   'nao-abriu': 'Não foi possível abrir essa página.',
+  'precisa-entrar': 'O site mandou para a página de login. Marque "A página pede login", use "Entrar no site", entre na sua conta e procure de novo.',
   'sem-acesso': 'A página recusou o acesso (401/403): o token faltou, venceu ou não é desse site.',
 };
 
@@ -51,6 +52,7 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
   const [token, setToken] = useState('');
   const [comLogin, setComLogin] = useState(false);
   const [verLog, setVerLog] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
   const idRef = useRef<string | null>(null);
   // O id da última leitura, para o "Importar" (idRef vira null quando ela acaba).
@@ -135,6 +137,25 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
     } catch (e) {
       const m = e instanceof Error ? e.message : '';
       setErro(m === 'sem-ytdlp' ? mensagemSemYtDlp : (ERROS[m] ?? 'Não foi possível ler esse link.'));
+    }
+  };
+
+  // A janela do Chrome com o perfil do Astroflix; a leitura seguinte a fecha antes de começar.
+  const entrarNoSite = async () => {
+    const l = link.trim();
+    if (!l) return;
+    try {
+      await api.linksEntrar(l);
+      setAviso('Janela aberta. Entre na sua conta e depois clique em Procurar vídeos (a janela fecha sozinha).');
+    } catch (e) {
+      const m = e instanceof Error ? e.message : '';
+      setAviso(
+        m === 'sem-navegador'
+          ? 'Precisa do Google Chrome (ou Edge, Brave) instalado.'
+          : m === 'ocupado'
+            ? 'Espere a leitura atual terminar.'
+            : 'Não foi possível abrir o navegador.',
+      );
     }
   };
 
@@ -233,8 +254,21 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
         </label>
         {comLogin && (
           <div className="mt-2">
-            <label htmlFor="link-token" className="mb-1 block text-sm text-neutral-300">
-              Token de login
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={lendo || !link.trim()}
+                onClick={() => void entrarNoSite()}
+                className="rounded-lg bg-neutral-700 px-3 py-2 text-sm text-neutral-50 hover:bg-neutral-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+              >
+                Entrar no site
+              </button>
+              <span className="text-xs text-neutral-400">
+                {aviso ?? 'Abre o Chrome no link. Entre na sua conta lá e volte aqui para procurar os vídeos; o app lembra do login.'}
+              </span>
+            </div>
+            <label htmlFor="link-token" className="mb-1 mt-3 block text-sm text-neutral-300">
+              Ou um token de login (opcional)
             </label>
             <TextField
               id="link-token"

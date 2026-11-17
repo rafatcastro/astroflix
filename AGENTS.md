@@ -235,7 +235,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `mandaLogin`. O vídeo que o player pede pela rede (`.m3u8`, `.mpd`, `.mp4`) é aceito direto, sem
   passar pelo yt-dlp; uma aula do mesmo site em que o yt-dlp não acha nada é aberta no navegador (2 por
   vez, até 80). O item guarda a `pagina` da aula: se o download falha (endereço assinado que venceu), a
-  aula é reaberta (`pararNoVideo`) e o endereço novo é baixado. Sem navegador, fica o HTML cru. **Logs:** cada leitura registra o passo a passo (status HTTP, tipo e
+  aula é reaberta (`pararNoVideo`) e o endereço novo é baixado. Sem navegador, fica o HTML cru. **Login
+  no navegador:** site que guarda a sessão no localStorage/cookies (o do Ferretto: `auth-storage`) não
+  aceita só o token e manda para `/login`. O navegador usa o **perfil do Astroflix**
+  (`DATA_DIR/navegador`, persistente): "Entrar no site" (`/api/links/entrar`, `abrirJanelaDeLogin`)
+  abre o Chrome visível nesse perfil, a pessoa entra uma vez, e a leitura invisível herda a sessão.
+  Dois Chromes não abrem o mesmo perfil: há um invisível compartilhado (`obterNavegador`/`soltar`,
+  fecha após 20 s ocioso), e a leitura fecha a janela de login (SIGTERM, que grava o localStorage)
+  antes de começar. Terminou em `/login`: erro `precisa-entrar`, sem abrir os links da tela de login. **Logs:** cada leitura registra o passo a passo (status HTTP, tipo e
   tamanho da página, quantos `<a>`/`<script>`, o que o yt-dlp disse de cada link; o token só mascarado)
   em `Descoberta.log` (a janela mostra em "Detalhes") e em `DATA_DIR/logs/links/<data> <host>/`,
   com `leitura.log` e o HTML recebido (`pagina.html`, ou `resposta.txt` num erro), ficando as 30 mais

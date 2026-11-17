@@ -8,7 +8,7 @@ import { inserirCursoDerivado } from '../scan/scan-course';
 import { reconcileCourse } from '../scan/reconcile';
 import { baixarVideo, listar, temYtDlp, type VideoAchado } from './ytdlp';
 import { cabecalhoDeLogin, candidatosDaPagina, lerPagina, loginMascarado, mandaLogin, type Candidato } from './pagina';
-import { abrirNavegador, acharNavegador, type Navegador } from './navegador';
+import { obterNavegador, type Navegador } from './navegador';
 import { createLimiter } from '../media/ffmpeg';
 
 // Importar por link: a pessoa cola o link de uma página (uma playlist do YouTube,
@@ -105,7 +105,7 @@ export function iniciarDescoberta(config: AppConfig, link: string, token?: strin
   };
   limparLogsAntigos(raiz);
 
-  void descobrir(estado, ac.signal, token ?? null, comLogin, registrar, salvar)
+  void descobrir(estado, ac.signal, token ?? null, comLogin, registrar, salvar, config.dataDir)
     .catch((e) => {
       estado.fase = 'erro';
       estado.erro = e instanceof Error ? e.message : 'falhou';
@@ -133,6 +133,7 @@ async function descobrir(
   comLogin: Set<string>,
   registrar: (msg: string) => void,
   salvar: (nome: string, conteudo: string) => void,
+  dataDir: string,
 ): Promise<void> {
   const link = estado.link;
   registrar(`link: ${link}`);
@@ -144,6 +145,7 @@ async function descobrir(
   const embutidos = new Set<string>();
   const loginPara = (url: string) => (login && mandaLogin(url, link, embutidos) ? login : null);
   let falhaDeAcesso = false;
+  let foiProLogin = false;
   const vistos = new Set<string>();
   const acrescentar = (v: VideoAchado) => {
     if (vistos.has(v.url)) return;
@@ -169,19 +171,16 @@ async function descobrir(
   // Uma página qualquer: abre cada link dela e fica com os que têm vídeo, na
   // ordem da página (é a ordem das aulas numa lista de curso). Com um Chrome
   // instalado, a página abre nele e o app espera o JavaScript montar a lista.
-  const exe = acharNavegador();
-  let nav: Navegador | null = null;
-  if (exe) {
-    registrar(`navegador: ${exe}`);
-    nav = await abrirNavegador(exe, signal).catch((e) => {
-      registrar(`navegador não abriu: ${e instanceof Error ? e.message : e}`);
-      return null;
-    });
-  } else registrar('navegador: nenhum Chrome, Edge ou Brave instalado; lendo só o HTML cru (sem JavaScript)');
+  const usado = await obterNavegador(dataDir).catch((e) => {
+    registrar(`navegador não abriu: ${e instanceof Error ? e.message : e}`);
+    return null;
+  });
+  if (usado) registrar(`navegador: ${usado.exe} (perfil do Astroflix, com o login feito em "Entrar no site")`);
+  else registrar('navegador: nenhum Chrome, Edge ou Brave instalado; lendo só o HTML cru (sem JavaScript)');
   try {
-    await lerELinks(nav);
+    await lerELinks(usado?.nav ?? null);
   } finally {
-    nav?.fechar();
+    usado?.soltar();
   }
 
   async function lerELinks(nav: Navegador | null): Promise<void> {
@@ -204,6 +203,10 @@ async function descobrir(
         return null;
       });
       if (r) {
+        if (r.url !== link && /\/(login|signin|entrar|auth)\b/i.test(new URL(r.url).pathname)) {
+          registrar('o site mandou para a página de login: use "Entrar no site" na janela de importar e tente de novo');
+          foiProLogin = true;
+        }
         registrar(
           `página (navegador): HTTP ${r.status ?? '?'}, ${r.html.length} bytes em ${(r.esperou / 1000).toFixed(1)} s${r.url !== link ? `, terminou em ${r.url}` : ''}, ${r.midias.length} vídeo(s) pedido(s) pela rede`,
         );
@@ -226,7 +229,8 @@ async function descobrir(
         }
       }
     }
-    if (!pagina) return;
+    // Os links da tela de login ("esqueci a senha") não são aulas.
+    if (!pagina || foiProLogin) return;
 
     // O <title> da página nomeia melhor o curso que o do vídeo embutido.
     estado.titulo = tituloDaPagina(pagina.html) ?? estado.titulo;
@@ -337,7 +341,7 @@ async function descobrir(
 
   if (signal.aborted) return registrar('parado pela pessoa');
   if (!estado.itens.length) {
-    estado.erro = falhaDeAcesso ? 'sem-acesso' : 'sem-videos';
+    estado.erro = foiProLogin ? 'precisa-entrar' : falhaDeAcesso ? 'sem-acesso' : 'sem-videos';
     estado.fase = 'erro';
     return;
   }
@@ -530,7 +534,7 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
         // O endereço do vídeo pode ter vencido: reabre a aula e pede um novo.
         if (ac.signal.aborted || !item.pagina) throw e;
         registrar(`falhou (${e instanceof Error ? e.message : e}); reabrindo ${item.pagina} para pegar o endereço de novo`);
-        const novo = await enderecoNovo(item.pagina, m.link, login, ac.signal);
+        const novo = await enderecoNovo(config.dataDir, item.pagina, m.link, login, ac.signal);
         if (!novo) throw e;
         registrar(`endereço novo: ${novo}`);
         item.url = novo;
@@ -561,19 +565,28 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
 }
 
 /** Abre a página da aula no navegador e devolve o primeiro vídeo que o player pedir. */
-async function enderecoNovo(pagina: string, link: string, login: ReturnType<typeof cabecalhoDeLogin>, signal: AbortSignal): Promise<string | null> {
-  const exe = acharNavegador();
-  if (!exe) return null;
-  const nav = await abrirNavegador(exe, signal).catch(() => null);
-  if (!nav) return null;
+async function enderecoNovo(
+  dataDir: string,
+  pagina: string,
+  link: string,
+  login: ReturnType<typeof cabecalhoDeLogin>,
+  signal: AbortSignal,
+): Promise<string | null> {
+  const usado = await obterNavegador(dataDir).catch(() => null);
+  if (!usado) return null;
   try {
-    const r = await nav.renderizar(pagina, { login, loginPara: (u) => mandaLogin(u, link, new Set([new URL(u).hostname])), signal, pararNoVideo: true });
+    const r = await usado.nav.renderizar(pagina, {
+      login,
+      loginPara: (u) => mandaLogin(u, link, new Set([new URL(u).hostname])),
+      signal,
+      pararNoVideo: true,
+    });
     const doHtml = candidatosDaPagina(r.html, r.url).filter((c) => c.embutido).map((c) => c.url);
     return r.midias[0] ?? doHtml[0] ?? null;
   } catch {
     return null;
   } finally {
-    nav.fechar();
+    usado.soltar();
   }
 }
 
