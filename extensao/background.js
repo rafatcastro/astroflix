@@ -191,12 +191,14 @@ async function tituloDaAba(tabId) {
 
 // Clica no botão (ou link) visível e habilitado cujo texto começa com `texto`
 // ("Próxima", "Próxima aula"), sem ligar para acento e maiúscula.
-async function clicarNoBotao(tabId, texto) {
+// `indice`: qual deles, na ordem da página (0 = o primeiro). Devolve quantos há
+// (0 = nenhum, não clicou) e se clicou.
+async function clicarNoBotao(tabId, texto, indice = 0) {
   const [r] = await chrome.scripting
     .executeScript({
       target: { tabId },
-      args: [texto],
-      func: (txt) => {
+      args: [texto, indice],
+      func: (txt, ind) => {
         const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
         const alvo = norm(txt);
         const visivel = (e) => {
@@ -206,16 +208,22 @@ async function clicarNoBotao(tabId, texto) {
         const todos = [...document.querySelectorAll('button, a, [role=button]')].filter(
           (e) => visivel(e) && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && norm(e.innerText || e.getAttribute('aria-label') || '').startsWith(alvo),
         );
-        const b = todos[0];
-        if (!b) return false;
+        const b = todos[ind];
+        if (!b) return { clicou: false, total: todos.length };
         b.scrollIntoView({ block: 'center' });
         b.click();
-        return true;
+        return { clicou: true, total: todos.length };
       },
     })
     .catch(() => [null]);
-  return !!r?.result;
+  return r?.result ?? { clicou: false, total: 0 };
 }
+
+// Aulas com outro "Próxima" dentro: no Gabarito de questões do Ferretto, o
+// primeiro passa para a próxima questão e só o segundo vai para a próxima aula.
+const REGRAS_DO_BOTAO = [{ titulo: /gabarito de quest/i, indice: 1 }];
+const indiceDoBotao = (titulo) =>
+  REGRAS_DO_BOTAO.find((r) => r.titulo.test(titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))?.indice ?? 0;
 
 // Aula sem vídeo que dê para baixar (texto, exercício, player protegido): é
 // pulada, fica na lista "Puladas" e a extensão segue para a próxima. Para só sem
@@ -233,7 +241,12 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   let ultimoTitulo = null;
   let puladasSeguidas = 0;
   let fim = 'ok';
-  for (let n = 0; n < MAX_AULAS && !parar; n++) {
+  // O botão clicado na última volta: se a aula não trocar, tenta o seguinte da
+  // página (um "Próxima" de dentro da aula, como o das questões, vem antes).
+  let indiceUsado = 0;
+  let botoes = 0;
+  let n = 0;
+  while (n < MAX_AULAS && !parar) {
     let v;
     if (n === 0) {
       // A aula aberta: o último vídeo que ela pediu; sem nenhum, espera um pouco.
@@ -250,9 +263,17 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
       await dormir(2000);
       titulo = await tituloDaAba(tabId);
     }
-    // Clicou em Próxima e nada mudou (nem vídeo, nem título): a página travou ou acabou.
+    // Clicou e nada mudou (nem vídeo, nem título): era um "Próxima" de dentro da
+    // aula. Tenta o botão seguinte; sem mais nenhum, a página travou ou acabou.
     if (!v && n > 0 && titulo === ultimoTitulo) {
-      fim = `a aula não trocou depois de "${textoBotao}"`;
+      if (indiceUsado + 1 < botoes) {
+        indiceUsado++;
+        desde = Date.now();
+        const r = await clicarNoBotao(tabId, textoBotao, indiceUsado);
+        botoes = r.total;
+        if (r.clicou) continue;
+      }
+      fim = `a aula "${titulo}" não trocou depois de "${textoBotao}"`;
       break;
     }
     titulo ||= `Aula ${n + 1}`;
@@ -285,9 +306,18 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
         await estado({ falhas });
       }
     }
+    n++;
     ultimoTitulo = titulo;
     desde = Date.now();
-    if (!(await clicarNoBotao(tabId, textoBotao))) break; // sem "Próxima": era a última aula
+    indiceUsado = indiceDoBotao(titulo);
+    let r = await clicarNoBotao(tabId, textoBotao, indiceUsado);
+    // A regra pedia o segundo, mas só há um: é ele.
+    if (!r.clicou && indiceUsado > 0 && r.total > 0) {
+      indiceUsado = 0;
+      r = await clicarNoBotao(tabId, textoBotao, 0);
+    }
+    botoes = r.total;
+    if (!r.clicou) break; // sem "Próxima": era a última aula
   }
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : fim });
 }
