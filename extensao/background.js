@@ -161,8 +161,123 @@ async function importarPagina({ tabId, seletor, playlist, modulo }) {
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : 'ok' });
 }
 
+// ---------- Seguir o botão "Próxima" ----------
+
+// Plataformas como a do Ferretto não abrem outra aula pelo clique na lista (o
+// laço acima fica parado depois da primeira), mas têm o botão "Próxima". Aqui:
+// manda a aula aberta (título da página + o vídeo que o player pediu), clica em
+// Próxima, espera o vídeo novo e repete, até não haver Próxima ou a aula não trocar.
+
+const SELETORES_DE_TITULO = ['span.font-family-headlines', 'h1', 'h2'];
+const MAX_AULAS = 500;
+
+async function tituloDaAba(tabId) {
+  const [r] = await chrome.scripting
+    .executeScript({
+      target: { tabId },
+      args: [SELETORES_DE_TITULO],
+      func: (seletores) => {
+        for (const s of seletores) {
+          const t = [...document.querySelectorAll(s)].map((e) => e.innerText.replace(/\s+/g, ' ').trim()).find((x) => x && x.length < 150);
+          if (t) return t;
+        }
+        return document.title;
+      },
+    })
+    .catch(() => [null]);
+  return r?.result ?? '';
+}
+
+// Clica no botão (ou link) visível e habilitado cujo texto começa com `texto`
+// ("Próxima", "Próxima aula"), sem ligar para acento e maiúscula.
+async function clicarNoBotao(tabId, texto) {
+  const [r] = await chrome.scripting
+    .executeScript({
+      target: { tabId },
+      args: [texto],
+      func: (txt) => {
+        const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const alvo = norm(txt);
+        const visivel = (e) => {
+          const r = e.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden';
+        };
+        const todos = [...document.querySelectorAll('button, a, [role=button]')].filter(
+          (e) => visivel(e) && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && norm(e.innerText || e.getAttribute('aria-label') || '').startsWith(alvo),
+        );
+        const b = todos[0];
+        if (!b) return false;
+        b.scrollIntoView({ block: 'center' });
+        b.click();
+        return true;
+      },
+    })
+    .catch(() => [null]);
+  return !!r?.result;
+}
+
+async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
+  parar = false;
+  await estado({ ativo: true, total: null, feitos: 0, falhas: [], atual: null, playlist, terminou: null });
+  const k = chave(tabId);
+  const usados = new Set();
+  const falhas = [];
+  let desde = 0;
+  let ultimoTitulo = null;
+  let fim = 'ok';
+  for (let n = 0; n < MAX_AULAS && !parar; n++) {
+    let v;
+    if (n === 0) {
+      // A aula aberta: o último vídeo que ela pediu; sem nenhum, espera (dê play).
+      v = ((await chrome.storage.session.get(k))[k] ?? []).filter((x) => /\.(m3u8|mpd)(\?|$)/i.test(x.url)).slice(-1)[0];
+      v ??= ((await chrome.storage.session.get(k))[k] ?? []).slice(-1)[0];
+      v ??= await videoNovo(tabId, Date.now(), usados);
+    } else v = await videoNovo(tabId, desde, usados);
+    if (parar) break;
+    if (!v) {
+      fim = n === 0 ? 'nenhum vídeo na aula aberta (dê play e tente de novo)' : `nenhum vídeo novo ${ESPERA_MS / 1000} s depois de "${textoBotao}"`;
+      break;
+    }
+    // O título troca junto com o vídeo, às vezes um instante depois.
+    await dormir(800);
+    let titulo = await tituloDaAba(tabId);
+    if (n > 0 && titulo === ultimoTitulo) {
+      await dormir(2000);
+      titulo = await tituloDaAba(tabId);
+    }
+    titulo ||= `Aula ${n + 1}`;
+    await estado({ atual: `${n + 1}. ${titulo}` });
+    usados.add(v.url);
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    try {
+      await apiDoApp(`/api/extensao/playlists/${playlist}/itens`, {
+        url: v.url,
+        titulo,
+        pagina: tab?.url ?? v.pagina,
+        cabecalhos: v.cabecalhos ?? [],
+        modulo,
+      });
+      const atual = (await chrome.storage.session.get(LOTE))[LOTE];
+      await estado({ feitos: (atual?.feitos ?? 0) + 1 });
+    } catch (e) {
+      falhas.push(`${titulo}: ${e.message}`);
+      await estado({ falhas });
+    }
+    ultimoTitulo = titulo;
+    desde = Date.now();
+    if (!(await clicarNoBotao(tabId, textoBotao))) {
+      fim = 'ok';
+      break; // sem "Próxima": era a última aula
+    }
+  }
+  await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : fim });
+}
+
 chrome.runtime.onMessage.addListener((m, _remetente, responder) => {
-  if (m?.tipo === 'importar-pagina') {
+  if (m?.tipo === 'importar-seguindo') {
+    void importarSeguindo(m).catch((e) => estado({ ativo: false, terminou: `erro: ${e.message}` }));
+    responder({ ok: true });
+  } else if (m?.tipo === 'importar-pagina') {
     void importarPagina(m).catch((e) => estado({ ativo: false, terminou: `erro: ${e.message}` }));
     responder({ ok: true });
   } else if (m?.tipo === 'parar-lote') {

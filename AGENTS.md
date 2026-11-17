@@ -272,7 +272,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   extensão regrava a hora de um vídeo pedido de novo) e manda com o texto como título; o progresso fica
   em `storage.session.lote`. Num site em JavaScript todas as aulas têm o mesmo endereço: a mesma aula
   no manifesto é o mesmo vídeo ou a mesma página **e** o mesmo título, e o download só reabre a página
-  para renovar um endereço vencido se ela for só daquela aula (senão viria o vídeo de outra).
+  para renovar um endereço vencido se ela for só daquela aula (senão viria o vídeo de outra). O modo
+  padrão, porém, é **seguir o botão "Próxima"** (`importarSeguindo`): no Ferretto o clique na lista
+  não abre outra aula. Manda a aula aberta (título por `span.font-family-headlines`/h1/h2 e o último
+  vídeo pedido), clica no botão visível e habilitado cujo texto começa com o configurado (sem acento
+  nem maiúscula), espera o vídeo novo e repete; para sem o botão, sem vídeo novo em 25 s ou em 500.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

@@ -245,7 +245,14 @@ $('criarSub').addEventListener('click', () => void criar(true));
 
 const SELETOR_PADRAO = 'p.text-sm.font-family-body.text-body.font-semibold';
 
+const modo = () => document.querySelector('input[name=modo]:checked')?.value ?? 'seguir';
+
 async function contar() {
+  if (modo() === 'seguir') {
+    $('loteInfo').textContent = `Manda esta aula, clica em "${$('textoBotao').value.trim() || 'Próxima'}", espera o vídeo da próxima e repete até a última. Não mexa nesta aba enquanto importa.`;
+    $('loteIr').disabled = false;
+    return;
+  }
   const seletor = $('seletor').value.trim();
   try {
     const [r] = await chrome.scripting.executeScript({
@@ -277,16 +284,32 @@ async function mostrarLote() {
   if (!l) return;
   if (l.ativo) $('lote').open = true;
   const falhas = l.falhas?.length ? ` Sem vídeo: ${l.falhas.length} (${l.falhas.slice(-2).join('; ')})` : '';
+  const de = l.total == null ? '' : ` de ${l.total}`;
   $('loteEstado').textContent = l.ativo
-    ? `Importando ${l.feitos} de ${l.total}… ${l.atual ?? ''}.${falhas}`
+    ? `Importando: ${l.feitos}${de} mandada(s)… ${l.atual ?? ''}.${falhas}`
     : l.terminou
-      ? `${l.terminou === 'ok' ? 'Pronto' : l.terminou === 'parado' ? 'Parado' : l.terminou}: ${l.feitos} de ${l.total} mandadas ao Astroflix.${falhas}`
+      ? `${l.terminou === 'ok' ? 'Pronto' : l.terminou === 'parado' ? 'Parado' : `Parou: ${l.terminou}`}. ${l.feitos}${de} mandada(s) ao Astroflix.${falhas}`
       : '';
 }
 
 async function iniciarLote() {
-  const { seletor } = await chrome.storage.local.get('seletor');
+  const { seletor, textoBotao, modoLote } = await chrome.storage.local.get(['seletor', 'textoBotao', 'modoLote']);
   $('seletor').value = seletor || SELETOR_PADRAO;
+  $('textoBotao').value = textoBotao || 'Próxima';
+  if (modoLote === 'lista') document.querySelector('input[name=modo][value=lista]').checked = true;
+  const trocarModo = async () => {
+    $('campoBotao').classList.toggle('escondido', modo() !== 'seguir');
+    $('campoSeletor').classList.toggle('escondido', modo() !== 'lista');
+    await chrome.storage.local.set({ modoLote: modo() });
+    await contar();
+  };
+  for (const r of document.querySelectorAll('input[name=modo]')) r.addEventListener('change', () => void trocarModo());
+  $('textoBotao').addEventListener('change', async () => {
+    await chrome.storage.local.set({ textoBotao: $('textoBotao').value.trim() });
+    await contar();
+  });
+  $('campoBotao').classList.toggle('escondido', modo() !== 'seguir');
+  $('campoSeletor').classList.toggle('escondido', modo() !== 'lista');
   $('seletor').addEventListener('change', async () => {
     await chrome.storage.local.set({ seletor: $('seletor').value.trim() });
     await contar();
@@ -295,8 +318,10 @@ async function iniciarLote() {
   $('loteIr').addEventListener('click', async () => {
     const { id: playlist, modulo } = escolhida();
     if (!playlist) return msg('Escolha ou crie uma playlist.', 'erro');
-    await chrome.storage.local.set({ seletor: $('seletor').value.trim(), ultimaPlaylist: $('playlist').value });
-    await chrome.runtime.sendMessage({ tipo: 'importar-pagina', tabId: aba.id, seletor: $('seletor').value.trim(), playlist, modulo });
+    await chrome.storage.local.set({ seletor: $('seletor').value.trim(), textoBotao: $('textoBotao').value.trim(), ultimaPlaylist: $('playlist').value });
+    if (modo() === 'seguir')
+      await chrome.runtime.sendMessage({ tipo: 'importar-seguindo', tabId: aba.id, textoBotao: $('textoBotao').value.trim() || 'Próxima', playlist, modulo });
+    else await chrome.runtime.sendMessage({ tipo: 'importar-pagina', tabId: aba.id, seletor: $('seletor').value.trim(), playlist, modulo });
     await mostrarLote();
   });
   $('loteParar').addEventListener('click', () => void chrome.runtime.sendMessage({ tipo: 'parar-lote' }));

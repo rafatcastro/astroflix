@@ -66,9 +66,19 @@
         <button id="adicionar" class="principal">Adicionar</button>
 
         <details id="lote" style="margin-top: 14px">
-          <summary style="cursor: pointer; color: #d4d4d4">Importar a página toda</summary>
-          <label for="seletor">Cada aula é o elemento</label>
-          <input id="seletor" spellcheck="false" />
+          <summary style="cursor: pointer; color: #d4d4d4">Importar várias aulas</summary>
+          <label class="video" style="color: #d4d4d4; font-size: 12px">
+            <input type="radio" name="modo" value="seguir" checked /> Desta aula em diante, clicando no botão
+          </label>
+          <div id="campoBotao">
+            <input id="textoBotao" spellcheck="false" aria-label="Texto do botão" />
+          </div>
+          <label class="video" style="color: #d4d4d4; font-size: 12px">
+            <input type="radio" name="modo" value="lista" /> Clicando em cada aula da lista
+          </label>
+          <div id="campoSeletor" class="escondido">
+            <input id="seletor" spellcheck="false" aria-label="Seletor das aulas" />
+          </div>
           <p class="aviso" id="loteInfo"></p>
           <div class="linha">
             <button id="loteIr" style="flex: 1">Importar todas</button>
