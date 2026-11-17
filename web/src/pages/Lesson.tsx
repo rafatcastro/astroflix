@@ -675,7 +675,7 @@ export default function Lesson() {
     // Esqueleto: pré-pinta o palco preto + barra de título, para a chegada do
     // player não causar layout-shift. Sem spinner (guia de produto).
     return (
-      <div className="relative h-screen bg-black">
+      <div className="relative h-screen bg-studio-black">
         <div className="absolute inset-x-0 top-0 p-4">
           <div className="h-5 w-64 max-w-[60%] animate-pulse rounded bg-neutral-800 motion-reduce:animate-none" />
         </div>
@@ -695,7 +695,7 @@ export default function Lesson() {
           {urlAuth && (
             <p className="mb-2 text-sm text-neutral-300" role="status">
               Conclua a autorização no navegador que abriu.{' '}
-              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
                 Abrir de novo
               </button>
             </p>

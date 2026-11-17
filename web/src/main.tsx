@@ -5,6 +5,10 @@ import { QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-qu
 import App from './App';
 import './index.css';
 import { api, tocaHevc } from './api/client';
+import { aplicarTema, temaSalvo } from './lib/tema';
+
+// O index.html já pôs o data-tema; aqui a barra de título da janela acompanha.
+aplicarTema(temaSalvo(), false);
 
 // O download do Drive converte em segundo plano, sem um <video> para perguntar o
 // que toca: a interface conta ao servidor assim que abre.

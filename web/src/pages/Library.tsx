@@ -92,7 +92,7 @@ function CourseCard({
       {/* Scrim funcional: garante legibilidade do título/progresso sobre a capa.
           pointer-events-none: em cards baixos ele sobe até o topo e roubaria o
           clique do ⋯ — só o botão Desarquivar reativa os eventos. */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent pb-2.5 pt-10">
+      <div className="escuro pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent pb-2.5 pt-10">
         <div className="px-3">
           {eyebrow && <div className="text-xs uppercase tracking-wide text-blue-400">Continuar</div>}
           <div className={`truncate font-medium text-neutral-50${featured ? ' sm:text-lg' : ''}`}>{c.title}</div>
@@ -173,7 +173,7 @@ function CourseRow({
           {pct === 100 ? <span className="text-green-400">✓ Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
         </div>
         {pct > 0 && pct < 100 && (
-          <div className="mt-1.5 h-1 max-w-xs rounded-full bg-white/10">
+          <div className="mt-1.5 h-1 max-w-xs rounded-full bg-neutral-800">
             <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
           </div>
         )}
@@ -656,7 +656,7 @@ export default function Library({ categoria }: { categoria: string }) {
 
   const chip = (active: boolean) =>
     `min-h-[44px] rounded-full px-4 text-sm transition-colors motion-reduce:transition-none ${
-      active ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
+      active ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
     }`;
 
   // Renderiza uma lista de cursos como GRADE (pôsteres, com destaque bento
@@ -721,14 +721,14 @@ export default function Library({ categoria }: { categoria: string }) {
             <button
               type="button"
               onClick={() => { setTab('active'); exitSelect(); }}
-              className={`min-h-[44px] px-3 py-1.5 ${tab === 'active' ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+              className={`min-h-[44px] px-3 py-1.5 ${tab === 'active' ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
             >
               Ativos
             </button>
             <button
               type="button"
               onClick={() => { setTab('archived'); exitSelect(); }}
-              className={`min-h-[44px] px-3 py-1.5 ${tab === 'archived' ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+              className={`min-h-[44px] px-3 py-1.5 ${tab === 'archived' ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
             >
               Arquivados
             </button>
@@ -737,7 +737,7 @@ export default function Library({ categoria }: { categoria: string }) {
             <button
               type="button"
               onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
-              className={`min-h-[44px] shrink-0 rounded-lg px-3 text-sm transition-colors motion-reduce:transition-none ${selectMode ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+              className={`min-h-[44px] shrink-0 rounded-lg px-3 text-sm transition-colors motion-reduce:transition-none ${selectMode ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
             >
               {selectMode ? 'Cancelar' : 'Selecionar'}
             </button>

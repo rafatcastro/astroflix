@@ -310,7 +310,7 @@ export default function CourseMenu({
         }}
         className={
           noCartao
-            ? 'grid h-11 w-11 place-items-center rounded-lg bg-black/50 text-neutral-200 backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none'
+            ? 'escuro grid h-11 w-11 place-items-center rounded-lg bg-black/50 text-neutral-200 backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none'
             : 'grid h-11 w-11 place-items-center rounded-lg bg-neutral-900 text-neutral-300 hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600'
         }
       >

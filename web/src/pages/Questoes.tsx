@@ -90,7 +90,7 @@ export default function Questoes({ categoria }: { categoria: string }) {
               <section key={g.chave}>
                 <h2 className="text-sm font-semibold text-neutral-300">
                   {g.link ? (
-                    <Link to={g.link} className="hover:text-white hover:underline">
+                    <Link to={g.link} className="hover:text-neutral-50 hover:underline">
                       {g.titulo}
                     </Link>
                   ) : (

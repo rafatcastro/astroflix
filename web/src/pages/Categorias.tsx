@@ -106,7 +106,7 @@ export default function Categorias() {
         const r = e.currentTarget.getBoundingClientRect();
         setMenu({ c, x: r.left, y: r.bottom + 4 });
       }}
-      className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-lg bg-black/40 text-neutral-300 opacity-100 hover:bg-black/60 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+      className="absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-lg bg-neutral-950/40 text-neutral-300 opacity-100 hover:bg-neutral-950/70 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
     >
       ⋯
     </button>

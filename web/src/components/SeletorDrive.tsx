@@ -147,7 +147,7 @@ export default function SeletorDrive({
 
   const aba = (ativo: boolean) =>
     `min-h-[40px] rounded-lg px-3 text-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-      ativo ? 'bg-neutral-700 text-white' : 'text-neutral-300 hover:bg-neutral-800'
+      ativo ? 'bg-neutral-700 text-neutral-50' : 'text-neutral-300 hover:bg-neutral-800'
     }`;
 
   return (
@@ -202,7 +202,7 @@ export default function SeletorDrive({
           {urlAuth ? (
             <p className="p-4 text-sm text-neutral-300" role="status">
               Conecte sua conta Google no navegador que abriu.{' '}
-              <button type="button" className="underline underline-offset-2 hover:text-white" onClick={() => void abrirFora(urlAuth)}>
+              <button type="button" className="underline underline-offset-2 hover:text-neutral-50" onClick={() => void abrirFora(urlAuth)}>
                 Abrir de novo
               </button>
             </p>
@@ -211,7 +211,7 @@ export default function SeletorDrive({
               {erro}{' '}
               <button
                 type="button"
-                className="text-neutral-300 underline underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="text-neutral-300 underline underline-offset-2 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                 onClick={() => setTentativa((t) => t + 1)}
               >
                 Tentar de novo
@@ -241,7 +241,7 @@ export default function SeletorDrive({
                       role="checkbox"
                       aria-checked={marcados.has(i.id)}
                       className={`flex min-h-[44px] w-full items-center gap-3 rounded-lg px-3 text-left text-sm hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-                        marcados.has(i.id) ? 'text-white' : 'text-neutral-300'
+                        marcados.has(i.id) ? 'text-neutral-50' : 'text-neutral-300'
                       }`}
                       onClick={() => alternar(i)}
                     >

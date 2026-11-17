@@ -1,3 +1,6 @@
+// Cor de uma variável CSS com o canal alfa do Tailwind (bg-neutral-900/95 continua valendo).
+const v = (nome) => `rgb(var(--${nome}) / <alpha-value>)`;
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -19,17 +22,27 @@ export default {
           'sans-serif',
         ],
       },
-      // Tokens semânticos do docs/design.md — mesmos valores dos shades stock já em uso,
-      // agora com fonte-única. NÃO altera nenhuma cor; só nomeia.
+      // Tokens semânticos do docs/design.md. As cores vêm de variáveis CSS
+      // (index.css) para o tema claro poder trocá-las sem tocar em cada classe:
+      // no claro a escala neutra se inverte (o 950 do palco vira o fundo claro, o
+      // 50 do título vira quase preto) e os tons de texto colorido escurecem para
+      // manter o contraste no fundo branco.
       colors: {
-        'studio-black': '#0a0a0a', // neutral-950 — palco/app
-        graphite: '#171717', // neutral-900 — superfícies elevadas
-        charcoal: '#262626', // neutral-800 — controles/trilha/bordas
-        slate: '#404040', // neutral-700 — estado ativo/selecionado
+        'studio-black': v('n-950'), // palco/app
+        graphite: v('n-900'), // superfícies elevadas
+        charcoal: v('n-800'), // controles/trilha/bordas
+        slate: v('n-700'), // estado ativo/selecionado
         'focus-blue': '#2563eb', // blue-600 — ação + ring de foco
         'progress-blue': '#3b82f6', // blue-500 — preenchimento de progresso
-        'signal-blue': '#60a5fa', // blue-400 — eyebrow/label
-        'done-green': '#4ade80', // green-400 — conclusão
+        'signal-blue': v('blue-400'), // eyebrow/label
+        'done-green': v('green-400'), // conclusão
+        neutral: Object.fromEntries(
+          ['50', '100', '200', '300', '400', '500', '600', '700', '800', '900', '950'].map((n) => [n, v(`n-${n}`)]),
+        ),
+        blue: { 100: v('blue-100'), 200: v('blue-200'), 300: v('blue-300'), 400: v('blue-400') },
+        red: { 300: v('red-300'), 400: v('red-400') },
+        green: { 300: v('green-300'), 400: v('green-400') },
+        amber: { 100: v('amber-100'), 200: v('amber-200'), 300: v('amber-300'), 700: v('amber-700'), 900: v('amber-900') },
       },
       height: { screen: '100dvh' }, // player usa h-screen; dvh evita a barra de URL do iOS
       minHeight: { screen: '100dvh' },

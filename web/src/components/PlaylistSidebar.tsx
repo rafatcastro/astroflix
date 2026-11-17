@@ -134,7 +134,7 @@ export default function PlaylistSidebar({
           <span className="relative shrink-0">
             <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-24 rounded bg-neutral-800 object-cover" loading="lazy" />
             {l.durationSec != null && (
-              <span className="absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
+              <span className="escuro absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
                 {formatDuration(l.durationSec)}
               </span>
             )}

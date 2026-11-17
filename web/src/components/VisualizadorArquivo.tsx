@@ -308,7 +308,7 @@ export function VisualizadorArquivo({ viewer, onFechar }: { viewer: NonNullable<
   }, [onFechar]);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label={viewer.name} className="fixed inset-0 z-40 flex flex-col bg-black/90 p-3 sm:p-6" onClick={onFechar}>
+    <div role="dialog" aria-modal="true" aria-label={viewer.name} className="escuro fixed inset-0 z-40 flex flex-col bg-black/90 p-3 sm:p-6" onClick={onFechar}>
       <div className="mb-2 flex items-center justify-between gap-3" onClick={(e) => e.stopPropagation()}>
         <span className="min-w-0 truncate text-sm text-neutral-200">{viewer.name}</span>
         <div className="flex shrink-0 gap-2">

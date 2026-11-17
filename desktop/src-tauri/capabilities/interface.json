@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "interface",
-  "description": "A interface servida pelo sidecar em localhost: abrir links fora, escolher pasta, checar atualização, parar o servidor antes de instalar (Windows), religá-lo se a instalação falhar e reiniciar depois.",
+  "description": "A interface servida pelo sidecar em localhost: abrir links fora, escolher pasta, checar atualização, parar o servidor antes de instalar (Windows), religá-lo se a instalação falhar e reiniciar depois, e trocar o tema da janela (barra de título).",
   "windows": [
     "main"
   ],
@@ -12,6 +12,7 @@
   },
   "permissions": [
     "core:default",
+    "core:window:allow-set-theme",
     "opener:default",
     "dialog:allow-open",
     "updater:default",

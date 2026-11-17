@@ -27,8 +27,52 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
-body { margin: 0; background: #0a0a0a; color: #f5f5f5; }
+/* ---- Tema ----
+   As cores da interface são variáveis (canais RGB, para o Tailwind aplicar o
+   alfa): tailwind.config.js liga neutral-*, os tokens do design.md e os tons de
+   texto colorido a elas. Escuro é o padrão; o claro inverte a escala neutra.
+   "Sistema" é só a media query, sem JS; a escolha explícita das Configurações
+   vira data-tema no <html> (posto pelo script do index.html antes de pintar,
+   senão a tela piscava escura ao abrir no claro).
+   .escuro força o escuro num trecho: o que fica sobre capa, vídeo ou véu preto
+   (título do cartão, pausa do pomodoro, visualizador) precisa de texto claro
+   em qualquer tema. */
+:root, .escuro {
+  --n-50: 250 250 250; --n-100: 245 245 245; --n-200: 229 229 229; --n-300: 212 212 212;
+  --n-400: 163 163 163; --n-500: 115 115 115; --n-600: 82 82 82; --n-700: 64 64 64;
+  --n-800: 38 38 38; --n-900: 23 23 23; --n-950: 10 10 10;
+  --blue-100: 219 234 254; --blue-200: 191 219 254; --blue-300: 147 197 253; --blue-400: 96 165 250;
+  --red-300: 252 165 165; --red-400: 248 113 113;
+  --green-300: 134 239 172; --green-400: 74 222 128;
+  --amber-100: 254 243 199; --amber-200: 253 230 138; --amber-300: 252 211 77;
+  --amber-700: 180 83 9; --amber-900: 120 53 15;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-tema='escuro']) {
+  --n-50: 10 10 10; --n-100: 23 23 23; --n-200: 38 38 38; --n-300: 64 64 64;
+  --n-400: 82 82 82; --n-500: 107 107 107; --n-600: 163 163 163; --n-700: 212 212 212;
+  --n-800: 232 232 232; --n-900: 255 255 255; --n-950: 241 241 241;
+  --blue-100: 23 37 84; --blue-200: 30 58 138; --blue-300: 30 64 175; --blue-400: 29 78 216;
+  --red-300: 185 28 28; --red-400: 220 38 38;
+  --green-300: 22 101 52; --green-400: 21 128 61;
+  --amber-100: 120 53 15; --amber-200: 146 64 14; --amber-300: 180 83 9;
+  --amber-700: 217 119 6; --amber-900: 254 243 199;
+  color-scheme: light;
+  }
+}
+:root[data-tema='claro'] {
+  --n-50: 10 10 10; --n-100: 23 23 23; --n-200: 38 38 38; --n-300: 64 64 64;
+  --n-400: 82 82 82; --n-500: 107 107 107; --n-600: 163 163 163; --n-700: 212 212 212;
+  --n-800: 232 232 232; --n-900: 255 255 255; --n-950: 241 241 241;
+  --blue-100: 23 37 84; --blue-200: 30 58 138; --blue-300: 30 64 175; --blue-400: 29 78 216;
+  --red-300: 185 28 28; --red-400: 220 38 38;
+  --green-300: 22 101 52; --green-400: 21 128 61;
+  --amber-100: 120 53 15; --amber-200: 146 64 14; --amber-300: 180 83 9;
+  --amber-700: 217 119 6; --amber-900: 254 243 199;
+  color-scheme: light;
+}
+body { margin: 0; background: rgb(var(--n-950)); color: rgb(var(--n-100)); }
 
 /* ---- Compatibilidade com navegadores antigos ----
    1) aspect-ratio só existe no Chromium ≥88. Sem ele, os cards-pôster (filhos
@@ -59,7 +103,7 @@ body { margin: 0; background: #0a0a0a; color: #f5f5f5; }
 /* ---- Documentos abertos no app (Markdown, notebook, Word) ----
    Sem o plugin de tipografia do Tailwind: só o que um texto precisa para ler
    bem. No escuro por padrão; o Word sai numa folha branca (.documento-claro). */
-.documento { color: #e5e5e5; line-height: 1.65; overflow-wrap: anywhere; }
+.documento { color: rgb(var(--n-200)); line-height: 1.65; overflow-wrap: anywhere; }
 .documento > * + * { margin-top: 0.75em; }
 .documento h1 { font-size: 1.6em; font-weight: 600; margin-top: 1.2em; }
 .documento h2 { font-size: 1.35em; font-weight: 600; margin-top: 1.1em; }
@@ -68,15 +112,15 @@ body { margin: 0; background: #0a0a0a; color: #f5f5f5; }
 .documento ul { list-style: disc; padding-left: 1.5em; }
 .documento ol { list-style: decimal; padding-left: 1.5em; }
 .documento li + li { margin-top: 0.25em; }
-.documento a { color: #60a5fa; text-decoration: underline; }
-.documento code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: #262626; padding: 0.1em 0.35em; border-radius: 4px; }
-.documento pre { background: #171717; padding: 0.9em 1em; border-radius: 8px; overflow-x: auto; }
+.documento a { color: rgb(var(--blue-400)); text-decoration: underline; }
+.documento code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: rgb(var(--n-800)); padding: 0.1em 0.35em; border-radius: 4px; }
+.documento pre { background: rgb(var(--n-900)); padding: 0.9em 1em; border-radius: 8px; overflow-x: auto; }
 .documento pre code { background: none; padding: 0; }
-.documento blockquote { border-left: 3px solid #404040; padding-left: 1em; color: #a3a3a3; }
+.documento blockquote { border-left: 3px solid rgb(var(--n-700)); padding-left: 1em; color: rgb(var(--n-400)); }
 .documento img { max-width: 100%; height: auto; }
 .documento table { border-collapse: collapse; display: block; overflow-x: auto; }
-.documento th, .documento td { border: 1px solid #404040; padding: 0.35em 0.6em; text-align: left; }
-.documento hr { border-color: #404040; }
+.documento th, .documento td { border: 1px solid rgb(var(--n-700)); padding: 0.35em 0.6em; text-align: left; }
+.documento hr { border-color: rgb(var(--n-700)); }
 .documento-claro { color: #171717; }
 .documento-claro code, .documento-claro pre { background: #f5f5f5; }
 .documento-claro blockquote { border-color: #d4d4d4; color: #525252; }

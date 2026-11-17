@@ -7,7 +7,7 @@ import { formatarDuracao, formatarRelogio, usePomodoro, type Fase } from '../lib
 const NOME_FASE: Record<Fase, string> = { foco: 'Foco', pausa: 'Pausa', 'pausa-longa': 'Pausa longa' };
 
 const botao =
-  'min-h-[36px] rounded-lg px-2.5 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600';
+  'min-h-[36px] rounded-lg px-2.5 text-sm text-neutral-300 hover:bg-neutral-800 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600';
 
 function useNomeDaCategoria(id: string | null): string {
   const { data } = useCollections();
@@ -102,7 +102,7 @@ export function BloqueioDaPausa() {
   const p = usePomodoro();
   if (!p.emPausa || !p.estado) return null;
   return (
-    <div className="absolute inset-0 z-20 grid place-items-center bg-black/80 text-center">
+    <div className="escuro absolute inset-0 z-20 grid place-items-center bg-black/80 text-center">
       <div>
         <div className="text-sm text-green-400">{NOME_FASE[p.estado.fase]}</div>
         <div className="mt-1 font-mono text-5xl tabular-nums text-white">{formatarRelogio(p.restanteMs)}</div>
@@ -168,7 +168,8 @@ type Medida = 'aula' | 'pomodoros';
 const CORES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181'];
 const COR_SEM = '#8a8a86';
 const COR_OUTRAS = '#5c5c59';
-const SUPERFICIE = '#171717';
+// O traço que separa as fatias tem a cor do cartão, que muda com o tema.
+const SUPERFICIE = 'rgb(var(--n-900))';
 
 interface Fatia {
   id: string;
@@ -295,7 +296,7 @@ function Segmentos<T extends string>({ opcoes, valor, onMudar, rotulo }: { opcoe
           aria-checked={valor === o.chave}
           onClick={() => onMudar(o.chave)}
           className={`min-h-[34px] rounded-md px-3 transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-            valor === o.chave ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-neutral-200'
+            valor === o.chave ? 'bg-neutral-700 text-neutral-50' : 'text-neutral-400 hover:text-neutral-200'
           }`}
         >
           {o.rotulo}

@@ -138,7 +138,7 @@ export default function DriveLinkModal({
           {urlAuth && (
             <p className="mt-2 text-sm text-neutral-300" role="status">
               Conclua a autorização no navegador que abriu.{' '}
-              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
+              <button type="button" onClick={() => void abrirFora(urlAuth)} className="underline decoration-neutral-600 underline-offset-2 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600">
                 Abrir de novo
               </button>
             </p>

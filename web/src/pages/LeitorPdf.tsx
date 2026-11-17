@@ -194,7 +194,7 @@ export default function LeitorPdf() {
   }, [irPara, total, navigate, voltar]);
 
   const botao =
-    'grid h-10 w-10 place-items-center rounded-lg text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-white disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none';
+    'grid h-10 w-10 place-items-center rounded-lg text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-neutral-50 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 motion-reduce:transition-none';
 
   const problema =
     erroDoc ? 'Este PDF não está mais na estante.' : d && !d.disponivel ? 'Arquivo não encontrado nesta máquina. Use ⋯ → Re-apontar arquivo… na estante.' : erro;
@@ -252,7 +252,7 @@ export default function LeitorPdf() {
               aria-pressed={painel}
               title="Questões deste PDF (C)"
               className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg px-3 text-sm transition-colors motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 ${
-                painel ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
+                painel ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'
               }`}
             >
               <Cards size={16} /> <span className="hidden md:inline">Questões</span>

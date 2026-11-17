@@ -6,6 +6,7 @@ import { api, type Collection } from '../api/client';
 import { useCollections, useConexaoDrive } from '../api/hooks';
 import { CONFIG_PADRAO, lerConfig, salvarConfig, type ConfigPomodoro } from '../lib/pomodoro';
 import { getPref, setPref } from '../lib/prefs';
+import { aplicarTema, temaSalvo, type Tema } from '../lib/tema';
 import { formatBytes } from '../lib/format';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import TextField from '../components/TextField';
@@ -280,7 +281,7 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
               <button
                 type="button"
                 onClick={() => setConectando(true)}
-                className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
               >
                 Conectar
               </button>
@@ -543,6 +544,7 @@ export default function Settings() {
   const [countdown, setCountdown] = useState<number>(() => getPref('player.countdownSeconds', 20));
   const [autoplay, setAutoplay] = useState<boolean>(() => getPref('player.autoplay', true));
   // A mesma chave que a aba Cursos lê (libView).
+  const [tema, setTema] = useState<Tema>(temaSalvo);
   const [visao, setVisao] = useState<'grid' | 'list'>(() => {
     try {
       return localStorage.getItem('libView') === 'list' ? 'list' : 'grid';
@@ -586,6 +588,26 @@ export default function Settings() {
 
       <section className="mb-8">
         <h2 className="mb-3 text-sm font-semibold text-neutral-300">Aparência</h2>
+        <div className="mb-2 flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
+          Tema
+          <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800" role="radiogroup" aria-label="Tema">
+            {([['sistema', 'Sistema'], ['claro', 'Claro'], ['escuro', 'Escuro']] as const).map(([t, rotulo]) => (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={tema === t}
+                onClick={() => {
+                  setTema(t);
+                  aplicarTema(t);
+                }}
+                className={`min-h-[40px] px-3 ${tema === t ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+              >
+                {rotulo}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center justify-between rounded-lg bg-neutral-900 px-3 py-2 text-sm">
           Cursos em
           <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800" role="radiogroup" aria-label="Cursos em">
@@ -603,7 +625,7 @@ export default function Settings() {
                     /* modo privado */
                   }
                 }}
-                className={`min-h-[40px] px-3 ${visao === v ? 'bg-neutral-700 text-white' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
+                className={`min-h-[40px] px-3 ${visao === v ? 'bg-neutral-700 text-neutral-50' : 'bg-neutral-900 text-neutral-300 hover:bg-neutral-800'}`}
               >
                 {v === 'grid' ? 'Grade' : 'Lista'}
               </button>

@@ -207,7 +207,7 @@ function CartaoPdf({ d, onAcoes }: { d: Documento; onAcoes: () => void }) {
           />
         )}
         {!d.disponivel && (
-          <div className="absolute inset-x-0 bottom-0 bg-black/80 px-2 py-1.5 text-center text-xs text-amber-300">Arquivo não encontrado</div>
+          <div className="escuro absolute inset-x-0 bottom-0 bg-black/80 px-2 py-1.5 text-center text-xs text-amber-300">Arquivo não encontrado</div>
         )}
         {d.lido && (
           <span className="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-green-600 text-white" title="Lido">
@@ -224,7 +224,7 @@ function CartaoPdf({ d, onAcoes }: { d: Documento; onAcoes: () => void }) {
         type="button"
         aria-label={`Ações de ${d.titulo}`}
         onClick={onAcoes}
-        className="absolute right-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-lg bg-black/60 text-neutral-200 opacity-100 transition-opacity hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 motion-reduce:transition-none"
+        className="escuro absolute right-1.5 top-1.5 grid h-9 w-9 place-items-center rounded-lg bg-black/60 text-neutral-200 opacity-100 transition-opacity hover:bg-black/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 motion-reduce:transition-none"
       >
         ⋯
       </button>
