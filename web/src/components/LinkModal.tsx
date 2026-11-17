@@ -24,6 +24,7 @@ const mensagemSemYtDlp = navigator.userAgent.includes('Windows')
 
 interface Linha {
   url: string;
+  pagina?: string;
   titulo: string;
   duracaoSec: number | null;
   marcado: boolean;
@@ -160,7 +161,7 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
         categoriaId,
         token: comLogin ? token.trim() || undefined : undefined,
         descoberta: descobertaRef.current ?? undefined,
-        itens: marcados.map((l) => ({ url: l.url, titulo: l.titulo })),
+        itens: marcados.map((l) => ({ url: l.url, titulo: l.titulo, pagina: l.pagina })),
       });
       qc.invalidateQueries({ queryKey: ['courses'] });
       navigate(`/course/${id}`);

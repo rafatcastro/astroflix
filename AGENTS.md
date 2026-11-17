@@ -228,7 +228,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   página e ao yt-dlp (`--add-headers`), mas só para o site do link e os players embutidos nela
   (`mandaLogin`; um YouTube linkado não recebe), e fica no manifesto para os downloads continuarem.
   O yt-dlp chama a página que ele não conhece de `Generic` ou `HTML5MediaEmbed` (`ehGenerico`): aí
-  os links dela também são abertos. **Logs:** cada leitura registra o passo a passo (status HTTP, tipo e
+  os links dela também são abertos. **Página montada por JavaScript:** com Chrome, Edge, Brave ou
+  Chromium instalado (`navegador.ts`, protocolo do DevTools, perfil temporário, sem dependência nova), a
+  página abre num navegador invisível que espera o load, a rede quieta e a contagem de links parar de
+  mudar (até 30 s); o login vai pedido a pedido (`Fetch.requestPaused`), só para os hosts de
+  `mandaLogin`. O vídeo que o player pede pela rede (`.m3u8`, `.mpd`, `.mp4`) é aceito direto, sem
+  passar pelo yt-dlp; uma aula do mesmo site em que o yt-dlp não acha nada é aberta no navegador (2 por
+  vez, até 80). O item guarda a `pagina` da aula: se o download falha (endereço assinado que venceu), a
+  aula é reaberta (`pararNoVideo`) e o endereço novo é baixado. Sem navegador, fica o HTML cru. **Logs:** cada leitura registra o passo a passo (status HTTP, tipo e
   tamanho da página, quantos `<a>`/`<script>`, o que o yt-dlp disse de cada link; o token só mascarado)
   em `Descoberta.log` (a janela mostra em "Detalhes") e em `DATA_DIR/logs/links/<data> <host>/`,
   com `leitura.log` e o HTML recebido (`pagina.html`, ou `resposta.txt` num erro), ficando as 30 mais

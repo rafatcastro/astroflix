@@ -221,7 +221,7 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 // Importar por link (server/src/links): a descoberta roda em segundo plano e a janela consulta.
-export interface VideoAchado { url: string; titulo: string; duracaoSec: number | null; }
+export interface VideoAchado { url: string; titulo: string; duracaoSec: number | null; /** A página da aula (achado pelo navegador). */ pagina?: string; }
 export interface DescobertaLinks {
   fase: 'lendo' | 'pronto' | 'erro';
   link: string;
@@ -588,7 +588,7 @@ export const api = {
     token?: string;
     /** O id da descoberta: diz quais vídeos levam o login no download. */
     descoberta?: string;
-    itens: Array<{ url: string; titulo: string }>;
+    itens: Array<{ url: string; titulo: string; pagina?: string }>;
   }) =>
     jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
   linksAbrirLog: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}/abrir-log`, { method: 'POST' }),

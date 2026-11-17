@@ -46,9 +46,13 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
   app.post('/api/links/importar', async (req, reply) => {
     const b = req.body as { titulo?: unknown; link?: unknown; categoriaId?: unknown; itens?: unknown; token?: unknown; descoberta?: unknown } | undefined;
     const itens = Array.isArray(b?.itens)
-      ? (b.itens as Array<{ url?: unknown; titulo?: unknown }>)
+      ? (b.itens as Array<{ url?: unknown; titulo?: unknown; pagina?: unknown }>)
           .filter((i) => typeof i?.url === 'string' && /^https?:\/\//i.test(i.url))
-          .map((i) => ({ url: i.url as string, titulo: typeof i.titulo === 'string' ? i.titulo : (i.url as string) }))
+          .map((i) => ({
+            url: i.url as string,
+            titulo: typeof i.titulo === 'string' ? i.titulo : (i.url as string),
+            pagina: typeof i.pagina === 'string' && /^https?:\/\//i.test(i.pagina) ? i.pagina : null,
+          }))
       : [];
     if (!itens.length || typeof b?.link !== 'string') return reply.code(400).send({ error: 'sem-videos' });
     const categoriaId = typeof b.categoriaId === 'string' && b.categoriaId ? b.categoriaId : null;

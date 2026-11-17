@@ -7,7 +7,9 @@ import { sanear } from '../armazenamento';
 import { inserirCursoDerivado } from '../scan/scan-course';
 import { reconcileCourse } from '../scan/reconcile';
 import { baixarVideo, listar, temYtDlp, type VideoAchado } from './ytdlp';
-import { cabecalhoDeLogin, candidatosDaPagina, lerPagina, loginMascarado, mandaLogin } from './pagina';
+import { cabecalhoDeLogin, candidatosDaPagina, lerPagina, loginMascarado, mandaLogin, type Candidato } from './pagina';
+import { abrirNavegador, acharNavegador, type Navegador } from './navegador';
+import { createLimiter } from '../media/ffmpeg';
 
 // Importar por link: a pessoa cola o link de uma página (uma playlist do YouTube,
 // a página de um curso), o app acha os vídeos, ela revisa a lista e confirma.
@@ -44,6 +46,10 @@ const descobertas = new Map<
   { estado: Descoberta; ac: AbortController; criadaEm: number; comLogin: Set<string>; pastaLog: string }
 >();
 const SIMULTANEOS = 4;
+
+// O vídeo que o player pediu pela rede: a lista do HLS/DASH (a primeira pedida é a
+// principal, as de cada qualidade vêm depois) ou, sem ela, o arquivo.
+const principal = (midias: string[]) => midias.find((m) => /\.(m3u8|mpd)(\?|$)/i.test(m)) ?? midias[0] ?? null;
 const MAX_LOG = 3000;
 
 // Cada leitura deixa uma pasta em DATA_DIR/logs/links: o log e o HTML que o
@@ -137,6 +143,7 @@ async function descobrir(
   registrar(login ? `login: ${loginMascarado(login)}` : 'login: nenhum');
   const embutidos = new Set<string>();
   const loginPara = (url: string) => (login && mandaLogin(url, link, embutidos) ? login : null);
+  let falhaDeAcesso = false;
   const vistos = new Set<string>();
   const acrescentar = (v: VideoAchado) => {
     if (vistos.has(v.url)) return;
@@ -160,20 +167,72 @@ async function descobrir(
   }
 
   // Uma página qualquer: abre cada link dela e fica com os que têm vídeo, na
-  // ordem da página (é a ordem das aulas numa lista de curso).
-  registrar('abrindo a página…');
-  const resp = await lerPagina(link, signal, login);
-  registrar(
-    `página: ${resp.erro ?? `HTTP ${resp.status}`}, ${resp.tipo ?? 'sem tipo'}, ${resp.bytes} bytes${resp.url !== link ? `, redirecionou para ${resp.url}` : ''}`,
-  );
-  if (resp.corpo) salvar(resp.html ? 'pagina.html' : 'resposta.txt', resp.corpo);
-  if (resp.status === 401 || resp.status === 403) registrar('a página recusou o acesso: o login (token) faltou, venceu ou não é desse site');
-  else if (resp.html && resp.url !== link && /login|signin|entrar|auth/i.test(resp.url)) registrar('redirecionou para uma página de login: o token não foi aceito');
-  const pagina = resp.html ? { html: resp.html, url: resp.url } : null;
-  if (pagina) {
+  // ordem da página (é a ordem das aulas numa lista de curso). Com um Chrome
+  // instalado, a página abre nele e o app espera o JavaScript montar a lista.
+  const exe = acharNavegador();
+  let nav: Navegador | null = null;
+  if (exe) {
+    registrar(`navegador: ${exe}`);
+    nav = await abrirNavegador(exe, signal).catch((e) => {
+      registrar(`navegador não abriu: ${e instanceof Error ? e.message : e}`);
+      return null;
+    });
+  } else registrar('navegador: nenhum Chrome, Edge ou Brave instalado; lendo só o HTML cru (sem JavaScript)');
+  try {
+    await lerELinks(nav);
+  } finally {
+    nav?.fechar();
+  }
+
+  async function lerELinks(nav: Navegador | null): Promise<void> {
+    registrar('abrindo a página…');
+    const resp = await lerPagina(link, signal, login);
+    registrar(
+      `página (HTML cru): ${resp.erro ?? `HTTP ${resp.status}`}, ${resp.tipo ?? 'sem tipo'}, ${resp.bytes} bytes${resp.url !== link ? `, redirecionou para ${resp.url}` : ''}`,
+    );
+    if (resp.corpo) salvar(resp.html ? 'pagina.html' : 'resposta.txt', resp.corpo);
+    if (resp.status === 401 || resp.status === 403) registrar('a página recusou o acesso: o login (token) faltou, venceu ou não é desse site');
+    else if (resp.html && resp.url !== link && /login|signin|entrar|auth/i.test(resp.url)) registrar('redirecionou para uma página de login: o token não foi aceito');
+    falhaDeAcesso = resp.status === 401 || resp.status === 403;
+
+    let pagina = resp.html ? { html: resp.html, url: resp.url } : null;
+    let midiasDaPagina: string[] = [];
+    if (nav) {
+      registrar('abrindo no navegador e esperando a página carregar (até 30 s)…');
+      const r = await nav.renderizar(link, { login, loginPara: (u) => mandaLogin(u, link, embutidos) || !!loginPara(u), signal }).catch((e) => {
+        registrar(`navegador: falhou: ${e instanceof Error ? e.message : e}`);
+        return null;
+      });
+      if (r) {
+        registrar(
+          `página (navegador): HTTP ${r.status ?? '?'}, ${r.html.length} bytes em ${(r.esperou / 1000).toFixed(1)} s${r.url !== link ? `, terminou em ${r.url}` : ''}, ${r.midias.length} vídeo(s) pedido(s) pela rede`,
+        );
+        for (const m of r.midias) registrar(`  rede: ${m}`);
+        salvar('pagina-renderizada.html', r.html);
+        if (r.html) {
+          pagina = { html: r.html, url: r.url };
+          midiasDaPagina = r.midias;
+          falhaDeAcesso = r.status === 401 || r.status === 403;
+        }
+        // A página colada já toca um vídeo (é uma aula): ele entra direto, sem
+        // passar pelo yt-dlp, que gastaria o tempo de um endereço assinado.
+        const proprio = principal(r.midias);
+        if (proprio && !vistos.has(proprio)) {
+          const v = { url: proprio, titulo: tituloDaPagina(r.html) ?? estado.titulo ?? proprio, duracaoSec: null, pagina: link };
+          daPagina.push(v);
+          if (login && mandaLogin(proprio, link, embutidos)) comLogin.add(proprio);
+          acrescentar(v);
+          registrar(`vídeo da própria página: ${proprio}`);
+        }
+      }
+    }
+    if (!pagina) return;
+
     // O <title> da página nomeia melhor o curso que o do vídeo embutido.
     estado.titulo = tituloDaPagina(pagina.html) ?? estado.titulo;
-    const candidatos = candidatosDaPagina(pagina.html, pagina.url);
+    // O que a rede já deu (a lista do HLS e as de cada qualidade) não é aberto de novo.
+    const ja = new Set(midiasDaPagina);
+    const candidatos = candidatosDaPagina(pagina.html, pagina.url).filter((c) => !ja.has(c.url));
     estado.total = candidatos.length;
     for (const c of candidatos) {
       if (!c.embutido) continue;
@@ -188,6 +247,52 @@ async function descobrir(
     registrar(`página: título "${estado.titulo ?? ''}", ${nLinks} <a>, ${nScripts} <script>, ${candidatos.length} link(s) para abrir (${embutidos.size} player(s) embutido(s))`);
     if (!candidatos.length && nScripts > nLinks)
       registrar('a página quase não tem links e tem muito script: a lista de aulas deve ser montada por JavaScript depois de abrir');
+
+    // Uma aula do mesmo site em que o yt-dlp não achou vídeo: o player deve vir
+    // por JavaScript. Abre no navegador e tenta o que ele carregou (2 por vez).
+    const limiteNav = createLimiter(2);
+    let abertasNoNav = 0;
+    const MAX_NO_NAV = 80;
+    const peloNavegador = async (c: Candidato, rotulo: string): Promise<VideoAchado | null> => {
+      if (!nav || c.embutido || abertasNoNav >= MAX_NO_NAV) return null;
+      if (!mandaLogin(c.url, link, new Set())) return null;
+      abertasNoNav++;
+      const r = await limiteNav(() => nav.renderizar(c.url, { login, loginPara: (u) => mandaLogin(u, link, embutidos) || !!loginPara(u), referer: pagina!.url, signal })).catch(
+        (e) => {
+          registrar(`${rotulo}: navegador falhou: ${e instanceof Error ? e.message : e}`);
+          return null;
+        },
+      );
+      if (!r) return null;
+      registrar(`${rotulo}: no navegador (${(r.esperou / 1000).toFixed(1)} s): ${r.midias.length} vídeo(s) pela rede`);
+      for (const m of r.midias) registrar(`${rotulo}:   rede: ${m}`);
+      // O player pediu um vídeo: é a aula. Entra direto (ver "vídeo da própria página").
+      const daRede = principal(r.midias);
+      if (daRede) {
+        if (login && mandaLogin(daRede, link, embutidos)) comLogin.add(daRede);
+        registrar(`${rotulo}:   vídeo: ${daRede}`);
+        return { url: daRede, titulo: c.texto || tituloDaPagina(r.html) || daRede, duracaoSec: null, pagina: c.url };
+      }
+      const dentro = candidatosDaPagina(r.html, r.url).filter((x) => x.embutido);
+      registrar(`${rotulo}:   ${dentro.length} player(s) na página para tentar`);
+      for (const d of dentro.slice(0, 6)) {
+        try {
+          embutidos.add(new URL(d.url).hostname);
+        } catch {
+          /* sem host */
+        }
+        const loginDele = loginPara(d.url);
+        const v = await listar(d.url, { referer: r.url, timeoutMs: 45_000, signal, login: loginDele, aoErro: (m) => registrar(`${rotulo}:   ${d.url}: ${m}`) }).catch(() => null);
+        const video = v?.tipo === 'video' ? v.video : v?.tipo === 'playlist' && v.itens.length === 1 ? v.itens[0] : null;
+        if (video) {
+          if (loginDele) comLogin.add(video.url);
+          registrar(`${rotulo}:   vídeo: ${video.url}`);
+          return { ...video, titulo: c.texto || video.titulo, pagina: c.url };
+        }
+      }
+      return null;
+    };
+
     const achados: Array<VideoAchado[] | undefined> = new Array(candidatos.length);
     let proximo = 0;
     const trabalhador = async () => {
@@ -197,7 +302,7 @@ async function descobrir(
         const loginDele = loginPara(c.url);
         const rotulo = `[${i + 1}/${candidatos.length}] ${c.embutido ? 'player ' : ''}${c.url}${loginDele ? ' (com login)' : ''}`;
         const r = await listar(c.url, {
-          referer: pagina.url,
+          referer: pagina!.url,
           soUm: !c.embutido,
           timeoutMs: 45_000,
           signal,
@@ -215,6 +320,9 @@ async function descobrir(
           // Uma playlist ou um canal linkado (o rodapé com o canal do site no YouTube)
           // não é aula desta página: fica de fora.
           registrar(`${rotulo}: playlist com ${r.itens.length} (ignorada)`);
+        } else {
+          const v = await peloNavegador(c, rotulo);
+          if (v) achados[i] = [v];
         }
         estado.verificados++;
         // Mostra o que já achou, na ordem da página, sem esperar o resto.
@@ -226,9 +334,10 @@ async function descobrir(
     };
     await Promise.all(Array.from({ length: SIMULTANEOS }, trabalhador));
   }
+
   if (signal.aborted) return registrar('parado pela pessoa');
   if (!estado.itens.length) {
-    estado.erro = pagina ? 'sem-videos' : resp.status === 401 || resp.status === 403 ? 'sem-acesso' : 'nao-abriu';
+    estado.erro = falhaDeAcesso ? 'sem-acesso' : 'sem-videos';
     estado.fase = 'erro';
     return;
   }
@@ -257,6 +366,8 @@ interface ItemManifesto {
   arquivo: string | null;
   /** O download leva o login do manifesto (o vídeo é do site do link ou do player dele). */
   login?: boolean;
+  /** A página da aula, para pedir o endereço do vídeo de novo se ele vencer (ver VideoAchado). */
+  pagina?: string | null;
   erro: string | null;
 }
 interface Manifesto {
@@ -309,7 +420,7 @@ export function criarCursoDeLinks(
     categoriaId: string | null;
     token: string | null;
     comLogin: Set<string>;
-    itens: Array<{ url: string; titulo: string }>;
+    itens: Array<{ url: string; titulo: string; pagina?: string | null }>;
   },
 ): string {
   const raiz = pastaDosLinks(config);
@@ -326,6 +437,7 @@ export function criarCursoDeLinks(
       titulo: i.titulo.trim() || i.url,
       arquivo: null,
       erro: null,
+      pagina: i.pagina ?? null,
       login: !!pedido.token && (pedido.comLogin.has(i.url) || mandaLogin(i.url, pedido.link, new Set())),
     })),
   });
@@ -401,15 +513,29 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
     estado.atual = { titulo: item.titulo, pct: null };
     const ac = new AbortController();
     atualAc = { courseId, ac };
-    try {
-      const baixado = await baixarVideo(item.url, path.join(pasta, TEMP), nome, {
-        referer: m.referer ?? undefined,
+    const baixar = (url: string, referer: string | undefined) =>
+      baixarVideo(url, path.join(pasta, TEMP), nome, {
+        referer,
         login: item.login ? login : null,
         signal: ac.signal,
         aoProgresso: (pct) => {
           if (estado.atual) estado.atual.pct = pct;
         },
       });
+    try {
+      let baixado: string;
+      try {
+        baixado = await baixar(item.url, item.pagina ?? m.referer ?? undefined);
+      } catch (e) {
+        // O endereço do vídeo pode ter vencido: reabre a aula e pede um novo.
+        if (ac.signal.aborted || !item.pagina) throw e;
+        registrar(`falhou (${e instanceof Error ? e.message : e}); reabrindo ${item.pagina} para pegar o endereço de novo`);
+        const novo = await enderecoNovo(item.pagina, m.link, login, ac.signal);
+        if (!novo) throw e;
+        registrar(`endereço novo: ${novo}`);
+        item.url = novo;
+        baixado = await baixar(novo, item.pagina);
+      }
       const final = path.join(pasta, `${nome}${path.extname(baixado)}`);
       fs.renameSync(baixado, final);
       item.arquivo = path.basename(final);
@@ -432,6 +558,23 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
   fs.rmSync(path.join(pasta, TEMP), { recursive: true, force: true });
   if (estado.falhas) estado.erro = `${estado.falhas} vídeo(s) não baixaram`;
   registrar(`fim: ${estado.feitos} de ${estado.total} baixados, ${estado.falhas} falha(s)`);
+}
+
+/** Abre a página da aula no navegador e devolve o primeiro vídeo que o player pedir. */
+async function enderecoNovo(pagina: string, link: string, login: ReturnType<typeof cabecalhoDeLogin>, signal: AbortSignal): Promise<string | null> {
+  const exe = acharNavegador();
+  if (!exe) return null;
+  const nav = await abrirNavegador(exe, signal).catch(() => null);
+  if (!nav) return null;
+  try {
+    const r = await nav.renderizar(pagina, { login, loginPara: (u) => mandaLogin(u, link, new Set([new URL(u).hostname])), signal, pararNoVideo: true });
+    const doHtml = candidatosDaPagina(r.html, r.url).filter((c) => c.embutido).map((c) => c.url);
+    return r.midias[0] ?? doHtml[0] ?? null;
+  } catch {
+    return null;
+  } finally {
+    nav.fechar();
+  }
 }
 
 /** O log dos downloads do curso, se for um curso de link e já tiver um. */

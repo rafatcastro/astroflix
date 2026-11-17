@@ -23,6 +23,12 @@ export interface VideoAchado {
   url: string;
   titulo: string;
   duracaoSec: number | null;
+  /**
+   * A página da aula de onde o vídeo saiu pelo navegador. O endereço do vídeo
+   * (um .m3u8 assinado) pode vencer antes do download; com a página, ele é
+   * pedido de novo.
+   */
+  pagina?: string;
 }
 
 export type ResultadoListar =
