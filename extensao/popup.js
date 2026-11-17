@@ -255,7 +255,6 @@ $('criarSub').addEventListener('click', () => void criar(true));
 // ---------- Importar a página toda (roda no background.js) ----------
 
 const SELETOR_PADRAO = 'p.text-sm.font-family-body.text-body.font-semibold';
-const SELETOR_LINKS_PADRAO = 'a[data-discover="true"]';
 
 const modo = () => document.querySelector('input[name=modo]:checked')?.value ?? 'seguir';
 
@@ -263,41 +262,6 @@ async function contar() {
   if (modo() === 'seguir') {
     $('loteInfo').textContent = `Manda esta aula, clica em "${$('textoBotao').value.trim() || 'Próxima'}", espera o vídeo da próxima e repete até a última. Aula sem vídeo é pulada. Não mexa nesta aba enquanto importa.`;
     $('loteIr').disabled = false;
-    return;
-  }
-  if (modo() === 'links') {
-    const sel = $('seletorLinks').value.trim() || SELETOR_LINKS_PADRAO;
-    try {
-      const [r] = await chrome.scripting.executeScript({
-        target: { tabId: aba.id },
-        args: [sel],
-        func: (s) => {
-          try {
-            const aqui = location.href.split('#')[0];
-            const vistos = new Set();
-            const out = [];
-            for (const a of document.querySelectorAll(s)) {
-              if (!a.href || new URL(a.href).origin !== location.origin) continue;
-              const href = a.href.split('#')[0];
-              if (href === aqui || vistos.has(href)) continue;
-              vistos.add(href);
-              out.push((a.innerText || href).replace(/\s+/g, ' ').trim());
-            }
-            return out;
-          } catch {
-            return null;
-          }
-        },
-      });
-      const t = r?.result;
-      if (!t) return ($('loteInfo').textContent = 'Seletor inválido.');
-      $('loteInfo').textContent = t.length
-        ? `${t.length} link(s): ${t.slice(0, 3).join(' · ')}${t.length > 3 ? ' …' : ''}. Abre cada um nesta aba, guarda o vídeo e, no fim, manda todos de uma vez para a playlist, na ordem. Não mexa nesta aba enquanto importa.`
-        : 'Nenhum link com esse seletor nesta página.';
-      $('loteIr').disabled = !t.length;
-    } catch {
-      $('loteInfo').textContent = 'Não dá para ler esta página.';
-    }
     return;
   }
   const seletor = $('seletor').value.trim();
@@ -340,16 +304,13 @@ async function mostrarLote() {
 }
 
 async function iniciarLote() {
-  const { seletor, textoBotao, modoLote, seletorLinks } = await chrome.storage.local.get(['seletor', 'textoBotao', 'modoLote', 'seletorLinks']);
+  const { seletor, textoBotao, modoLote } = await chrome.storage.local.get(['seletor', 'textoBotao', 'modoLote']);
   $('seletor').value = seletor || SELETOR_PADRAO;
-  $('seletorLinks').value = seletorLinks || SELETOR_LINKS_PADRAO;
-  if (modoLote === 'links') document.querySelector('input[name=modo][value=links]').checked = true;
   $('textoBotao').value = textoBotao || 'Próxima';
   if (modoLote === 'lista') document.querySelector('input[name=modo][value=lista]').checked = true;
   const trocarModo = async () => {
     $('campoBotao').classList.toggle('escondido', modo() !== 'seguir');
     $('campoSeletor').classList.toggle('escondido', modo() !== 'lista');
-    $('campoLinks').classList.toggle('escondido', modo() !== 'links');
     await chrome.storage.local.set({ modoLote: modo() });
     await contar();
   };
@@ -360,11 +321,6 @@ async function iniciarLote() {
   });
   $('campoBotao').classList.toggle('escondido', modo() !== 'seguir');
   $('campoSeletor').classList.toggle('escondido', modo() !== 'lista');
-  $('campoLinks').classList.toggle('escondido', modo() !== 'links');
-  $('seletorLinks').addEventListener('change', async () => {
-    await chrome.storage.local.set({ seletorLinks: $('seletorLinks').value.trim() });
-    await contar();
-  });
   $('seletor').addEventListener('change', async () => {
     await chrome.storage.local.set({ seletor: $('seletor').value.trim() });
     await contar();
@@ -376,8 +332,6 @@ async function iniciarLote() {
     await chrome.storage.local.set({ seletor: $('seletor').value.trim(), textoBotao: $('textoBotao').value.trim(), ultimaPlaylist: $('playlist').value });
     if (modo() === 'seguir')
       await chrome.runtime.sendMessage({ tipo: 'importar-seguindo', tabId: aba.id, textoBotao: $('textoBotao').value.trim() || 'Próxima', playlist, modulo });
-    else if (modo() === 'links')
-      await chrome.runtime.sendMessage({ tipo: 'importar-links', tabId: aba.id, seletor: $('seletorLinks').value.trim() || SELETOR_LINKS_PADRAO, playlist, modulo });
     else await chrome.runtime.sendMessage({ tipo: 'importar-pagina', tabId: aba.id, seletor: $('seletor').value.trim(), playlist, modulo });
     await mostrarLote();
   });

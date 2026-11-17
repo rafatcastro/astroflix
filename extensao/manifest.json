@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Astroflix",
-  "version": "1.4.0",
+  "version": "1.3.5",
   "description": "Manda o vídeo da aula aberta para uma playlist do Astroflix, que baixa e guarda o progresso.",
   "permissions": ["webRequest", "storage", "activeTab", "scripting", "tabs"],
   "host_permissions": ["<all_urls>"],
