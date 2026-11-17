@@ -265,7 +265,14 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   de criação), listada em `manifesto.modulos`, que o scan mostra como módulo; o item leva `modulo` e
   é numerado dentro dela. Criada pelo "+ Nova sub-playlist" da página do curso ou pela extensão
   ("Dentro da escolhida"). O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),
-  depois h1/h2, depois o da aba.
+  depois h1/h2, depois o da aba. **Importar a página toda** (popup → "Importar a página toda", roda no `background.js`
+  porque o popup fecha ao perder o foco): para cada elemento do seletor (padrão
+  `p.text-sm.font-family-body.text-body.font-semibold`, o nome da aula no Ferretto; editável e
+  lembrado), clica no item clicável em volta, espera até 25 s o player pedir um vídeo novo (a
+  extensão regrava a hora de um vídeo pedido de novo) e manda com o texto como título; o progresso fica
+  em `storage.session.lote`. Num site em JavaScript todas as aulas têm o mesmo endereço: a mesma aula
+  no manifesto é o mesmo vídeo ou a mesma página **e** o mesmo título, e o download só reabre a página
+  para renovar um endereço vencido se ela for só daquela aula (senão viria o vídeo de outra).
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

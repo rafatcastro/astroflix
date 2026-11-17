@@ -550,14 +550,17 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
       try {
         baixado = await baixar(item.url, item.pagina ?? m.referer ?? undefined);
       } catch (e) {
-        // O endereço do vídeo pode ter vencido: reabre a aula e pede um novo.
-        if (ac.signal.aborted || !item.pagina) throw e;
+        // O endereço do vídeo pode ter vencido: reabre a aula e pede um novo. Só se a
+        // página for só desta aula: num site em JavaScript (a lista inteira num
+        // endereço), reabrir daria o vídeo de outra aula com o título desta.
+        const paginaSo = !!item.pagina && atual.itens.filter((it) => it.pagina === item.pagina).length === 1;
+        if (ac.signal.aborted || !paginaSo) throw e;
         registrar(`falhou (${e instanceof Error ? e.message : e}); reabrindo ${item.pagina} para pegar o endereço de novo`);
-        const novo = await enderecoNovo(config.dataDir, item.pagina, m.link, login, ac.signal);
+        const novo = await enderecoNovo(config.dataDir, item.pagina!, m.link, login, ac.signal);
         if (!novo) throw e;
         registrar(`endereço novo: ${novo}`);
         mudou.url = novo;
-        baixado = await baixar(novo, item.pagina);
+        baixado = await baixar(novo, item.pagina!);
       }
       fs.mkdirSync(destinoDir, { recursive: true });
       const final = path.join(destinoDir, `${nome}${path.extname(baixado)}`);
@@ -704,7 +707,11 @@ export function adicionarAPlaylist(
   if (!curso || !m) return null;
   // A mesma aula duas vezes (clicou de novo): não duplica, só atualiza o
   // endereço, que pode ter vencido.
-  const ja = m.itens.findIndex((i) => i.url === item.url || (!!item.pagina && i.pagina === item.pagina));
+  // Num site em JavaScript todas as aulas têm o mesmo endereço de página: a mesma
+  // aula é o mesmo vídeo, ou a mesma página com o mesmo título.
+  const ja = m.itens.findIndex(
+    (i) => i.url === item.url || (!!item.pagina && i.pagina === item.pagina && i.titulo.trim() === item.titulo.trim() && (i.modulo ?? null) === (item.modulo ?? null)),
+  );
   if (ja >= 0) {
     const i = m.itens[ja];
     if (!i.arquivo) Object.assign(i, { url: item.url, cabecalhos: item.cabecalhos, erro: null });

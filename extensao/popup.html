@@ -64,6 +64,18 @@
         <div id="videos" class="videos"></div>
 
         <button id="adicionar" class="principal">Adicionar</button>
+
+        <details id="lote" style="margin-top: 14px">
+          <summary style="cursor: pointer; color: #d4d4d4">Importar a página toda</summary>
+          <label for="seletor">Cada aula é o elemento</label>
+          <input id="seletor" spellcheck="false" />
+          <p class="aviso" id="loteInfo"></p>
+          <div class="linha">
+            <button id="loteIr" style="flex: 1">Importar todas</button>
+            <button id="loteParar" class="escondido">Parar</button>
+          </div>
+          <p class="aviso" id="loteEstado" role="status"></p>
+        </details>
       </section>
 
       <p id="msg" class="aviso" role="status"></p>

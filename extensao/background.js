@@ -15,8 +15,9 @@ const chave = (tabId) => `aba:${tabId}`;
 async function guardar(tabId, item) {
   const k = chave(tabId);
   const atual = (await chrome.storage.session.get(k))[k] ?? [];
-  if (atual.some((x) => x.url === item.url)) return;
-  const lista = [...atual, item].slice(-MAX_POR_ABA);
+  // Pedido de novo (voltou a uma aula já vista): vai para o fim com a hora nova,
+  // que é o que o "Importar a página toda" usa para saber qual vídeo a aula abriu.
+  const lista = [...atual.filter((x) => x.url !== item.url), item].slice(-MAX_POR_ABA);
   await chrome.storage.session.set({ [k]: lista });
   const n = new Set(lista.filter((x) => x.pagina === item.pagina).map((x) => x.url)).size;
   chrome.action.setBadgeText({ tabId, text: n ? String(n) : '' });
@@ -50,4 +51,122 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
   const lista = (await chrome.storage.session.get(k))[k] ?? [];
   const n = new Set(lista.filter((x) => x.pagina === info.url).map((x) => x.url)).size;
   chrome.action.setBadgeText({ tabId, text: n ? String(n) : '' });
+});
+
+// ---------- Importar a página toda ----------
+
+// A página lista as aulas (no Ferretto, cada uma num <p class="text-sm
+// font-family-body text-body font-semibold">). Para cada uma: clica, espera o
+// player pedir o vídeo novo e manda para a playlist com o texto como título. Roda
+// aqui, e não no popup, porque o popup fecha quando perde o foco; o progresso
+// fica em storage.session e o popup o mostra ao reabrir.
+
+const LOTE = 'lote';
+const ESPERA_MS = 25_000;
+let parar = false;
+
+const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
+const estado = async (patch) => {
+  const atual = (await chrome.storage.session.get(LOTE))[LOTE] ?? {};
+  await chrome.storage.session.set({ [LOTE]: { ...atual, ...patch } });
+};
+
+async function apiDoApp(caminho, corpo) {
+  const { porta, chave: c } = await chrome.storage.local.get(['porta', 'chave']);
+  const res = await fetch(`http://127.0.0.1:${porta}${caminho}`, {
+    method: 'POST',
+    headers: { 'X-Astroflix-Chave': c, 'Content-Type': 'application/json' },
+    body: JSON.stringify(corpo),
+  });
+  const r = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(r.error ?? `HTTP ${res.status}`);
+  return r;
+}
+
+// O vídeo que apareceu depois de `desde` (a lista do HLS/DASH antes de um .mp4).
+async function videoNovo(tabId, desde, usados) {
+  const k = chave(tabId);
+  const fim = Date.now() + ESPERA_MS;
+  while (Date.now() < fim && !parar) {
+    const lista = ((await chrome.storage.session.get(k))[k] ?? []).filter((x) => x.quando >= desde && !usados.has(x.url));
+    if (lista.length) {
+      // Um instante para a lista principal chegar antes das de cada qualidade.
+      await dormir(1200);
+      const depois = ((await chrome.storage.session.get(k))[k] ?? []).filter((x) => x.quando >= desde && !usados.has(x.url));
+      return depois.find((x) => /\.(m3u8|mpd)(\?|$)/i.test(x.url)) ?? depois[0];
+    }
+    await dormir(400);
+  }
+  return null;
+}
+
+async function importarPagina({ tabId, seletor, playlist, modulo }) {
+  parar = false;
+  const [{ result: titulos }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [seletor],
+    func: (sel) => [...document.querySelectorAll(sel)].map((e) => e.innerText.replace(/\s+/g, ' ').trim()),
+  });
+  await estado({ ativo: true, total: titulos.length, feitos: 0, falhas: [], atual: null, playlist, terminou: null });
+  const usados = new Set();
+  // O vídeo que já está tocando quando começa: é o da aula aberta, que pode ser a primeira.
+  const k = chave(tabId);
+  const jaTocando = ((await chrome.storage.session.get(k))[k] ?? []).slice(-1)[0] ?? null;
+  const falhas = [];
+  for (let i = 0; i < titulos.length && !parar; i++) {
+    const titulo = titulos[i] || `Aula ${i + 1}`;
+    await estado({ atual: `${i + 1}. ${titulo}` });
+    const desde = Date.now();
+    // Clica no que é clicável em volta do parágrafo (o item da lista), ou nele.
+    await chrome.scripting
+      .executeScript({
+        target: { tabId },
+        args: [seletor, i],
+        func: (sel, n) => {
+          const el = document.querySelectorAll(sel)[n];
+          if (!el) return false;
+          el.scrollIntoView({ block: 'center' });
+          const alvo = el.closest('a, button, [role=button], [onclick], li') ?? el;
+          alvo.click();
+          return true;
+        },
+      })
+      .catch(() => null);
+    let v = await videoNovo(tabId, desde, usados);
+    // A primeira aula já estava aberta e não pediu o vídeo de novo ao ser clicada.
+    // Só a primeira: em outra posição, seria o vídeo de outra aula com este título.
+    if (!v && i === 0 && jaTocando && !usados.has(jaTocando.url)) v = jaTocando;
+    if (!v) {
+      falhas.push(`${titulo}: nenhum vídeo novo em ${ESPERA_MS / 1000} s`);
+      await estado({ falhas });
+      continue;
+    }
+    usados.add(v.url);
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    try {
+      await apiDoApp(`/api/extensao/playlists/${playlist}/itens`, {
+        url: v.url,
+        titulo,
+        pagina: tab?.url ?? v.pagina,
+        cabecalhos: v.cabecalhos ?? [],
+        modulo,
+      });
+      const atual = (await chrome.storage.session.get(LOTE))[LOTE];
+      await estado({ feitos: (atual?.feitos ?? 0) + 1 });
+    } catch (e) {
+      falhas.push(`${titulo}: ${e.message}`);
+      await estado({ falhas });
+    }
+  }
+  await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : 'ok' });
+}
+
+chrome.runtime.onMessage.addListener((m, _remetente, responder) => {
+  if (m?.tipo === 'importar-pagina') {
+    void importarPagina(m).catch((e) => estado({ ativo: false, terminou: `erro: ${e.message}` }));
+    responder({ ok: true });
+  } else if (m?.tipo === 'parar-lote') {
+    parar = true;
+    responder({ ok: true });
+  }
 });
