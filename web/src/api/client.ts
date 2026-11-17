@@ -42,6 +42,8 @@ export interface CourseDetail {
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
   /** Curso de link (pasta em DATA_DIR/links): uma playlist que a extensão pode encher. */
   deLink?: boolean;
+  /** As sub-playlists (módulos) da playlist, inclusive as ainda vazias. */
+  subPlaylists?: Array<{ pasta: string; nome: string }>;
   importacao: {
     carregando: boolean;
     erro: string | null;
@@ -597,6 +599,10 @@ export const api = {
   linksInstalarExtensao: () => jsonFetch<{ pasta: string }>('/api/links/extensao/instalar', { method: 'POST' }),
   linksCriarPlaylist: (titulo: string, categoriaId?: string) =>
     jsonFetch<{ id: string }>('/api/links/playlists', { method: 'POST', body: JSON.stringify({ titulo, categoriaId }) }),
+  linksCriarSubPlaylist: (courseId: string, titulo: string) =>
+    jsonFetch<{ pasta: string; nome: string }>(`/api/links/playlists/${courseId}/modulos`, { method: 'POST', body: JSON.stringify({ titulo }) }),
+  renomearAula: (lessonId: string, titulo: string) =>
+    jsonFetch<{ id: string; title: string }>(`/api/lessons/${lessonId}`, { method: 'PATCH', body: JSON.stringify({ titulo }) }),
   linksEntrar: (link: string) => jsonFetch<void>('/api/links/entrar', { method: 'POST', body: JSON.stringify({ link }) }),
   linksAbrirLog: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}/abrir-log`, { method: 'POST' }),
   linksLogDoCurso: async (courseId: string): Promise<string | null> => {

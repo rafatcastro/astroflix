@@ -34,6 +34,8 @@ export interface LessonRow {
   thumb_path: string | null;
   missing: number;
   remote_id?: string | null;
+  /** v15: o título dado pela pessoa ("Renomear"); o re-escaneio o mantém. */
+  titulo_editado?: string | null;
 }
 
 export interface MaterialRow {

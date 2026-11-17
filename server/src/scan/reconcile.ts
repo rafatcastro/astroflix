@@ -171,7 +171,7 @@ export function aplicarReconcile(
   const now = new Date().toISOString();
 
   const updateLesson = db.prepare(`
-    UPDATE lessons SET rel_path=@rel_path, module=@module, title=@title, order_index=@order_index,
+    UPDATE lessons SET rel_path=@rel_path, module=@module, title=COALESCE(titulo_editado, @title), order_index=@order_index,
       module_order=@module_order, size_bytes=@size_bytes, mtime=@mtime, container=@container,
       playable=@playable, missing=0, remote_id=COALESCE(@remote_id, remote_id),
       duration_sec=CASE WHEN mtime<>@mtime THEN @duration_sec ELSE COALESCE(@duration_sec, duration_sec) END,

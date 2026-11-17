@@ -10,7 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
-import { importacaoLink, pararImportacao, pastaDosLinks } from '../links/importar';
+import { importacaoLink, manifestoDoCurso, nomeDoModulo, pararImportacao, pastaDosLinks } from '../links/importar';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
@@ -240,6 +240,10 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : importacaoLink(course.id),
       // Curso de link (playlist da extensão): a página mostra como acrescentar aulas.
       deLink: course.root_path.startsWith(pastaDosLinks(config) + path.sep),
+      // As sub-playlists (módulos) da playlist, inclusive as que ainda não têm aula.
+      subPlaylists: course.root_path.startsWith(pastaDosLinks(config) + path.sep)
+        ? (manifestoDoCurso(db, course.id)?.m.modulos ?? []).map((p) => ({ pasta: p, nome: nomeDoModulo(p) }))
+        : [],
       download: remoto ? downloadDe(course.id, baixadas) : null,
       pastaConectada: remoto ? pastaConectada(db, course.id) : null,
       downloadCurso: drive?.baixador.estado(course.id) ?? null,

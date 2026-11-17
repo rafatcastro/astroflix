@@ -13,6 +13,7 @@ import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from '../co
 import { cliqueFora } from '../lib/desktop';
 import CourseMenu from '../components/CourseMenu';
 import Banner from '../components/Banner';
+import DialogoTexto from '../components/DialogoTexto';
 import { mensagemErroDrive } from '../api/driveAuth';
 import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
@@ -53,6 +54,9 @@ export default function Course() {
   const [notice, setNotice] = useState<string | null>(null);
   // Curso importado por link que falhou: o log dos downloads, aberto pelo "Ver log".
   const [logLink, setLogLink] = useState<string | null>(null);
+  // "Renomear" (botão direito da aula) e "Nova sub-playlist" (playlist da extensão).
+  const [renomeando, setRenomeando] = useState<LessonDTO | null>(null);
+  const [novaSub, setNovaSub] = useState(false);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
 
@@ -115,14 +119,11 @@ export default function Course() {
     setView(v);
     setPref('course.view', v);
   };
-  const abrirMenuAula =
-    data.source === 'local'
-      ? undefined
-      : (l: LessonDTO, e: MouseEvent) => {
-          if (l.missing) return;
-          e.preventDefault();
-          setMenuAula({ l, x: e.clientX, y: e.clientY });
-        };
+  // Toda aula tem Renomear; as do Drive e do Telegram também Baixar/Excluir download.
+  const abrirMenuAula = (l: LessonDTO, e: MouseEvent) => {
+    e.preventDefault();
+    setMenuAula({ l, x: e.clientX, y: e.clientY });
+  };
   const arvore = montarArvore(allLessons, data.materials);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
@@ -334,6 +335,24 @@ export default function Course() {
         </span>
       )}
 
+      {data.deLink && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-neutral-400">Sub-playlists:</span>
+          {(data.subPlaylists ?? []).length === 0 && <span className="text-neutral-500">nenhuma</span>}
+          {(data.subPlaylists ?? []).map((sp) => (
+            <span key={sp.pasta} className="rounded bg-neutral-800 px-2 py-0.5 text-neutral-300">
+              {sp.nome}
+            </span>
+          ))}
+          <button
+            type="button"
+            onClick={() => setNovaSub(true)}
+            className="min-h-[36px] rounded px-2 text-neutral-300 underline decoration-neutral-600 underline-offset-2 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            + Nova sub-playlist
+          </button>
+        </div>
+      )}
       {data.deLink && allLessons.length === 0 && !data.importacao?.carregando && (
         <div className="mt-4" role="status">
           <Banner tone="info">
@@ -517,10 +536,22 @@ export default function Course() {
             role="menu"
             aria-label={menuAula.l.title}
             className="fixed z-40 w-48 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900 py-1 shadow-lg shadow-black/40"
-            style={{ left: Math.min(menuAula.x, window.innerWidth - 200), top: Math.min(menuAula.y, window.innerHeight - 60) }}
+            style={{ left: Math.min(menuAula.x, window.innerWidth - 200), top: Math.min(menuAula.y, window.innerHeight - 110) }}
             onKeyDown={(e) => e.key === 'Escape' && setMenuAula(null)}
           >
-            {menuAula.l.baixada && data?.pastaConectada ? (
+            <button
+              type="button"
+              role="menuitem"
+              autoFocus
+              className="block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none"
+              onClick={() => {
+                setRenomeando(menuAula.l);
+                setMenuAula(null);
+              }}
+            >
+              Renomear
+            </button>
+            {data?.source === 'local' || menuAula.l.missing ? null : menuAula.l.baixada && data?.pastaConectada ? (
               // Pasta conectada: o arquivo é da pessoa, e o app não o apaga.
               <div role="menuitem" aria-disabled className="px-3 py-2.5 text-sm text-neutral-500">
                 Na pasta conectada
@@ -529,7 +560,6 @@ export default function Course() {
               <button
                 type="button"
                 role="menuitem"
-                autoFocus
                 className={`block w-full px-3 py-2.5 text-left text-sm hover:bg-neutral-800 focus:bg-neutral-800 focus:outline-none ${menuAula.l.baixada ? 'text-red-400' : ''}`}
                 onClick={() => acaoAula(menuAula.l)}
               >
@@ -538,6 +568,33 @@ export default function Course() {
             )}
           </div>
         </>
+      )}
+      {renomeando && (
+        <DialogoTexto
+          titulo="Renomear aula"
+          rotulo="Título"
+          inicial={renomeando.title}
+          dica="Só o nome que aparece aqui muda; o arquivo e o progresso ficam. Vazio volta ao nome do arquivo."
+          permitirVazio
+          onSalvar={async (t) => {
+            await api.renomearAula(renomeando.id, t);
+            qc.invalidateQueries({ queryKey: ['course', id] });
+          }}
+          onClose={() => setRenomeando(null)}
+        />
+      )}
+      {novaSub && (
+        <DialogoTexto
+          titulo="Sub-playlist nova"
+          rotulo="Nome"
+          botao="Criar"
+          dica="Vira um módulo deste curso. Na extensão, ela aparece embaixo desta playlist."
+          onSalvar={async (t) => {
+            await api.linksCriarSubPlaylist(id, t);
+            qc.invalidateQueries({ queryKey: ['course', id] });
+          }}
+          onClose={() => setNovaSub(false)}
+        />
       )}
     </div>
   );

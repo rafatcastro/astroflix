@@ -49,9 +49,12 @@
           <select id="playlist"></select>
           <button id="nova" title="Nova playlist">+</button>
         </div>
-        <div id="novaLinha" class="linha escondido" style="margin-top: 6px">
-          <input id="novaNome" placeholder="Nome da nova playlist" />
-          <button id="criar">Criar</button>
+        <div id="novaLinha" class="escondido" style="margin-top: 6px">
+          <input id="novaNome" placeholder="Nome" />
+          <div class="linha" style="margin-top: 6px">
+            <button id="criar" style="flex: 1">Playlist nova</button>
+            <button id="criarSub" style="flex: 1">Dentro da escolhida</button>
+          </div>
         </div>
 
         <label for="titulo">Título da aula</label>

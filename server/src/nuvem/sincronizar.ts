@@ -320,7 +320,7 @@ export function criarSincronizador(deps: {
         const existe = db.prepare('SELECT id FROM lessons WHERE course_id=? AND rel_path=?').get(r.curso_id, r.rel_path);
         if (existe) {
           db.prepare(
-            `UPDATE lessons SET title=?, module=?, order_index=?, module_order=?, duration_sec=COALESCE(?, duration_sec),
+            `UPDATE lessons SET title=COALESCE(titulo_editado, ?), module=?, order_index=?, module_order=?, duration_sec=COALESCE(?, duration_sec),
                remote_id=COALESCE(?, remote_id)
              WHERE course_id=? AND rel_path=?`,
           ).run(r.titulo, r.modulo ?? null, r.order_index, r.module_order, r.duracao_sec ?? null, r.remote_id ?? null, r.curso_id, r.rel_path);

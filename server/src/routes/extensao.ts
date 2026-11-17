@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { EXTENSAO, APP_VERSION } from '../bundled';
-import { adicionarAPlaylist, criarPlaylist, listarPlaylists } from '../links/importar';
+import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists } from '../links/importar';
 import { acharNavegador } from '../links/navegador';
 import { abrirNoSistema } from './armazenamento';
 
@@ -86,6 +86,14 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
     return reply.code(201).send({ id: criarPlaylist(db, config, titulo, categoriaId) });
   });
 
+  // Uma sub-playlist (módulo) dentro de uma playlist, pelo app.
+  app.post('/api/links/playlists/:id/modulos', async (req, reply) => {
+    const titulo = (req.body as { titulo?: unknown } | undefined)?.titulo;
+    if (typeof titulo !== 'string' || !titulo.trim()) return reply.code(400).send({ error: 'sem-titulo' });
+    const r = criarSubPlaylist(db, (req.params as { id: string }).id, titulo);
+    return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
+  });
+
   // ----- Para a extensão (chrome-extension://, com a chave) -----
 
   app.addHook('onRequest', async (req, reply) => {
@@ -103,8 +111,15 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
     return reply.code(201).send({ id: criarPlaylist(db, config, titulo.trim(), null) });
   });
 
+  app.post('/api/extensao/playlists/:id/modulos', async (req, reply) => {
+    const titulo = (req.body as { titulo?: unknown } | undefined)?.titulo;
+    if (typeof titulo !== 'string' || !titulo.trim()) return reply.code(400).send({ error: 'sem-titulo' });
+    const r = criarSubPlaylist(db, (req.params as { id: string }).id, titulo);
+    return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
+  });
+
   app.post('/api/extensao/playlists/:id/itens', async (req, reply) => {
-    const b = req.body as { url?: unknown; titulo?: unknown; pagina?: unknown; cabecalhos?: unknown } | undefined;
+    const b = req.body as { url?: unknown; titulo?: unknown; pagina?: unknown; cabecalhos?: unknown; modulo?: unknown } | undefined;
     const url = typeof b?.url === 'string' && /^https?:\/\//i.test(b.url) ? b.url : null;
     if (!url) return reply.code(400).send({ error: 'url-invalida' });
     const cabecalhos = Array.isArray(b?.cabecalhos)
@@ -119,6 +134,7 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
       titulo: typeof b?.titulo === 'string' ? b.titulo.slice(0, 200) : url,
       pagina: typeof b?.pagina === 'string' && /^https?:\/\//i.test(b.pagina) ? b.pagina : null,
       cabecalhos,
+      modulo: typeof b?.modulo === 'string' && b.modulo ? b.modulo : null,
     });
     return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
   });

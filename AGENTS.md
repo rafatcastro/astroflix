@@ -261,7 +261,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   exigem `X-Astroflix-Chave` (`routes/extensao.ts`, gerada em `settings` e mostrada nas Configurações).
   A extensão procura o app de 7777 a 7797. O download relê o manifesto a cada vídeo e grava só o item
   que mudou: aula acrescentada no meio do download entra na fila; a mesma aula duas vezes só atualiza
-  o endereço.
+  o endereço. **Sub-playlist** (uma playlist dentro da outra): uma subpasta `NN - Nome` (o número dá a ordem
+  de criação), listada em `manifesto.modulos`, que o scan mostra como módulo; o item leva `modulo` e
+  é numerado dentro dela. Criada pelo "+ Nova sub-playlist" da página do curso ou pela extensão
+  ("Dentro da escolhida"). O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),
+  depois h1/h2, depois o da aba.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
@@ -367,6 +371,9 @@ re-apontar preserva o histórico.
   ao Anki. Entram no backup (`flashcards` por curso, `flashcardsGerais`).
 - `progress` é uma tabela por aula, com `position_sec`, `furthest_sec` e
   `completed`/`auto_completed`.
+- `lessons.titulo_editado` (v15): o "Renomear" do botão direito da aula (`PATCH /api/lessons/:id`).
+  Muda só o título, nunca o arquivo (o `rel_path` é a identidade na nuvem e no progresso); o
+  re-escaneio e a descida da nuvem fazem `COALESCE(titulo_editado, …)`. Vazio volta ao nome do arquivo.
 - `cache_aulas` e `capas_estado` (v14) são só desta máquina, sem gatilho da nuvem: o cache
   automático das aulas remotas e o estado das capas que falharam.
 - As aulas são apagadas em cascata.

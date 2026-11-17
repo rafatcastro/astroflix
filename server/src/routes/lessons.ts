@@ -2,7 +2,9 @@ import type { FastifyInstance } from 'fastify';
 import type { Db } from '../db';
 import type { ServicosDrive } from '../drive/servicos';
 import type { AppConfig } from '../config';
+import path from 'node:path';
 import { apagarBaixado } from '../armazenamento';
+import { cleanTitle } from '../scan/derive';
 
 export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig; drive?: ServicosDrive }): Promise<void> {
   const { db, config, drive } = opts;
@@ -33,6 +35,20 @@ export async function lessonsRoutes(app: FastifyInstance, opts: { db: Db; config
       courseSource: r.course_source === 'drive' || r.course_source === 'telegram' ? r.course_source : 'local',
       prevLessonId: prev?.id ?? null, nextLessonId: next?.id ?? null,
     };
+  });
+
+  // "Renomear" (botão direito da aula): muda só o título, nunca o arquivo (ver a
+  // v15). Vazio volta ao nome que vem do arquivo.
+  app.patch('/api/lessons/:id', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    const titulo = (req.body as { titulo?: unknown } | undefined)?.titulo;
+    if (typeof titulo !== 'string') return reply.code(400).send({ error: 'sem-titulo' });
+    const l = db.prepare('SELECT rel_path FROM lessons WHERE id=?').get(id) as { rel_path: string } | undefined;
+    if (!l) return reply.code(404).send({ error: 'not_found' });
+    const novo = titulo.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (novo) db.prepare('UPDATE lessons SET title=?, titulo_editado=? WHERE id=?').run(novo, novo, id);
+    else db.prepare('UPDATE lessons SET title=?, titulo_editado=NULL WHERE id=?').run(cleanTitle(path.posix.basename(l.rel_path)), id);
+    return { id, title: novo || cleanTitle(path.posix.basename(l.rel_path)) };
   });
 
   // O botão direito da aula na página do curso (Drive e Telegram).

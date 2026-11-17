@@ -92,31 +92,53 @@ $('trocar').addEventListener('click', (e) => {
   mostrarPareamento();
 });
 
+// Cada playlist e, embaixo dela, as sub-playlists (módulos). O valor da opção é
+// "id|subpasta" (subpasta vazia = a raiz da playlist).
+let playlists = [];
 async function carregarPlaylists(escolher) {
-  const lista = await api('/api/extensao/playlists');
+  playlists = await api('/api/extensao/playlists');
   const sel = $('playlist');
   sel.innerHTML = '';
-  for (const p of lista) {
+  for (const p of playlists) {
     const o = document.createElement('option');
-    o.value = p.id;
+    o.value = `${p.id}|`;
     o.textContent = `${p.titulo} (${p.itens})`;
     sel.appendChild(o);
+    for (const m of p.modulos ?? []) {
+      const s = document.createElement('option');
+      s.value = `${p.id}|${m.pasta}`;
+      s.textContent = `\u00a0\u00a0\u00a0↳ ${m.nome} (${m.itens})`;
+      sel.appendChild(s);
+    }
   }
   const alvo = escolher ?? cfg.ultimaPlaylist;
-  if (alvo && lista.some((p) => p.id === alvo)) sel.value = alvo;
-  if (!lista.length) msg('Nenhuma playlist ainda: crie uma com o +.');
-  return lista;
+  if (alvo && [...sel.options].some((o) => o.value === alvo)) sel.value = alvo;
+  if (!playlists.length) msg('Nenhuma playlist ainda: crie uma com o +.');
+  return playlists;
 }
 
-// O nome da aula: o título grande da página (h1) costuma ser o da aula; o da
-// aba vem com o nome do site junto.
+const escolhida = () => {
+  const [id, modulo] = ($('playlist').value || '|').split('|');
+  return { id, modulo: modulo || null };
+};
+
+// O nome da aula. Primeiro os lugares conhecidos de plataformas de curso (no
+// Ferretto, o título da aula fica num <span class="font-family-headlines">);
+// depois o título grande da página (h1/h2); por último o da aba, que vem com o
+// nome do site junto.
+const SELETORES_DE_TITULO = ['span.font-family-headlines', 'h1', 'h2'];
+
 async function tituloDaAula() {
   try {
     const [r] = await chrome.scripting.executeScript({
       target: { tabId: aba.id },
-      func: () => {
-        const h = [...document.querySelectorAll('h1, h2')].map((e) => e.innerText.trim()).find((t) => t && t.length < 150);
-        return h || document.title;
+      args: [SELETORES_DE_TITULO],
+      func: (seletores) => {
+        for (const s of seletores) {
+          const t = [...document.querySelectorAll(s)].map((e) => e.innerText.replace(/\s+/g, ' ').trim()).find((x) => x && x.length < 150);
+          if (t) return t;
+        }
+        return document.title;
       },
     });
     if (r?.result) return r.result;
@@ -162,7 +184,8 @@ async function mostrarPrincipal() {
 }
 
 async function adicionar(videos) {
-  const playlist = $('playlist').value;
+  const valor = $('playlist').value;
+  const { id: playlist, modulo } = escolhida();
   if (!playlist) return msg('Escolha ou crie uma playlist.', 'erro');
   const marcado = document.querySelector('input[name=video]:checked')?.value ?? 'pagina';
   const v = marcado === 'pagina' ? null : videos[Number(marcado)];
@@ -175,12 +198,13 @@ async function adicionar(videos) {
         titulo: $('titulo').value.trim() || aba.title,
         pagina: aba.url,
         cabecalhos: v?.cabecalhos ?? [],
+        modulo,
       }),
     });
-    cfg.ultimaPlaylist = playlist;
-    await chrome.storage.local.set({ ultimaPlaylist: playlist });
+    cfg.ultimaPlaylist = valor;
+    await chrome.storage.local.set({ ultimaPlaylist: valor });
     msg(r.repetido ? `Essa aula já estava na playlist (nº ${r.posicao}); o endereço foi atualizado.` : `Adicionada como aula ${r.posicao}. O Astroflix está baixando.`, 'ok');
-    await carregarPlaylists(playlist);
+    await carregarPlaylists(valor);
   } catch (e) {
     msg(ERROS[e.message] ?? `Não deu: ${e.message}`, 'erro');
   } finally {
@@ -192,18 +216,29 @@ $('nova').addEventListener('click', () => {
   $('novaLinha').classList.toggle('escondido');
   $('novaNome').focus();
 });
-$('criar').addEventListener('click', async () => {
+async function criar(dentro) {
   const titulo = $('novaNome').value.trim();
-  if (!titulo) return;
+  if (!titulo) return $('novaNome').focus();
+  const { id } = escolhida();
+  if (dentro && !id) return msg('Escolha antes a playlist onde criar.', 'erro');
   try {
-    const { id } = await api('/api/extensao/playlists', { method: 'POST', body: JSON.stringify({ titulo }) });
+    let valor;
+    if (dentro) {
+      const r = await api(`/api/extensao/playlists/${id}/modulos`, { method: 'POST', body: JSON.stringify({ titulo }) });
+      valor = `${id}|${r.pasta}`;
+    } else {
+      const r = await api('/api/extensao/playlists', { method: 'POST', body: JSON.stringify({ titulo }) });
+      valor = `${r.id}|`;
+    }
     $('novaLinha').classList.add('escondido');
     $('novaNome').value = '';
-    await carregarPlaylists(id);
-    msg(`Playlist "${titulo}" criada.`, 'ok');
+    await carregarPlaylists(valor);
+    msg(dentro ? `"${titulo}" criada dentro da playlist.` : `Playlist "${titulo}" criada.`, 'ok');
   } catch (e) {
     msg(`Não deu: ${e.message}`, 'erro');
   }
-});
+}
+$('criar').addEventListener('click', () => void criar(false));
+$('criarSub').addEventListener('click', () => void criar(true));
 
 void iniciar();

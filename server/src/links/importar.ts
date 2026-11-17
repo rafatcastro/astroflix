@@ -374,6 +374,8 @@ interface ItemManifesto {
   pagina?: string | null;
   /** Mandado pela extensão: os cabeçalhos com que o navegador da pessoa pediu o vídeo. */
   cabecalhos?: Array<{ nome: string; valor: string }>;
+  /** A sub-playlist (a subpasta, que vira módulo do curso); sem ela, na raiz. */
+  modulo?: string | null;
   erro: string | null;
 }
 interface Manifesto {
@@ -381,6 +383,8 @@ interface Manifesto {
   referer: string | null;
   /** O token de login colado; fica só nesta máquina, dentro da pasta de dados. */
   token?: string | null;
+  /** As sub-playlists, na ordem de criação: nomes das subpastas ("01 - Funções"). */
+  modulos?: string[];
   itens: ItemManifesto[];
 }
 
@@ -521,9 +525,12 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
     if (i < 0) break;
     tentados.add(i);
     const item = atual.itens[i];
-    // O número na frente do nome mantém a ordem da lista (o scan ordena pelo nome).
-    const largura = Math.max(2, String(atual.itens.length).length);
-    const nome = sanear(`${String(i + 1).padStart(largura, '0')} - ${item.titulo}`, 140);
+    // O número na frente do nome mantém a ordem da lista (o scan ordena pelo nome),
+    // contado dentro da sub-playlist: a primeira aula de cada módulo é a 01.
+    const doModulo = atual.itens.filter((it) => (it.modulo ?? null) === (item.modulo ?? null));
+    const largura = Math.max(2, String(doModulo.length).length);
+    const nome = sanear(`${String(doModulo.indexOf(item) + 1).padStart(largura, '0')} - ${item.titulo}`, 140);
+    const destinoDir = item.modulo ? path.join(pasta, item.modulo) : pasta;
     estado.atual = { titulo: item.titulo, pct: null };
     const ac = new AbortController();
     atualAc = { courseId, ac };
@@ -552,9 +559,11 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
         mudou.url = novo;
         baixado = await baixar(novo, item.pagina);
       }
-      const final = path.join(pasta, `${nome}${path.extname(baixado)}`);
+      fs.mkdirSync(destinoDir, { recursive: true });
+      const final = path.join(destinoDir, `${nome}${path.extname(baixado)}`);
       fs.renameSync(baixado, final);
-      mudou.arquivo = path.basename(final);
+      // Relativo à pasta do curso: "01 - Funções/03 - Aula.mp4".
+      mudou.arquivo = path.relative(pasta, final).split(path.sep).join('/');
       mudou.erro = null;
       estado.feitos++;
       registrar(`ok: ${mudou.arquivo} (${fs.statSync(final).size} bytes) ← ${mudou.url ?? item.url}${item.login ? ' (com login)' : ''}`);
@@ -625,6 +634,37 @@ export interface Playlist {
   categoriaId: string | null;
   itens: number;
   baixados: number;
+  /** As sub-playlists (módulos), na ordem de criação. */
+  modulos: Array<{ pasta: string; nome: string; itens: number }>;
+}
+
+// "03 - Funções" → "Funções": o número só ordena as pastas.
+export const nomeDoModulo = (pasta: string) => pasta.replace(/^\d+\s*-\s*/, '');
+
+/** O manifesto de um curso de link, ou null. */
+export function manifestoDoCurso(db: Db, courseId: string): { pasta: string; m: Manifesto } | null {
+  const curso = db.prepare('SELECT root_path FROM courses WHERE id=?').get(courseId) as { root_path: string } | undefined;
+  const m = curso ? lerManifesto(curso.root_path) : null;
+  return curso && m ? { pasta: curso.root_path, m } : null;
+}
+
+/**
+ * Uma playlist dentro da outra: uma subpasta, que o scan mostra como módulo. O
+ * número na frente mantém a ordem de criação (o scan ordena os módulos pelo nome).
+ */
+export function criarSubPlaylist(db: Db, courseId: string, titulo: string): { pasta: string; nome: string } | null {
+  const achado = manifestoDoCurso(db, courseId);
+  if (!achado) return null;
+  const { pasta, m } = achado;
+  const modulos = m.modulos ?? [];
+  const nome = sanear(titulo.trim() || 'Módulo', 100);
+  const existente = modulos.find((x) => nomeDoModulo(x).toLowerCase() === nome.toLowerCase());
+  if (existente) return { pasta: existente, nome: nomeDoModulo(existente) };
+  const sub = `${String(modulos.length + 1).padStart(2, '0')} - ${nome}`;
+  fs.mkdirSync(path.join(pasta, sub), { recursive: true });
+  m.modulos = [...modulos, sub];
+  gravarManifesto(pasta, m);
+  return { pasta: sub, nome };
 }
 
 export function listarPlaylists(db: Db, config: AppConfig): Playlist[] {
@@ -635,7 +675,16 @@ export function listarPlaylists(db: Db, config: AppConfig): Playlist[] {
   return cursos
     .map((c) => {
       const m = lerManifesto(c.root_path);
-      return m ? { id: c.id, titulo: c.title, categoriaId: c.collection_id, itens: m.itens.length, baixados: m.itens.filter((i) => i.arquivo).length } : null;
+      return m
+        ? {
+            id: c.id,
+            titulo: c.title,
+            categoriaId: c.collection_id,
+            itens: m.itens.length,
+            baixados: m.itens.filter((i) => i.arquivo).length,
+            modulos: (m.modulos ?? []).map((pasta) => ({ pasta, nome: nomeDoModulo(pasta), itens: m.itens.filter((i) => i.modulo === pasta).length })),
+          }
+        : null;
     })
     .filter((p): p is Playlist => !!p);
 }
@@ -648,7 +697,7 @@ export function adicionarAPlaylist(
   db: Db,
   config: AppConfig,
   courseId: string,
-  item: { url: string; titulo: string; pagina: string | null; cabecalhos: Array<{ nome: string; valor: string }> },
+  item: { url: string; titulo: string; pagina: string | null; cabecalhos: Array<{ nome: string; valor: string }>; modulo?: string | null },
 ): { posicao: number; repetido: boolean } | null {
   const curso = db.prepare('SELECT root_path FROM courses WHERE id=?').get(courseId) as { root_path: string } | undefined;
   const m = curso ? lerManifesto(curso.root_path) : null;
@@ -663,11 +712,13 @@ export function adicionarAPlaylist(
     if (!i.arquivo) enfileirar(db, config, courseId);
     return { posicao: ja + 1, repetido: true };
   }
-  m.itens.push({ url: item.url, titulo: item.titulo.trim() || item.url, arquivo: null, erro: null, pagina: item.pagina, cabecalhos: item.cabecalhos });
+  // Sub-playlist que não existe (apagada no meio): vai para a raiz.
+  const modulo = item.modulo && (m.modulos ?? []).includes(item.modulo) ? item.modulo : null;
+  m.itens.push({ url: item.url, titulo: item.titulo.trim() || item.url, arquivo: null, erro: null, pagina: item.pagina, cabecalhos: item.cabecalhos, modulo });
   gravarManifesto(curso.root_path, m);
   db.prepare('UPDATE courses SET updated_at=? WHERE id=?').run(new Date().toISOString(), courseId);
   enfileirar(db, config, courseId);
-  return { posicao: m.itens.length, repetido: false };
+  return { posicao: m.itens.filter((i) => (i.modulo ?? null) === modulo).length, repetido: false };
 }
 
 /** Excluir o curso no meio: para o download dele. */

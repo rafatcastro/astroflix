@@ -91,7 +91,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 14;
+const ULTIMA_VERSAO = 15;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -476,6 +476,16 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
         );
       `);
       pragma(db, 'user_version = 14');
+    });
+  }
+  // v15: o título que a pessoa deu à aula ("Renomear"). O `title` vem do nome do
+  // arquivo (ou da legenda do Telegram) e todo re-escaneio o refaz; renomear o
+  // arquivo mudaria o rel_path, que é a identidade da aula na nuvem e no progresso.
+  // O re-escaneio mantém este quando ele existe (reconcile.ts).
+  if (version < 15 && ate >= 15) {
+    transaction(db, () => {
+      db.exec('ALTER TABLE lessons ADD COLUMN titulo_editado TEXT');
+      pragma(db, 'user_version = 15');
     });
   }
 }
