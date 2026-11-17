@@ -190,16 +190,22 @@ async function tituloDaAba(tabId) {
 }
 
 // Clica no botão (ou link) visível e habilitado cujo texto começa com `texto`
-// ("Próxima", "Próxima aula"), sem ligar para acento e maiúscula.
-// `indice`: qual deles, na ordem da página (0 = o primeiro). Devolve quantos há
-// (0 = nenhum, não clicou) e se clicou.
-async function clicarNoBotao(tabId, texto, indice = 0) {
+// ("Próxima", "Próxima aula"), sem ligar para acento e maiúscula. A página tem
+// mais de um "Próxima" (o de dentro da aula, que troca a questão, e o que vai
+// para a próxima aula), então a ordem de preferência é:
+// - com <video> na página: o que está logo abaixo do vídeo (o mais perto, de
+//   preferência na mesma coluna); o de dentro da aula fica em outro lugar;
+// - sem <video> (texto, Gabarito de questões): o segundo com a classe
+//   `text-sm font-family-body` (no Ferretto, o primeiro troca a questão).
+// Depois vêm os outros, na ordem da página. `tentativa`: qual da lista clicar
+// (0 = o preferido; a aula que não trocou tenta o seguinte). Devolve quantos há.
+async function clicarNoBotao(tabId, texto, tentativa = 0) {
   const [r] = await chrome.scripting
     .executeScript({
       target: { tabId },
-      args: [texto, indice],
+      args: [texto, tentativa],
       func: (txt, ind) => {
-        const norm = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+        const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
         const alvo = norm(txt);
         const visivel = (e) => {
           const r = e.getBoundingClientRect();
@@ -208,22 +214,42 @@ async function clicarNoBotao(tabId, texto, indice = 0) {
         const todos = [...document.querySelectorAll('button, a, [role=button]')].filter(
           (e) => visivel(e) && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && norm(e.innerText || e.getAttribute('aria-label') || '').startsWith(alvo),
         );
-        const b = todos[ind];
-        if (!b) return { clicou: false, total: todos.length };
+        // O vídeo da aula: o maior visível (um preview pequeno não conta).
+        const video = [...document.querySelectorAll('video')]
+          .filter(visivel)
+          .sort((a, b) => {
+            const ra = a.getBoundingClientRect();
+            const rb = b.getBoundingClientRect();
+            return rb.width * rb.height - ra.width * ra.height;
+          })[0];
+        let preferidos = [];
+        if (video) {
+          // Os dois retângulos são da mesma tela: a distância vale mesmo com o botão fora dela.
+          const v = video.getBoundingClientRect();
+          const abaixo = todos
+            .map((e) => {
+              const r = e.getBoundingClientRect();
+              const mesmaColuna = r.right > v.left && r.left < v.right;
+              return { e, d: r.top - v.bottom, mesmaColuna };
+            })
+            .filter((x) => x.d >= -8);
+          abaixo.sort((a, b) => (a.mesmaColuna === b.mesmaColuna ? a.d - b.d : a.mesmaColuna ? -1 : 1));
+          preferidos = abaixo.map((x) => x.e);
+        } else {
+          const comClasse = todos.filter((e) => e.matches('.text-sm.font-family-body') || e.querySelector('.text-sm.font-family-body'));
+          preferidos = comClasse.length >= 2 ? [comClasse[1], comClasse[0], ...comClasse.slice(2)] : comClasse;
+        }
+        const ordem = [...preferidos, ...todos.filter((e) => !preferidos.includes(e))];
+        const b = ordem[ind];
+        if (!b) return { clicou: false, total: ordem.length, comVideo: !!video };
         b.scrollIntoView({ block: 'center' });
         b.click();
-        return { clicou: true, total: todos.length };
+        return { clicou: true, total: ordem.length, comVideo: !!video };
       },
     })
     .catch(() => [null]);
   return r?.result ?? { clicou: false, total: 0 };
 }
-
-// Aulas com outro "Próxima" dentro: no Gabarito de questões do Ferretto, o
-// primeiro passa para a próxima questão e só o segundo vai para a próxima aula.
-const REGRAS_DO_BOTAO = [{ titulo: /gabarito de quest/i, indice: 1 }];
-const indiceDoBotao = (titulo) =>
-  REGRAS_DO_BOTAO.find((r) => r.titulo.test(titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))?.indice ?? 0;
 
 // Aula sem vídeo que dê para baixar (texto, exercício, player protegido): é
 // pulada, fica na lista "Puladas" e a extensão segue para a próxima. Para só sem
@@ -241,8 +267,8 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   let ultimoTitulo = null;
   let puladasSeguidas = 0;
   let fim = 'ok';
-  // O botão clicado na última volta: se a aula não trocar, tenta o seguinte da
-  // página (um "Próxima" de dentro da aula, como o das questões, vem antes).
+  // O botão clicado na última volta (a posição na ordem de clicarNoBotao): se a
+  // aula não trocar, tenta o seguinte.
   let indiceUsado = 0;
   let botoes = 0;
   let n = 0;
@@ -309,13 +335,8 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
     n++;
     ultimoTitulo = titulo;
     desde = Date.now();
-    indiceUsado = indiceDoBotao(titulo);
-    let r = await clicarNoBotao(tabId, textoBotao, indiceUsado);
-    // A regra pedia o segundo, mas só há um: é ele.
-    if (!r.clicou && indiceUsado > 0 && r.total > 0) {
-      indiceUsado = 0;
-      r = await clicarNoBotao(tabId, textoBotao, 0);
-    }
+    indiceUsado = 0;
+    const r = await clicarNoBotao(tabId, textoBotao, 0);
     botoes = r.total;
     if (!r.clicou) break; // sem "Próxima": era a última aula
   }

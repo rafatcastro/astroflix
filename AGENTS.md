@@ -289,9 +289,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   vídeo pedido), clica no botão visível e habilitado cujo texto começa com o configurado (sem acento
   nem maiúscula), espera o vídeo novo (20 s) e repete. Aula sem vídeo (texto, exercício, player
   protegido) é **pulada** e listada; para sem o botão, se nem o vídeo nem o título trocarem depois do
-  clique, depois de 15 puladas seguidas ou em 500. Aula com outro "Próxima" dentro (o **Gabarito de
-  questões** do Ferretto: o primeiro troca a questão) usa o **segundo** botão (`REGRAS_DO_BOTAO`); e
-  se o clique não trocou a aula, tenta o botão seguinte antes de desistir.
+  clique, depois de 15 puladas seguidas ou em 500. A página tem mais de um "Próxima" (o de dentro da
+  aula troca a questão), então `clicarNoBotao` escolhe: com `<video>` na página, o "Próxima" logo
+  **abaixo do vídeo** (o mais perto, de preferência na mesma coluna); sem `<video>` (o **Gabarito de
+  questões**), o **segundo** com a classe `text-sm font-family-body`. Se o clique não trocou a aula,
+  tenta o botão seguinte dessa ordem antes de desistir.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML
