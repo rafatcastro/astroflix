@@ -221,9 +221,15 @@ async function clicarNoBotao(tabId, texto, tentativa = 0) {
           (e) => visivel(e) && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && norm(e.innerText || e.getAttribute('aria-label') || '').startsWith(alvo),
         );
         const titulo = [...document.querySelectorAll('span')].find((e) => temClasses(e, classesTitulo) && visivel(e));
+        // O gabarito de questões (span "Gabarito" com font-normal font-family-body
+        // text-headings text-lg sm:text-md) pode ter também o título de aula de vídeo
+        // na tela: aí "abaixo do vídeo" acertava o Próxima errado e a aula não trocava.
+        const gabarito = [...document.querySelectorAll('span')].some(
+          (e) => temClasses(e, ['font-normal', 'font-family-body', 'text-headings', 'text-lg', 'sm:text-md']) && visivel(e) && /gabarito/i.test(e.textContent ?? ''),
+        );
         let preferidos = [];
         let regra;
-        if (titulo) {
+        if (titulo && !gabarito) {
           // O vídeo da aula: o maior visível (um preview pequeno não conta).
           const video = [...document.querySelectorAll('video')]
             .filter(visivel)
@@ -244,9 +250,18 @@ async function clicarNoBotao(tabId, texto, tentativa = 0) {
           abaixo.sort((a, b) => (a.mesmaColuna === b.mesmaColuna ? a.d - b.d : a.mesmaColuna ? -1 : 1));
           preferidos = abaixo.map((x) => x.e);
         } else {
-          regra = 'classe text-sm font-family-body';
-          // A classe no próprio botão ou no texto dentro dele.
+          regra = gabarito ? 'Gabarito: classe text-sm font-family-body' : 'classe text-sm font-family-body';
+          // A classe no próprio botão, no texto dentro dele ou num elemento clicável
+          // que não é <button>/<a> (um div com onClick): esse entra pelo texto.
           const comClasse = todos.filter((e) => temClasses(e, classesBotao) || [...e.querySelectorAll('*')].some((d) => temClasses(d, classesBotao)));
+          for (const el of document.querySelectorAll('*')) {
+            if (!temClasses(el, classesBotao) || !visivel(el) || !norm(el.innerText || '').startsWith(alvo)) continue;
+            const alvoDoClique = el.closest('button, a, [role=button]') ?? el;
+            if (alvoDoClique.disabled || comClasse.some((c) => c === alvoDoClique || c.contains(alvoDoClique) || alvoDoClique.contains(c))) continue;
+            comClasse.push(alvoDoClique);
+          }
+          // Na ordem da página (o "segundo" é o segundo de cima para baixo).
+          comClasse.sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
           preferidos = comClasse.length >= 2 ? [comClasse[1], comClasse[0], ...comClasse.slice(2)] : comClasse;
         }
         const ordem = [...preferidos, ...todos.filter((e) => !preferidos.includes(e))];
@@ -266,6 +281,25 @@ async function clicarNoBotao(tabId, texto, tentativa = 0) {
 // "Próxima", se a aula não trocar depois do clique ou depois de muitas puladas
 // seguidas (a página provavelmente parou de responder).
 const MAX_PULADAS_SEGUIDAS = 15;
+
+// No Ferretto, o fim do bloco de aulas abre um popup do Simulado (um
+// <span class="text-headings font-family-headlines text-lg font-semibold"> com
+// "Simulado"): dali em diante não há mais aula para a playlist, então a importação para.
+async function abriuSimulado(tabId) {
+  try {
+    const [r] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () =>
+        [...document.querySelectorAll('span.text-headings.font-family-headlines.text-lg.font-semibold')].some((el) => {
+          const caixa = el.getBoundingClientRect();
+          return caixa.width > 0 && caixa.height > 0 && /simulado/i.test(el.textContent ?? '');
+        }),
+    });
+    return r?.result === true;
+  } catch {
+    return false;
+  }
+}
 
 async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   parar = false;
@@ -295,6 +329,10 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
       v ??= await videoNovo(tabId, Date.now(), usados);
     } else v = await videoNovo(tabId, desde, usados);
     if (parar) break;
+    if (await abriuSimulado(tabId)) {
+      fim = 'abriu o Simulado';
+      break;
+    }
 
     // O título troca junto com o vídeo, às vezes um instante depois.
     await dormir(800);
@@ -356,6 +394,12 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
     botoes = r.total;
     regra = r.regra ?? '';
     if (!r.clicou) break; // sem "Próxima": era a última aula
+    // O popup do Simulado abre logo depois do clique: sem esperar os 20 s do vídeo novo.
+    await dormir(1500);
+    if (await abriuSimulado(tabId)) {
+      fim = 'abriu o Simulado';
+      break;
+    }
   }
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : fim });
 }

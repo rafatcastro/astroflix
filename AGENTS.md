@@ -294,12 +294,13 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   vídeo pedido), clica no botão visível e habilitado cujo texto começa com o configurado (sem acento
   nem maiúscula), espera o vídeo novo (20 s) e repete. Aula sem vídeo (texto, exercício, player
   protegido) é **pulada** e listada; para sem o botão, se nem o vídeo nem o título trocarem depois do
-  clique, depois de 15 puladas seguidas ou em 500. A página tem mais de um "Próxima" (o de dentro da
+  clique, quando abre o popup do **Simulado** (um `span.text-headings.font-family-headlines.text-lg.font-semibold` visível com "Simulado", conferido antes de mandar cada aula e 1,5 s depois de cada clique), depois de 15 puladas seguidas ou em 500. A página tem mais de um "Próxima" (o de dentro da
   aula troca a questão), então `clicarNoBotao` escolhe: com o título de aula de vídeo do Ferretto (o
   `<span class="font-family-headlines text-headings text-xl sm:text-2xl font-semibold leading-8">`),
-  o "Próxima" logo **abaixo do `<video>`** (ou do título, se o vídeo está num iframe); sem esse título
-  (o **Gabarito de questões**), o botão com as classes `text-sm font-family-body` (havendo dois, o
-  segundo). A aula trocou se o título ou o endereço da aba mudou; se não trocou, tenta o botão
+  o "Próxima" logo **abaixo do `<video>`** (ou do título, se o vídeo está num iframe); sem esse título,
+  ou com o `span` "Gabarito" (`font-normal font-family-body text-headings text-lg sm:text-md`) na tela mesmo
+  com ele (o **Gabarito de questões**), o botão com as classes `text-sm font-family-body`, no próprio botão, no
+  texto dentro dele ou num elemento clicável qualquer (havendo dois, o segundo na ordem da página). A aula trocou se o título ou o endereço da aba mudou; se não trocou, tenta o botão
   seguinte dessa ordem antes de desistir.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
