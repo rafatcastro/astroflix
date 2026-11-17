@@ -276,7 +276,9 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   padrão, porém, é **seguir o botão "Próxima"** (`importarSeguindo`): no Ferretto o clique na lista
   não abre outra aula. Manda a aula aberta (título por `span.font-family-headlines`/h1/h2 e o último
   vídeo pedido), clica no botão visível e habilitado cujo texto começa com o configurado (sem acento
-  nem maiúscula), espera o vídeo novo e repete; para sem o botão, sem vídeo novo em 25 s ou em 500.
+  nem maiúscula), espera o vídeo novo (20 s) e repete. Aula sem vídeo (texto, exercício, player
+  protegido) é **pulada** e listada; para sem o botão, se nem o vídeo nem o título trocarem depois do
+  clique, depois de 15 puladas seguidas ou em 500.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

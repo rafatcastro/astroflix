@@ -249,7 +249,7 @@ const modo = () => document.querySelector('input[name=modo]:checked')?.value ?? 
 
 async function contar() {
   if (modo() === 'seguir') {
-    $('loteInfo').textContent = `Manda esta aula, clica em "${$('textoBotao').value.trim() || 'Próxima'}", espera o vídeo da próxima e repete até a última. Não mexa nesta aba enquanto importa.`;
+    $('loteInfo').textContent = `Manda esta aula, clica em "${$('textoBotao').value.trim() || 'Próxima'}", espera o vídeo da próxima e repete até a última. Aula sem vídeo é pulada. Não mexa nesta aba enquanto importa.`;
     $('loteIr').disabled = false;
     return;
   }
@@ -283,7 +283,7 @@ async function mostrarLote() {
   $('loteIr').classList.toggle('escondido', !!l?.ativo);
   if (!l) return;
   if (l.ativo) $('lote').open = true;
-  const falhas = l.falhas?.length ? ` Sem vídeo: ${l.falhas.length} (${l.falhas.slice(-2).join('; ')})` : '';
+  const falhas = l.falhas?.length ? ` Puladas: ${l.falhas.length} (${l.falhas.slice(-3).join('; ')}).` : '';
   const de = l.total == null ? '' : ` de ${l.total}`;
   $('loteEstado').textContent = l.ativo
     ? `Importando: ${l.feitos}${de} mandada(s)… ${l.atual ?? ''}.${falhas}`

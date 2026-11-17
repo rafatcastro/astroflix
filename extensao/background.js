@@ -62,7 +62,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
 // fica em storage.session e o popup o mostra ao reabrir.
 
 const LOTE = 'lote';
-const ESPERA_MS = 25_000;
+// Quanto esperar o vídeo de uma aula: a que não tem vídeo custa esse tempo inteiro.
+const ESPERA_MS = 20_000;
 let parar = false;
 
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -216,6 +217,12 @@ async function clicarNoBotao(tabId, texto) {
   return !!r?.result;
 }
 
+// Aula sem vídeo que dê para baixar (texto, exercício, player protegido): é
+// pulada, fica na lista "Puladas" e a extensão segue para a próxima. Para só sem
+// "Próxima", se a aula não trocar depois do clique ou depois de muitas puladas
+// seguidas (a página provavelmente parou de responder).
+const MAX_PULADAS_SEGUIDAS = 15;
+
 async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   parar = false;
   await estado({ ativo: true, total: null, feitos: 0, falhas: [], atual: null, playlist, terminou: null });
@@ -224,20 +231,18 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   const falhas = [];
   let desde = 0;
   let ultimoTitulo = null;
+  let puladasSeguidas = 0;
   let fim = 'ok';
   for (let n = 0; n < MAX_AULAS && !parar; n++) {
     let v;
     if (n === 0) {
-      // A aula aberta: o último vídeo que ela pediu; sem nenhum, espera (dê play).
-      v = ((await chrome.storage.session.get(k))[k] ?? []).filter((x) => /\.(m3u8|mpd)(\?|$)/i.test(x.url)).slice(-1)[0];
-      v ??= ((await chrome.storage.session.get(k))[k] ?? []).slice(-1)[0];
+      // A aula aberta: o último vídeo que ela pediu; sem nenhum, espera um pouco.
+      const lista = (await chrome.storage.session.get(k))[k] ?? [];
+      v = lista.filter((x) => /\.(m3u8|mpd)(\?|$)/i.test(x.url)).slice(-1)[0] ?? lista.slice(-1)[0];
       v ??= await videoNovo(tabId, Date.now(), usados);
     } else v = await videoNovo(tabId, desde, usados);
     if (parar) break;
-    if (!v) {
-      fim = n === 0 ? 'nenhum vídeo na aula aberta (dê play e tente de novo)' : `nenhum vídeo novo ${ESPERA_MS / 1000} s depois de "${textoBotao}"`;
-      break;
-    }
+
     // O título troca junto com o vídeo, às vezes um instante depois.
     await dormir(800);
     let titulo = await tituloDaAba(tabId);
@@ -245,30 +250,44 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
       await dormir(2000);
       titulo = await tituloDaAba(tabId);
     }
+    // Clicou em Próxima e nada mudou (nem vídeo, nem título): a página travou ou acabou.
+    if (!v && n > 0 && titulo === ultimoTitulo) {
+      fim = `a aula não trocou depois de "${textoBotao}"`;
+      break;
+    }
     titulo ||= `Aula ${n + 1}`;
     await estado({ atual: `${n + 1}. ${titulo}` });
-    usados.add(v.url);
-    const tab = await chrome.tabs.get(tabId).catch(() => null);
-    try {
-      await apiDoApp(`/api/extensao/playlists/${playlist}/itens`, {
-        url: v.url,
-        titulo,
-        pagina: tab?.url ?? v.pagina,
-        cabecalhos: v.cabecalhos ?? [],
-        modulo,
-      });
-      const atual = (await chrome.storage.session.get(LOTE))[LOTE];
-      await estado({ feitos: (atual?.feitos ?? 0) + 1 });
-    } catch (e) {
-      falhas.push(`${titulo}: ${e.message}`);
+
+    if (!v) {
+      falhas.push(`${titulo} (sem vídeo)`);
+      puladasSeguidas++;
       await estado({ falhas });
+      if (puladasSeguidas >= MAX_PULADAS_SEGUIDAS) {
+        fim = `${MAX_PULADAS_SEGUIDAS} aulas seguidas sem vídeo`;
+        break;
+      }
+    } else {
+      puladasSeguidas = 0;
+      usados.add(v.url);
+      const tab = await chrome.tabs.get(tabId).catch(() => null);
+      try {
+        await apiDoApp(`/api/extensao/playlists/${playlist}/itens`, {
+          url: v.url,
+          titulo,
+          pagina: tab?.url ?? v.pagina,
+          cabecalhos: v.cabecalhos ?? [],
+          modulo,
+        });
+        const atual = (await chrome.storage.session.get(LOTE))[LOTE];
+        await estado({ feitos: (atual?.feitos ?? 0) + 1 });
+      } catch (e) {
+        falhas.push(`${titulo} (${e.message})`);
+        await estado({ falhas });
+      }
     }
     ultimoTitulo = titulo;
     desde = Date.now();
-    if (!(await clicarNoBotao(tabId, textoBotao))) {
-      fim = 'ok';
-      break; // sem "Próxima": era a última aula
-    }
+    if (!(await clicarNoBotao(tabId, textoBotao))) break; // sem "Próxima": era a última aula
   }
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : fim });
 }
