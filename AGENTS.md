@@ -264,7 +264,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   o endereço. **Sub-playlist** (uma playlist dentro da outra): uma subpasta `NN - Nome` (o número dá a ordem
   de criação), listada em `manifesto.modulos`, que o scan mostra como módulo; o item leva `modulo` e
   é numerado dentro dela. Criada pelo "+ Nova sub-playlist" da página do curso ou pela extensão
-  ("Dentro da escolhida"). **"Baixar para downloads"** (menu ⋯ da playlist e o "Baixar" da categoria,
+  ("Dentro da escolhida"), ou já ao criar (Adicionar → Playlist, campo "Dentro de"). **Mover para dentro de
+  outra playlist** (menu ⋯, `moverPlaylistParaDentro`, `POST /api/links/playlists/:id/mover`): a playlist vira
+  a subpasta `NN - <nome>` da outra (as sub-playlists dela, módulos irmãos `NN - <nome> - <sub>`, porque o scan
+  só conhece um nível), os itens entram no manifesto do destino, o progresso, o título renomeado e os
+  flashcards vão para as aulas novas (achadas pelo caminho novo) e a playlist de origem é excluída. **"Baixar para downloads"** (menu ⋯ da playlist e o "Baixar" da categoria,
   `exportarPlaylist`): os vídeos vão para a pasta de armazenamento (`pastaDoCurso`), com as subpastas
   das sub-playlists, por hard link (mesmo disco, sem ocupar o dobro) ou cópia; `manifesto.exportar`
   faz cada vídeo que chegar depois ir também. Não entram em `baixados`: o app nunca apaga essa cópia. O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),

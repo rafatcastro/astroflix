@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import type { Db } from '../db';
+import { transaction, type Db } from '../db';
 import type { AppConfig } from '../config';
 import { pastaDoCurso, sanear } from '../armazenamento';
 import { inserirCursoDerivado } from '../scan/scan-course';
@@ -815,6 +815,116 @@ export async function exportarPlaylist(db: Db, config: AppConfig, courseId: stri
     }
   }
   return r;
+}
+
+// ---------- Mover uma playlist para dentro de outra ----------
+// A playlist inteira vira uma sub-playlist (módulo) da outra: os vídeos vão para
+// a subpasta "NN - <nome>", o manifesto dela entra no da outra e a playlist de
+// origem some. As sub-playlists dela viram módulos irmãos, "NN - <nome> - <sub>",
+// porque o scan só conhece um nível de módulo (o 1º segmento do caminho). O
+// progresso, o título renomeado e os flashcards de cada aula vão junto (a aula
+// nova é outra linha, achada pelo caminho novo).
+
+/** Uma subpasta nova na playlist, com o número da ordem de criação e sem repetir nome. */
+function novaSubpasta(pasta: string, m: Manifesto, titulo: string): string {
+  const modulos = m.modulos ?? [];
+  const base = sanear(titulo.trim() || 'Módulo', 100);
+  const usados = new Set(modulos.map((x) => nomeDoModulo(x).toLowerCase()));
+  let nome = base;
+  for (let n = 2; usados.has(nome.toLowerCase()); n++) nome = `${base} (${n})`;
+  const sub = `${String(modulos.length + 1).padStart(2, '0')} - ${nome}`;
+  fs.mkdirSync(path.join(pasta, sub), { recursive: true });
+  m.modulos = [...modulos, sub];
+  return sub;
+}
+
+export type ErroMover = 'nao-existe' | 'mesma' | 'nao-e-playlist';
+
+export function moverPlaylistParaDentro(db: Db, config: AppConfig, origemId: string, destinoId: string): { modulos: string[]; videos: number } | ErroMover {
+  if (origemId === destinoId) return 'mesma';
+  const origem = manifestoDoCurso(db, origemId);
+  const destino = manifestoDoCurso(db, destinoId);
+  const raiz = pastaDosLinks(config) + path.sep;
+  if (!origem || !destino) return 'nao-existe';
+  if (!origem.pasta.startsWith(raiz) || !destino.pasta.startsWith(raiz)) return 'nao-e-playlist';
+  const tituloOrigem = (db.prepare('SELECT title FROM courses WHERE id=?').get(origemId) as { title: string }).title;
+
+  // O download da origem para: o que faltava continua na playlist de destino.
+  pararImportacao(origemId);
+
+  const { pasta: de, m: mo } = origem;
+  const { pasta: para } = destino;
+  // Relido agora: o download do destino pode ter gravado depois do manifestoDoCurso.
+  const md = lerManifesto(para)!;
+  const subsDaOrigem = (mo.modulos ?? []).filter((x) => fs.existsSync(path.join(de, x)));
+  const naRaiz = mo.itens.some((i) => !i.modulo) || subsDaOrigem.length === 0;
+  const mapa = new Map<string | null, string>();
+  if (naRaiz) mapa.set(null, novaSubpasta(para, md, tituloOrigem));
+  for (const sub of subsDaOrigem) mapa.set(sub, novaSubpasta(para, md, `${tituloOrigem} - ${nomeDoModulo(sub)}`));
+  // Sub-playlist que sumiu da origem: os itens dela vão para o módulo da raiz.
+  const destinoDoModulo = (modulo: string | null | undefined) =>
+    mapa.get(modulo && mapa.has(modulo) ? modulo : null) ?? mapa.get(null) ?? novaSubpasta(para, md, tituloOrigem);
+
+  // O token de login é um por playlist: o da origem só vai se o destino não tem
+  // o seu (senão os vídeos pendentes da origem iriam com o login de outro site).
+  if (mo.token && !md.token) md.token = mo.token;
+  const loginVai = !!mo.token && md.token === mo.token;
+
+  // Os arquivos: rel antigo (na origem) → rel novo (no destino).
+  const relNovo = new Map<string, string>();
+  const mover = (relDe: string, modulo: string) => {
+    const nome = relDe.split('/').pop()!;
+    let alvo = path.join(para, modulo, nome);
+    for (let n = 2; fs.existsSync(alvo); n++) alvo = path.join(para, modulo, `${path.basename(nome, path.extname(nome))} (${n})${path.extname(nome)}`);
+    fs.renameSync(path.join(de, ...relDe.split('/')), alvo);
+    const rel = path.relative(para, alvo).split(path.sep).join('/');
+    relNovo.set(relDe, rel);
+    return rel;
+  };
+  for (const item of mo.itens) {
+    const modulo = destinoDoModulo(item.modulo);
+    let arquivo: string | null = null;
+    if (item.arquivo && fs.existsSync(path.join(de, ...item.arquivo.split('/')))) arquivo = mover(item.arquivo, modulo);
+    md.itens.push({ ...item, modulo, arquivo, login: !!item.login && loginVai });
+  }
+  // O que estava na pasta e não era item (materiais soltos) também vai.
+  for (const rel of arquivosDaPlaylist(de)) {
+    const primeiro = rel.split('/')[0];
+    mover(rel, destinoDoModulo(rel.includes('/') && mapa.has(primeiro) ? primeiro : null));
+  }
+  gravarManifesto(para, md);
+  reconcileCourse(db, config, destinoId);
+
+  transaction(db, () => {
+    const antigas = db.prepare('SELECT id, rel_path, titulo_editado FROM lessons WHERE course_id=?').all(origemId) as Array<{
+      id: string;
+      rel_path: string;
+      titulo_editado: string | null;
+    }>;
+    const nova = db.prepare('SELECT id FROM lessons WHERE course_id=? AND rel_path=?');
+    const copiarProgresso = db.prepare(
+      `INSERT OR REPLACE INTO progress (lesson_id, position_sec, furthest_sec, duration_sec, completed, completed_at, auto_completed, updated_at)
+       SELECT ?, position_sec, furthest_sec, duration_sec, completed, completed_at, auto_completed, updated_at FROM progress WHERE lesson_id=?`,
+    );
+    const titulo = db.prepare('UPDATE lessons SET titulo_editado=?, title=? WHERE id=?');
+    const card = db.prepare('UPDATE flashcards SET course_id=?, lesson_id=? WHERE lesson_id=?');
+    for (const a of antigas) {
+      const rel = relNovo.get(a.rel_path);
+      const n = rel ? (nova.get(destinoId, rel) as { id: string } | undefined) : undefined;
+      if (!n) continue;
+      copiarProgresso.run(n.id, a.id);
+      if (a.titulo_editado) titulo.run(a.titulo_editado, a.titulo_editado, n.id);
+      card.run(destinoId, n.id, a.id);
+    }
+    // Os cards do curso todo (sem aula) também vão.
+    db.prepare('UPDATE flashcards SET course_id=? WHERE course_id=?').run(destinoId, origemId);
+    db.prepare('UPDATE courses SET updated_at=? WHERE id=?').run(new Date().toISOString(), destinoId);
+    db.prepare('DELETE FROM courses WHERE id=?').run(origemId);
+  });
+  // Só sobrou o que é do app (manifesto, log, .baixando).
+  fs.rmSync(de, { recursive: true, force: true });
+  if (md.itens.some((i) => !i.arquivo && !i.erro)) enfileirar(db, config, destinoId);
+  return { modulos: [...mapa.values()].map(nomeDoModulo), videos: relNovo.size };
 }
 
 /** Excluir o curso no meio: para o download dele. */

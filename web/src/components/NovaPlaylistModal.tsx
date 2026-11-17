@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
+import { useCourses } from '../api/hooks';
 import TextField from './TextField';
 
 // Adicionar → "Playlist (pela extensão)": um curso vazio que a extensão do Chrome
@@ -12,6 +13,10 @@ export default function NovaPlaylistModal({ onClose, categoriaId }: { onClose: (
   const [titulo, setTitulo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  // "Dentro de": a playlist nova vira uma sub-playlist (subpasta e módulo) da escolhida.
+  const { data: cursos } = useCourses();
+  const playlists = (cursos ?? []).filter((c) => c.deLink).sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
+  const [dentroDe, setDentroDe] = useState('');
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -27,6 +32,12 @@ export default function NovaPlaylistModal({ onClose, categoriaId }: { onClose: (
     if (!titulo.trim() || enviando) return;
     setEnviando(true);
     try {
+      if (dentroDe) {
+        await api.linksCriarSubPlaylist(dentroDe, titulo.trim());
+        qc.invalidateQueries({ queryKey: ['course', dentroDe] });
+        navigate(`/course/${dentroDe}`);
+        return;
+      }
       const { id } = await api.linksCriarPlaylist(titulo.trim(), categoriaId);
       qc.invalidateQueries({ queryKey: ['courses'] });
       navigate(`/course/${id}`);
@@ -62,6 +73,27 @@ export default function NovaPlaylistModal({ onClose, categoriaId }: { onClose: (
             Nome
           </label>
           <TextField id="playlist-nome" autoFocus value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Matemática básica" />
+          {playlists.length > 0 && (
+            <>
+              <label htmlFor="playlist-dentro" className="mb-1 mt-3 block text-sm text-neutral-300">
+                Dentro de
+              </label>
+              <select
+                id="playlist-dentro"
+                value={dentroDe}
+                onChange={(e) => setDentroDe(e.target.value)}
+                className="min-h-[44px] w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 text-sm text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                <option value="">Nenhuma (playlist própria)</option>
+                {playlists.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.title}
+                  </option>
+                ))}
+              </select>
+              {dentroDe && <p className="mt-1 text-xs text-neutral-500">Vira uma pasta dentro dela, mostrada como módulo.</p>}
+            </>
+          )}
           {erro && (
             <p role="alert" className="mt-2 text-sm text-amber-200">
               {erro}

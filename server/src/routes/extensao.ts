@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { EXTENSAO, APP_VERSION } from '../bundled';
-import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists } from '../links/importar';
+import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists, moverPlaylistParaDentro } from '../links/importar';
 import { acharNavegador } from '../links/navegador';
 import { abrirNoSistema } from './armazenamento';
 
@@ -92,6 +92,15 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
     if (typeof titulo !== 'string' || !titulo.trim()) return reply.code(400).send({ error: 'sem-titulo' });
     const r = criarSubPlaylist(db, (req.params as { id: string }).id, titulo);
     return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
+  });
+
+  // Mover a playlist para dentro de outra: ela vira uma sub-playlist (módulo) da outra.
+  app.post('/api/links/playlists/:id/mover', async (req, reply) => {
+    const destino = (req.body as { destino?: unknown } | undefined)?.destino;
+    if (typeof destino !== 'string') return reply.code(400).send({ error: 'sem-destino' });
+    const r = moverPlaylistParaDentro(db, config, (req.params as { id: string }).id, destino);
+    if (typeof r === 'string') return reply.code(r === 'nao-existe' ? 404 : 400).send({ error: r });
+    return r;
   });
 
   // ----- Para a extensão (chrome-extension://, com a chave) -----

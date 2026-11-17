@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { caminhoDaCategoria } from './CabecalhoCategoria';
 import { api, type RepointSummary } from '../api/client';
-import { useCollections, useDownloads } from '../api/hooks';
+import { useCollections, useCourses, useDownloads } from '../api/hooks';
 import { formatBytes } from '../lib/format';
 import { escolherPasta } from '../lib/desktop';
 import RepointModal from './RepointModal';
@@ -20,6 +20,7 @@ type Flow =
   | 'collection'
   | 'confirmBaixar'
   | 'confirmBaixarPlaylist'
+  | 'moverParaPlaylist'
   | 'confirmRemoverBaixados'
   | 'confirmArchive'
   | 'confirmReset'
@@ -63,6 +64,11 @@ export default function CourseMenu({
   const qc = useQueryClient();
   const { data: collections } = useCollections();
   const { data: downloads } = useDownloads();
+  const { data: cursos } = useCourses();
+  // As outras playlists, para "Mover para dentro de outra playlist".
+  const outrasPlaylists = (cursos ?? [])
+    .filter((c) => c.deLink && c.id !== course.id)
+    .sort((a, b) => a.title.localeCompare(b.title, 'pt-BR'));
   const [flow, setFlow] = useState<Flow>(null);
   const [pickedPath, setPickedPath] = useState('');
   const [summary, setSummary] = useState<RepointSummary | null>(null);
@@ -253,6 +259,21 @@ export default function CourseMenu({
     }
   };
 
+  // A playlist vira uma sub-playlist (módulo) da escolhida e deixa de existir sozinha.
+  const doMoverParaPlaylist = async (destino: { id: string; title: string }) => {
+    close();
+    try {
+      await api.moverPlaylistParaDentro(course.id, destino.id);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['course', destino.id] });
+      qc.invalidateQueries({ queryKey: ['flashcards'] });
+      onNotice(`"${course.title}" agora é um módulo de "${destino.title}".`);
+      if (!noCartao) navigate(`/course/${destino.id}`, { replace: true });
+    } catch {
+      onNotice('Não deu para mover a playlist. Tente de novo.');
+    }
+  };
+
   // Apaga só o que foi baixado: o curso e o progresso ficam, e as aulas voltam a tocar pela rede.
   const doRemoverBaixados = async () => {
     close();
@@ -359,6 +380,11 @@ export default function CourseMenu({
             {course.deLink && (
               <button type="button" className={item} onClick={() => setFlow('confirmBaixarPlaylist')}>
                 Baixar para downloads…
+              </button>
+            )}
+            {course.deLink && outrasPlaylists.length > 0 && (
+              <button type="button" className={item} onClick={() => setFlow('moverParaPlaylist')}>
+                Mover para dentro de outra playlist…
               </button>
             )}
             {course.deLink && course.playlistNosDownloads && (
@@ -510,6 +536,24 @@ export default function CourseMenu({
           onConfirm={() => void doBaixar()}
           onCancel={close}
         />
+      )}
+
+      {flow === 'moverParaPlaylist' && (
+        <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" onClick={(e) => { parar(e); close(); }}>
+          <div className="max-h-[85dvh] w-full max-w-sm overflow-y-auto rounded-xl bg-neutral-900 p-2" onClick={parar}>
+            <div className="px-3 pb-1 pt-2 text-sm font-medium text-neutral-200">Mover para dentro de…</div>
+            <p className="px-3 pb-2 text-xs text-neutral-500">
+              "{course.title}" vira um módulo da playlist escolhida (uma pasta dentro dela), com os vídeos, o progresso e os
+              flashcards. As sub-playlists dela viram módulos também.
+            </p>
+            {outrasPlaylists.map((p) => (
+              <button key={p.id} type="button" className={item} onClick={() => void doMoverParaPlaylist(p)}>
+                {p.title}
+              </button>
+            ))}
+            <button type="button" className={`${item} text-neutral-400`} onClick={close}>Cancelar</button>
+          </div>
+        </div>
       )}
 
       {flow === 'confirmBaixarPlaylist' && (
