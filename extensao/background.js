@@ -162,6 +162,89 @@ async function importarPagina({ tabId, seletor, playlist, modulo }) {
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : 'ok' });
 }
 
+// ---------- Abrir cada link da página ----------
+
+// Página de curso feita em React Router: cada aula é um <a data-discover="true">.
+// Abre um por um na própria aba (na ordem da página), guarda o vídeo que o player
+// pedir e só no fim manda tudo para a playlist, em ordem: se parar no meio, nada
+// pela metade fica na playlist. No fim a aba volta para a página de onde saiu.
+
+const SELETOR_DOS_LINKS = 'a[data-discover="true"]';
+
+async function carregou(tabId) {
+  const fim = Date.now() + 30_000;
+  await dormir(300);
+  while (Date.now() < fim && !parar) {
+    const tab = await chrome.tabs.get(tabId).catch(() => null);
+    if (!tab) return false;
+    if (tab.status === 'complete') return true;
+    await dormir(300);
+  }
+  return false;
+}
+
+async function importarLinks({ tabId, playlist, modulo, seletor }) {
+  parar = false;
+  const sel = seletor || SELETOR_DOS_LINKS;
+  const origem = (await chrome.tabs.get(tabId)).url;
+  const [{ result: links }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    args: [sel],
+    func: (s) => {
+      const vistos = new Set();
+      const aqui = location.href.split('#')[0];
+      const out = [];
+      for (const a of document.querySelectorAll(s)) {
+        // Mesmo site, sem o próprio endereço e sem repetir (o mesmo link no menu e na lista).
+        if (!a.href || new URL(a.href).origin !== location.origin) continue;
+        const href = a.href.split('#')[0];
+        if (href === aqui || vistos.has(href)) continue;
+        vistos.add(href);
+        out.push({ href, texto: (a.innerText || a.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim() });
+      }
+      return out;
+    },
+  });
+  await estado({ ativo: true, total: links.length, feitos: 0, falhas: [], atual: null, playlist, terminou: null });
+  const usados = new Set();
+  const falhas = [];
+  const achados = [];
+  for (let i = 0; i < links.length && !parar; i++) {
+    const { href, texto } = links[i];
+    await estado({ atual: `abrindo ${i + 1}/${links.length}: ${texto || href}` });
+    const desde = Date.now();
+    await chrome.tabs.update(tabId, { url: href }).catch(() => null);
+    await carregou(tabId);
+    const v = await videoNovo(tabId, desde, usados);
+    if (parar) break;
+    const doTitulo = await tituloDaAba(tabId);
+    const titulo = (doTitulo && doTitulo.length < 150 ? doTitulo : '') || texto || `Aula ${i + 1}`;
+    if (!v) {
+      falhas.push(`${titulo} (sem vídeo)`);
+      await estado({ falhas });
+      continue;
+    }
+    usados.add(v.url);
+    achados.push({ url: v.url, titulo, pagina: href, cabecalhos: v.cabecalhos ?? [] });
+  }
+  if (!parar) {
+    // Tudo de uma vez, na ordem dos links.
+    await estado({ atual: `mandando ${achados.length} vídeo(s) para a playlist` });
+    for (const item of achados) {
+      try {
+        await apiDoApp(`/api/extensao/playlists/${playlist}/itens`, { ...item, modulo });
+        const atual = (await chrome.storage.session.get(LOTE))[LOTE];
+        await estado({ feitos: (atual?.feitos ?? 0) + 1 });
+      } catch (e) {
+        falhas.push(`${item.titulo} (${e.message})`);
+        await estado({ falhas });
+      }
+    }
+  }
+  if (origem) await chrome.tabs.update(tabId, { url: origem }).catch(() => null);
+  await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : 'ok' });
+}
+
 // ---------- Seguir o botão "Próxima" ----------
 
 // Plataformas como a do Ferretto não abrem outra aula pelo clique na lista (o
@@ -410,6 +493,9 @@ chrome.runtime.onMessage.addListener((m, _remetente, responder) => {
     responder({ ok: true });
   } else if (m?.tipo === 'importar-pagina') {
     void importarPagina(m).catch((e) => estado({ ativo: false, terminou: `erro: ${e.message}` }));
+    responder({ ok: true });
+  } else if (m?.tipo === 'importar-links') {
+    void importarLinks(m).catch((e) => estado({ ativo: false, terminou: `erro: ${e.message}` }));
     responder({ ok: true });
   } else if (m?.tipo === 'parar-lote') {
     parar = true;

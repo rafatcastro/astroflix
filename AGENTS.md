@@ -288,7 +288,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   extensão regrava a hora de um vídeo pedido de novo) e manda com o texto como título; o progresso fica
   em `storage.session.lote`. Num site em JavaScript todas as aulas têm o mesmo endereço: a mesma aula
   no manifesto é o mesmo vídeo ou a mesma página **e** o mesmo título, e o download só reabre a página
-  para renovar um endereço vencido se ela for só daquela aula (senão viria o vídeo de outra). O modo
+  para renovar um endereço vencido se ela for só daquela aula (senão viria o vídeo de outra). **Abrir cada link da página** (popup → "Abrindo cada link da página",
+  `importarLinks`): pega os `a[data-discover="true"]` (os `<Link>` do React Router; seletor editável e lembrado),
+  do mesmo site, sem repetir nem o próprio endereço, abre um por um na própria aba (na ordem da página), guarda o
+  vídeo que o player pedir (20 s; sem vídeo, pulada) e **só no fim** manda tudo para a playlist, na ordem (parar
+  no meio não manda nada); a aba volta para a página de onde saiu. O modo
   padrão, porém, é **seguir o botão "Próxima"** (`importarSeguindo`): no Ferretto o clique na lista
   não abre outra aula. Manda a aula aberta (título por `span.font-family-headlines`/h1/h2 e o último
   vídeo pedido), clica no botão visível e habilitado cujo texto começa com o configurado (sem acento
