@@ -45,6 +45,7 @@ import { hasFfmpeg } from './media/ffmpeg';
 import { descartarCredenciaisTelegram } from './telegram/credenciais';
 import { armazenamentoRoutes } from './routes/armazenamento';
 import { linksRoutes } from './routes/links';
+import { extensaoRoutes } from './routes/extensao';
 import { retomarImportacoes } from './links/importar';
 
 // `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
@@ -184,6 +185,7 @@ export function buildApp(
   app.register(estudoRoutes, { db });
   app.register(armazenamentoRoutes, { db, config, drive });
   app.register(linksRoutes, { db, config });
+  app.register(extensaoRoutes, { db, config });
   // [ROUTES]
 
   if (opts?.retomarDownloads) {

@@ -10,7 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
-import { importacaoLink, pararImportacao } from '../links/importar';
+import { importacaoLink, pararImportacao, pastaDosLinks } from '../links/importar';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
@@ -238,6 +238,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       // Curso de link: os vídeos vão sendo baixados e entrando (links/importar.ts).
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : importacaoLink(course.id),
+      // Curso de link (playlist da extensão): a página mostra como acrescentar aulas.
+      deLink: course.root_path.startsWith(pastaDosLinks(config) + path.sep),
       download: remoto ? downloadDe(course.id, baixadas) : null,
       pastaConectada: remoto ? pastaConectada(db, course.id) : null,
       downloadCurso: drive?.baixador.estado(course.id) ?? null,

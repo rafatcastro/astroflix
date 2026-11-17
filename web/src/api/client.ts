@@ -40,6 +40,8 @@ export interface CourseDetail {
   collectionId: string | null;
   source: 'local' | 'drive' | 'telegram';
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
+  /** Curso de link (pasta em DATA_DIR/links): uma playlist que a extensão pode encher. */
+  deLink?: boolean;
   importacao: {
     carregando: boolean;
     erro: string | null;
@@ -591,6 +593,10 @@ export const api = {
     itens: Array<{ url: string; titulo: string; pagina?: string }>;
   }) =>
     jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
+  linksExtensao: () => jsonFetch<{ chave: string; pasta: string; instalada: boolean; disponivel: boolean }>('/api/links/extensao'),
+  linksInstalarExtensao: () => jsonFetch<{ pasta: string }>('/api/links/extensao/instalar', { method: 'POST' }),
+  linksCriarPlaylist: (titulo: string, categoriaId?: string) =>
+    jsonFetch<{ id: string }>('/api/links/playlists', { method: 'POST', body: JSON.stringify({ titulo, categoriaId }) }),
   linksEntrar: (link: string) => jsonFetch<void>('/api/links/entrar', { method: 'POST', body: JSON.stringify({ link }) }),
   linksAbrirLog: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}/abrir-log`, { method: 'POST' }),
   linksLogDoCurso: async (courseId: string): Promise<string | null> => {

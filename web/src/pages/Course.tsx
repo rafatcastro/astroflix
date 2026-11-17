@@ -334,6 +334,14 @@ export default function Course() {
         </span>
       )}
 
+      {data.deLink && allLessons.length === 0 && !data.importacao?.carregando && (
+        <div className="mt-4" role="status">
+          <Banner tone="info">
+            Playlist vazia. Abra a aula no Chrome, logado no site, clique no ícone do Astroflix e escolha <b>{data.title}</b>. A
+            extensão fica em <Link to="/settings" className="underline underline-offset-2">Configurações → Extensão do navegador</Link>.
+          </Banner>
+        </div>
+      )}
       {data.source === 'local' && data.importacao && (data.importacao.carregando || data.importacao.erro) && (
         <div className="mt-4" role="status">
           {data.importacao.carregando ? (

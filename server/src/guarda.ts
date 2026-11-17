@@ -54,11 +54,17 @@ export function origemConfiavel(origin: string | undefined, host: string | undef
   return LOOPBACK.has(nome) || nome.endsWith('.localhost') || nome.startsWith('127.');
 }
 
+export const ehExtensao = (origin: string | undefined) => !!origin && /^(chrome|moz)-extension:\/\/[a-z0-9-]+$/i.test(origin);
+
 const SEGUROS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export function registrarGuarda(app: FastifyInstance): void {
   app.addHook('onRequest', async (req: FastifyRequest, reply) => {
     if (!hostConfiavel(req.headers.host)) return reply.code(403).send({ error: 'forbidden_host' });
+    // A extensão do Astroflix fala de chrome-extension://…: só nas rotas dela, que
+    // exigem a chave gerada pelo app (routes/extensao.ts). Outra extensão sem a
+    // chave não passa de lá.
+    if (ehExtensao(req.headers.origin) && req.url.startsWith('/api/extensao/')) return;
     if (!SEGUROS.has(req.method) && !origemConfiavel(req.headers.origin, req.headers.host)) {
       return reply.code(403).send({ error: 'forbidden_origin' });
     }

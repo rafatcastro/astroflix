@@ -372,6 +372,8 @@ interface ItemManifesto {
   login?: boolean;
   /** A página da aula, para pedir o endereço do vídeo de novo se ele vencer (ver VideoAchado). */
   pagina?: string | null;
+  /** Mandado pela extensão: os cabeçalhos com que o navegador da pessoa pediu o vídeo. */
+  cabecalhos?: Array<{ nome: string; valor: string }>;
   erro: string | null;
 }
 interface Manifesto {
@@ -507,12 +509,20 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
   const login = cabecalhoDeLogin(m.token);
   registrar(`começando: ${m.itens.filter((i) => !i.arquivo).length} de ${m.itens.length} a baixar, login: ${login ? loginMascarado(login) : 'nenhum'}`);
 
-  // O número na frente do nome mantém a ordem da lista revisada (o scan ordena pelo nome).
-  const largura = String(m.itens.length).length < 2 ? 2 : String(m.itens.length).length;
-  for (let i = 0; i < m.itens.length; i++) {
-    const item = m.itens[i];
-    if (item.arquivo && fs.existsSync(path.join(pasta, item.arquivo))) continue;
-    if (!cursoExiste(db, courseId)) return;
+  // A lista é relida a cada vídeo: a extensão acrescenta aulas no meio do download
+  // (só acrescenta; as posições não mudam), e cada item é gravado sozinho, sem
+  // sobrescrever o que entrou enquanto este baixava.
+  const tentados = new Set<number>();
+  for (;;) {
+    const atual = lerManifesto(pasta);
+    if (!atual || !cursoExiste(db, courseId)) return;
+    estado.total = atual.itens.length;
+    const i = atual.itens.findIndex((it, k) => !tentados.has(k) && !(it.arquivo && fs.existsSync(path.join(pasta, it.arquivo))));
+    if (i < 0) break;
+    tentados.add(i);
+    const item = atual.itens[i];
+    // O número na frente do nome mantém a ordem da lista (o scan ordena pelo nome).
+    const largura = Math.max(2, String(atual.itens.length).length);
     const nome = sanear(`${String(i + 1).padStart(largura, '0')} - ${item.titulo}`, 140);
     estado.atual = { titulo: item.titulo, pct: null };
     const ac = new AbortController();
@@ -521,11 +531,13 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
       baixarVideo(url, path.join(pasta, TEMP), nome, {
         referer,
         login: item.login ? login : null,
+        cabecalhos: item.cabecalhos,
         signal: ac.signal,
         aoProgresso: (pct) => {
           if (estado.atual) estado.atual.pct = pct;
         },
       });
+    const mudou: Partial<ItemManifesto> = {};
     try {
       let baixado: string;
       try {
@@ -537,25 +549,29 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
         const novo = await enderecoNovo(config.dataDir, item.pagina, m.link, login, ac.signal);
         if (!novo) throw e;
         registrar(`endereço novo: ${novo}`);
-        item.url = novo;
+        mudou.url = novo;
         baixado = await baixar(novo, item.pagina);
       }
       const final = path.join(pasta, `${nome}${path.extname(baixado)}`);
       fs.renameSync(baixado, final);
-      item.arquivo = path.basename(final);
-      item.erro = null;
+      mudou.arquivo = path.basename(final);
+      mudou.erro = null;
       estado.feitos++;
-      registrar(`ok: ${item.arquivo} (${fs.statSync(final).size} bytes) ← ${item.url}${item.login ? ' (com login)' : ''}`);
+      registrar(`ok: ${mudou.arquivo} (${fs.statSync(final).size} bytes) ← ${mudou.url ?? item.url}${item.login ? ' (com login)' : ''}`);
     } catch (e) {
       if (ac.signal.aborted) return registrar(`parado: ${item.url}`);
-      item.erro = e instanceof Error ? e.message : 'falhou';
+      mudou.erro = e instanceof Error ? e.message : 'falhou';
       estado.falhas++;
       const detalhe = (e as { detalhe?: string }).detalhe;
-      registrar(`FALHOU: ${item.titulo} ← ${item.url}${item.login ? ' (com login)' : ''}: ${item.erro}${detalhe ? `\n${detalhe.trim()}\n---` : ''}`);
+      registrar(`FALHOU: ${item.titulo} ← ${item.url}${item.login ? ' (com login)' : ''}: ${mudou.erro}${detalhe ? `\n${detalhe.trim()}\n---` : ''}`);
     } finally {
       atualAc = null;
     }
-    gravarManifesto(pasta, m);
+    const agora = lerManifesto(pasta);
+    if (agora?.itens[i]) {
+      Object.assign(agora.itens[i], mudou);
+      gravarManifesto(pasta, agora);
+    }
     // A aula aparece no curso assim que chega.
     if (cursoExiste(db, courseId)) reconcileCourse(db, config, courseId);
   }
@@ -595,6 +611,63 @@ export function logDoCurso(db: Db, courseId: string): string | null {
   const curso = db.prepare('SELECT root_path FROM courses WHERE id=?').get(courseId) as { root_path: string } | undefined;
   const arquivo = curso ? path.join(curso.root_path, LOG_DO_CURSO) : null;
   return arquivo && fs.existsSync(arquivo) ? arquivo : null;
+}
+
+// ---------- Playlists (a extensão do navegador) ----------
+
+// Uma "playlist" é um curso de link: a pasta em DATA_DIR/links com o manifesto.
+// A extensão escolhe uma e manda a aula aberta no navegador da pessoa (que já está
+// logada no site); o vídeo entra no fim e a fila baixa.
+
+export interface Playlist {
+  id: string;
+  titulo: string;
+  categoriaId: string | null;
+  itens: number;
+  baixados: number;
+}
+
+export function listarPlaylists(db: Db, config: AppConfig): Playlist[] {
+  const raiz = pastaDosLinks(config);
+  const cursos = db
+    .prepare('SELECT id, title, root_path, collection_id FROM courses WHERE root_path LIKE ? AND archived=0 ORDER BY updated_at DESC')
+    .all(`${raiz}${path.sep}%`) as Array<{ id: string; title: string; root_path: string; collection_id: string | null }>;
+  return cursos
+    .map((c) => {
+      const m = lerManifesto(c.root_path);
+      return m ? { id: c.id, titulo: c.title, categoriaId: c.collection_id, itens: m.itens.length, baixados: m.itens.filter((i) => i.arquivo).length } : null;
+    })
+    .filter((p): p is Playlist => !!p);
+}
+
+export function criarPlaylist(db: Db, config: AppConfig, titulo: string, categoriaId: string | null): string {
+  return criarCursoDeLinks(db, config, { titulo, link: '', categoriaId, token: null, comLogin: new Set(), itens: [] });
+}
+
+export function adicionarAPlaylist(
+  db: Db,
+  config: AppConfig,
+  courseId: string,
+  item: { url: string; titulo: string; pagina: string | null; cabecalhos: Array<{ nome: string; valor: string }> },
+): { posicao: number; repetido: boolean } | null {
+  const curso = db.prepare('SELECT root_path FROM courses WHERE id=?').get(courseId) as { root_path: string } | undefined;
+  const m = curso ? lerManifesto(curso.root_path) : null;
+  if (!curso || !m) return null;
+  // A mesma aula duas vezes (clicou de novo): não duplica, só atualiza o
+  // endereço, que pode ter vencido.
+  const ja = m.itens.findIndex((i) => i.url === item.url || (!!item.pagina && i.pagina === item.pagina));
+  if (ja >= 0) {
+    const i = m.itens[ja];
+    if (!i.arquivo) Object.assign(i, { url: item.url, cabecalhos: item.cabecalhos, erro: null });
+    gravarManifesto(curso.root_path, m);
+    if (!i.arquivo) enfileirar(db, config, courseId);
+    return { posicao: ja + 1, repetido: true };
+  }
+  m.itens.push({ url: item.url, titulo: item.titulo.trim() || item.url, arquivo: null, erro: null, pagina: item.pagina, cabecalhos: item.cabecalhos });
+  gravarManifesto(curso.root_path, m);
+  db.prepare('UPDATE courses SET updated_at=? WHERE id=?').run(new Date().toISOString(), courseId);
+  enfileirar(db, config, courseId);
+  return { posicao: m.itens.length, repetido: false };
 }
 
 /** Excluir o curso no meio: para o download dele. */

@@ -11,6 +11,7 @@ import SeletorDrive from '../components/SeletorDrive';
 import MenuAdicionar from '../components/MenuAdicionar';
 import TelegramLinkModal from '../components/TelegramLinkModal';
 import LinkModal from '../components/LinkModal';
+import NovaPlaylistModal from '../components/NovaPlaylistModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TextField from '../components/TextField';
 import { api, type BatchImportResult, type Collection, type CourseRoot, type CourseSummary } from '../api/client';
@@ -470,7 +471,7 @@ export default function Library({ categoria }: { categoria: string }) {
     [todos, categoria],
   );
   const { data: collections } = useCollections();
-  const [picking, setPicking] = useState<null | 'drive' | 'drive-link' | 'telegram' | 'link'>(null);
+  const [picking, setPicking] = useState<null | 'drive' | 'drive-link' | 'telegram' | 'link' | 'playlist'>(null);
   // Pasta com vídeo só nas subpastas: um curso com módulos ou uma estante de cursos?
   const [ambigua, setAmbigua] = useState<{ path: string; subpastas: number } | null>(null);
   // Sem o app do Telegram no build nem um próprio nas Configurações, a opção só
@@ -652,6 +653,7 @@ export default function Library({ categoria }: { categoria: string }) {
           ? [{ rotulo: 'Do Telegram', descricao: 'Cole o link de um grupo, canal ou bot', onClick: () => setPicking('telegram') }]
           : []),
         { rotulo: 'De um link', descricao: 'Playlist do YouTube ou página com vídeos', onClick: () => setPicking('link') },
+        { rotulo: 'Playlist (pela extensão)', descricao: 'Mande as aulas do Chrome, uma a uma, logado no site', onClick: () => setPicking('playlist') },
       ]}
     />
   );
@@ -942,6 +944,7 @@ export default function Library({ categoria }: { categoria: string }) {
         />
       )}
       {picking === 'drive-link' && <DriveLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
+      {picking === 'playlist' && <NovaPlaylistModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {picking === 'link' && <LinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {picking === 'telegram' && <TelegramLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {ambigua && (

@@ -116,7 +116,14 @@ export function baixarVideo(
   url: string,
   pastaTemp: string,
   nome: string,
-  opts: { referer?: string; signal?: AbortSignal; aoProgresso?: (pct: number) => void; login?: Cabecalho | null } = {},
+  opts: {
+    referer?: string;
+    signal?: AbortSignal;
+    aoProgresso?: (pct: number) => void;
+    login?: Cabecalho | null;
+    /** Os cabeçalhos que o navegador mandou ao pedir o vídeo (a extensão os captura). */
+    cabecalhos?: Cabecalho[];
+  } = {},
 ): Promise<string> {
   fs.mkdirSync(pastaTemp, { recursive: true });
   const args = [
@@ -140,6 +147,7 @@ export function baixarVideo(
   ];
   if (opts.referer) args.push('--referer', opts.referer);
   if (opts.login) args.push('--add-headers', `${opts.login.nome}:${opts.login.valor}`);
+  for (const c of opts.cabecalhos ?? []) args.push('--add-headers', `${c.nome}:${c.valor}`);
   args.push(url);
 
   return new Promise((resolve, reject) => {

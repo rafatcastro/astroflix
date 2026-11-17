@@ -106,6 +106,13 @@ function lerSupabasePadrao() {
 }
 const supabase = lerSupabasePadrao();
 
+// A extensão do navegador (extensao/): vai junto para o app gravá-la numa pasta e
+// a pessoa carregar no Chrome ("Instalar a extensão", nas Configurações). Texto puro.
+const pastaExtensao = path.join(raiz, 'extensao');
+const extensao = fs.existsSync(pastaExtensao)
+  ? Object.fromEntries(listar(pastaExtensao).map(({ rel, completo }) => [rel, fs.readFileSync(completo, 'utf8')]))
+  : {};
+
 const entradas = arquivos.map(({ rel, completo }) => {
   const tipo = TIPOS[path.extname(rel).toLowerCase()] ?? 'application/octet-stream';
   const base64 = fs.readFileSync(completo).toString('base64');
@@ -130,6 +137,8 @@ export const GOOGLE_PADRAO: { clientId: string | null; clientSecret: string | nu
 export const TELEGRAM_PADRAO: { apiId: number | null; apiHash: string | null } = ${JSON.stringify(telegram)};
 
 export const SUPABASE_PADRAO: { url: string | null; publishableKey: string | null } = ${JSON.stringify(supabase)};
+
+export const EXTENSAO: Record<string, string> = ${JSON.stringify(extensao)};
 
 export const WEB_ASSETS: Record<string, AssetEmbutido> = {
 ${entradas.join('\n')}

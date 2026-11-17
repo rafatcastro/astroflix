@@ -248,6 +248,20 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   com `leitura.log` e o HTML recebido (`pagina.html`, ou `resposta.txt` num erro), ficando as 30 mais
   novas. Os downloads de cada curso vão para `.astroflix-link.log` na pasta dele ("Ver log" no aviso de
   erro do curso).
+- **Extensão do navegador** (`extensao/`, Chrome MV3, JS puro sem build): a pessoa abre a aula no
+  próprio Chrome, já logada, e manda o vídeo para uma **playlist** (um curso de link vazio, criado em
+  Adicionar → "Playlist (pela extensão)" ou pelo + da extensão). `background.js` observa os pedidos de
+  vídeo de cada aba (`webRequest.onSendHeaders` com `extraHeaders`: `.m3u8`/`.mpd`/`.mp4`, sem os
+  segmentos) e guarda o endereço e os cabeçalhos úteis (Cookie, Authorization, Referer, Origin,
+  User-Agent); o popup escolhe a playlist, o título (o h1 da página) e o vídeo, e manda para
+  `POST /api/extensao/playlists/:id/itens`. O item leva os `cabecalhos` para o yt-dlp. A pasta entra no
+  build (`EXTENSAO` em `bundled.ts`, por `gerar-bundled.mjs`) e Configurações → Extensão do navegador
+  a grava em `DATA_DIR/extensao` e abre `chrome://extensions` ("Carregar sem compactação"). **Segurança:**
+  a guarda deixa passar `chrome-extension://` só em `/api/extensao/*` (`ehExtensao`), e essas rotas
+  exigem `X-Astroflix-Chave` (`routes/extensao.ts`, gerada em `settings` e mostrada nas Configurações).
+  A extensão procura o app de 7777 a 7797. O download relê o manifesto a cada vídeo e grava só o item
+  que mudou: aula acrescentada no meio do download entra na fila; a mesma aula duas vezes só atualiza
+  o endereço.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

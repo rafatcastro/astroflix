@@ -300,6 +300,83 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
   );
 }
 
+// A extensão do Chrome manda a aula aberta (logado no site) para uma playlist
+// do app. Aqui fica a chave de pareamento e o "Instalar", que grava a extensão
+// numa pasta e abre chrome://extensions para a pessoa carregar (fora da loja,
+// só por lá).
+function SecaoExtensao({ onNotice }: { onNotice: (m: string) => void }) {
+  const { data } = useQuery({ queryKey: ['extensao'], queryFn: api.linksExtensao });
+  const [instalando, setInstalando] = useState(false);
+  const [passos, setPassos] = useState(false);
+
+  const instalar = async () => {
+    setInstalando(true);
+    try {
+      await api.linksInstalarExtensao();
+      setPassos(true);
+    } catch {
+      onNotice('Não foi possível gravar a extensão.');
+    }
+    setInstalando(false);
+  };
+  const copiar = async () => {
+    if (!data) return;
+    try {
+      await navigator.clipboard.writeText(data.chave);
+      onNotice('Chave copiada.');
+    } catch {
+      onNotice('Não foi possível copiar; selecione a chave e copie.');
+    }
+  };
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-1 text-sm font-semibold text-neutral-300">Extensão do navegador</h2>
+      <p className="mb-3 text-sm text-neutral-400">
+        Abra a aula no Chrome, logado no site, e mande o vídeo para uma playlist daqui com um clique. O Astroflix baixa e
+        guarda o progresso.
+      </p>
+      <div className="space-y-2 rounded-lg bg-neutral-900 px-3 py-3 text-sm">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-neutral-400">Chave</span>
+          <code className="min-w-0 flex-1 select-all truncate rounded bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-200">
+            {data?.chave ?? '…'}
+          </code>
+          <button
+            type="button"
+            onClick={() => void copiar()}
+            className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+          >
+            Copiar
+          </button>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-neutral-400">{data?.instalada ? `Gravada em ${data.pasta}` : 'Ainda não instalada'}</span>
+          <button
+            type="button"
+            disabled={instalando || data?.disponivel === false}
+            onClick={() => void instalar()}
+            className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:opacity-40"
+          >
+            {data?.instalada ? 'Atualizar a extensão' : 'Instalar a extensão'}
+          </button>
+        </div>
+        {passos && (
+          <ol className="list-decimal space-y-1 pl-5 text-neutral-300">
+            <li>No Chrome que abriu em chrome://extensions, ligue o <b>Modo do desenvolvedor</b> (canto superior direito).</li>
+            <li>
+              Clique em <b>Carregar sem compactação</b> e escolha a pasta que abriu no Finder ({data?.pasta}). Se já estava
+              carregada, clique em ↻ nela.
+            </li>
+            <li>Fixe o ícone do Astroflix na barra (o quebra-cabeça → alfinete).</li>
+            <li>Na primeira vez, clique no ícone e cole a chave acima.</li>
+          </ol>
+        )}
+      </div>
+    </section>
+  );
+}
+
 // Onde ficam as aulas e os materiais baixados do Drive e do Telegram, quanto
 // ocupam e o que fazer com eles. O que foi baixado o app nunca apaga sozinho: é
 // aqui (ou no menu do curso) que a pessoa libera espaço. O cache automático, à
@@ -664,6 +741,7 @@ export default function Settings() {
       <SecaoDrive onNotice={setNotice} />
       <SecaoAnki />
       <SecaoTelegram onNotice={setNotice} />
+      <SecaoExtensao onNotice={setNotice} />
 
       <section className="mb-8">
         <h2 className="mb-1 text-sm font-semibold text-red-400">Apagar categoria</h2>
