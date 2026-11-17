@@ -322,6 +322,8 @@ export default function Course() {
               baixadas: data.download?.baixadas ?? 0,
               primeiraAulaId: allLessons[0]?.id ?? null,
               tamanhoRemoto: data.tamanhoRemoto,
+              deLink: data.deLink,
+              playlistNosDownloads: data.playlistNosDownloads,
             }}
             onNotice={(t) => setNotice(t)}
           />

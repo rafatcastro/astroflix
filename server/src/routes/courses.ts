@@ -10,7 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
-import { importacaoLink, manifestoDoCurso, nomeDoModulo, pararImportacao, pastaDosLinks } from '../links/importar';
+import { exportarPlaylist, importacaoLink, manifestoDoCurso, nomeDoModulo, pararImportacao, pastaDosLinks } from '../links/importar';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
@@ -122,6 +122,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     return reply.code(204).send();
   });
 
+  const ehDeLink = (rootPath: string) => rootPath.startsWith(pastaDosLinks(config) + path.sep);
+
   app.get('/api/courses', async (req) => {
     const archived = (req.query as { archived?: string }).archived === '1' ? 1 : 0;
     const courses = db.prepare(`SELECT * FROM courses WHERE archived=? ORDER BY COALESCE(sort_index, 1e9), created_at`).all(archived) as any[];
@@ -181,6 +183,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         pastaConectada: remoto ? pastaConectada(db, c.id) : null,
         baixadas: remoto ? (baixadasStmt.get(c.id) as { n: number }).n : 0,
         primeiraAulaId: (primeiraStmt.get(c.id) as { id: string } | undefined)?.id ?? null,
+        // Playlist (curso de link): o menu ⋯ do cartão tem "Baixar para downloads".
+        deLink: ehDeLink(c.root_path),
       };
     });
   });
@@ -239,11 +243,13 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       // Curso de link: os vídeos vão sendo baixados e entrando (links/importar.ts).
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : importacaoLink(course.id),
       // Curso de link (playlist da extensão): a página mostra como acrescentar aulas.
-      deLink: course.root_path.startsWith(pastaDosLinks(config) + path.sep),
+      deLink: ehDeLink(course.root_path),
       // As sub-playlists (módulos) da playlist, inclusive as que ainda não têm aula.
       subPlaylists: course.root_path.startsWith(pastaDosLinks(config) + path.sep)
         ? (manifestoDoCurso(db, course.id)?.m.modulos ?? []).map((p) => ({ pasta: p, nome: nomeDoModulo(p) }))
         : [],
+      // "Baixar para downloads" já pedido: o menu mostra "Abrir pasta baixada".
+      playlistNosDownloads: ehDeLink(course.root_path) ? !!manifestoDoCurso(db, course.id)?.m.exportar : false,
       download: remoto ? downloadDe(course.id, baixadas) : null,
       pastaConectada: remoto ? pastaConectada(db, course.id) : null,
       downloadCurso: drive?.baixador.estado(course.id) ?? null,
@@ -258,11 +264,16 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     };
   });
 
-  // O curso inteiro para a pasta de armazenamento (drive/baixar.ts).
+  // O curso inteiro para a pasta de armazenamento (drive/baixar.ts). A playlist
+  // (curso de link) já está no disco, na pasta do app: vai para a de downloads.
   app.post('/api/courses/:id/baixar', async (req, reply) => {
     const id = (req.params as { id: string }).id;
-    const c = db.prepare('SELECT source FROM courses WHERE id=?').get(id) as { source: string } | undefined;
+    const c = db.prepare('SELECT source, root_path FROM courses WHERE id=?').get(id) as { source: string; root_path: string } | undefined;
     if (!c) return reply.code(404).send({ error: 'not_found' });
+    if (ehDeLink(c.root_path)) {
+      const r = await exportarPlaylist(db, config, id);
+      return r ? { playlist: r } : reply.code(400).send({ error: 'curso-local' });
+    }
     if (c.source !== 'drive' && c.source !== 'telegram') return reply.code(400).send({ error: 'curso-local' });
     if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
     drive.baixador.baixarCurso(id);
@@ -353,13 +364,23 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     return reply.code(204).send();
   });
 
+  // As playlists da categoria entram no mesmo "Baixar": vão para a pasta de downloads.
+  const playlistsDa = (cat: string) =>
+    (db
+      .prepare(
+        `SELECT id FROM courses WHERE archived=0 AND source='local' AND root_path LIKE ?
+           AND ${cat === 'sem' ? 'collection_id IS NULL' : 'collection_id=?'} ORDER BY title`,
+      )
+      .all(`${pastaDosLinks(config)}${path.sep}%`, ...(cat === 'sem' ? [] : [cat])) as Array<{ id: string }>).map((r) => r.id);
+
   app.post('/api/collections/:cat/baixar', async (req, reply) => {
     const cat = (req.params as { cat: string }).cat;
-    if (!drive) return reply.code(503).send({ error: 'sem-conexao' });
-    const ids = cursosRemotosDa(cat);
-    if (!ids.length) return reply.code(400).send({ error: 'sem-cursos-remotos' });
-    for (const id of ids) drive.baixador.baixarCurso(id);
-    return reply.code(202).send({ cursos: ids.length });
+    const ids = drive ? cursosRemotosDa(cat) : [];
+    const playlists = playlistsDa(cat);
+    if (!ids.length && !playlists.length) return reply.code(drive ? 400 : 503).send({ error: drive ? 'sem-cursos-remotos' : 'sem-conexao' });
+    for (const id of ids) drive!.baixador.baixarCurso(id);
+    for (const id of playlists) await exportarPlaylist(db, config, id).catch(() => null);
+    return reply.code(202).send({ cursos: ids.length + playlists.length });
   });
 
   app.delete('/api/collections/:cat/baixar', async (req, reply) => {

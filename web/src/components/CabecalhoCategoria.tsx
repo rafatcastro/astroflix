@@ -50,12 +50,17 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
   // de armazenamento, cada um na sua pasta (o mesmo "Baixar" do curso).
   const { data: cursos } = useCourses();
   const remotos = (cursos ?? []).filter((c) => c.source !== 'local' && (c.collectionId ?? SEM) === cat);
+  // As playlists entram no mesmo "Baixar": já estão no disco, vão para a pasta de downloads.
+  const playlists = (cursos ?? []).filter((c) => c.deLink && (c.collectionId ?? SEM) === cat);
   // O progresso fica no painel de downloads (em toda tela).
   const { data: downloads } = useDownloads();
   const baixando = remotos.some((c) => downloads?.itens.some((e) => e.courseId === c.id && e.ativo));
   const baixar = () => {
     setConfirmandoBaixar(false);
-    void api.baixarCategoria(cat).then(() => qc.invalidateQueries({ queryKey: ['downloads'] }), () => undefined);
+    void api.baixarCategoria(cat).then(() => {
+      qc.invalidateQueries({ queryKey: ['downloads'] });
+      qc.invalidateQueries({ queryKey: ['course'] });
+    }, () => undefined);
   };
 
   // Editar "Sem categoria" a transforma numa categoria de verdade, levando tudo o
@@ -120,14 +125,14 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
           </div>
           {info && <div className="mt-1 text-sm text-neutral-500">{info}</div>}
         </div>
-        {(acoes || remotos.length > 0) && (
+        {(acoes || remotos.length > 0 || playlists.length > 0) && (
           <div className="flex flex-wrap items-center gap-2">
-            {remotos.length > 0 && (
+            {(remotos.length > 0 || playlists.length > 0) && (
               <button
                 type="button"
                 onClick={() => setConfirmandoBaixar(true)}
                 disabled={baixando}
-                title="Baixar os cursos do Drive e do Telegram desta categoria para assistir sem internet"
+                title="Baixar os cursos do Drive e do Telegram e as playlists desta categoria para a pasta de downloads"
                 className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg bg-neutral-900 px-3 text-sm text-neutral-300 hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 disabled:cursor-default disabled:text-neutral-500"
               >
                 <Download size={16} /> {baixando ? 'Baixando…' : 'Baixar'}
@@ -153,9 +158,20 @@ export default function CabecalhoCategoria({ cat, acoes, info }: { cat: string; 
           title="Baixar a categoria"
           message={
             <>
-              {remotos.length === 1 ? 'O curso' : `Os ${remotos.length} cursos`} do Drive e do Telegram desta categoria são baixados
-              para a pasta do app (Configurações → Armazenamento), cada um na sua pasta, com os nomes originais. O que já foi baixado
-              não é baixado de novo. Cursos de pastas do computador ficam de fora: eles já estão no disco.
+              {remotos.length > 0 && (
+                <>
+                  {remotos.length === 1 ? 'O curso' : `Os ${remotos.length} cursos`} do Drive e do Telegram desta categoria são baixados
+                  para a pasta de downloads (Configurações → Armazenamento), cada um na sua pasta, com os nomes originais. O que já foi
+                  baixado não é baixado de novo.{' '}
+                </>
+              )}
+              {playlists.length > 0 && (
+                <>
+                  {playlists.length === 1 ? 'A playlist vai' : `As ${playlists.length} playlists vão`} para a mesma pasta de downloads
+                  (os vídeos que ainda estão baixando vão quando chegarem).{' '}
+                </>
+              )}
+              Cursos de pastas do computador ficam de fora: eles já estão no disco.
             </>
           }
           confirmLabel="Baixar"

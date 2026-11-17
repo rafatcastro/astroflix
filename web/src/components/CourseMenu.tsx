@@ -19,6 +19,7 @@ type Flow =
   | 'rename'
   | 'collection'
   | 'confirmBaixar'
+  | 'confirmBaixarPlaylist'
   | 'confirmRemoverBaixados'
   | 'confirmArchive'
   | 'confirmReset'
@@ -36,6 +37,10 @@ export interface CursoDoMenu {
   primeiraAulaId?: string | null;
   /** O tamanho do curso inteiro, para o "Baixar" dizer quanto vai ocupar (só a página sabe). */
   tamanhoRemoto?: number | null;
+  /** Playlist (curso de link): "Baixar para downloads" no lugar do "Baixar" do Drive. */
+  deLink?: boolean;
+  /** "Baixar para downloads" já pedido: mostra "Abrir pasta baixada". */
+  playlistNosDownloads?: boolean;
 }
 
 /**
@@ -230,6 +235,24 @@ export default function CourseMenu({
     }
   };
 
+  // A playlist já está no disco, na pasta do app: vai para a de downloads, e o
+  // que ainda está baixando vai ao chegar.
+  const doBaixarPlaylist = async () => {
+    close();
+    try {
+      const { playlist: r } = await api.baixarPlaylist(course.id);
+      invalidate();
+      const partes = [
+        r.levados ? `${r.levados} vídeo${r.levados === 1 ? '' : 's'} na pasta de downloads` : r.jaEstavam ? 'os vídeos já estavam na pasta de downloads' : 'nenhum vídeo baixado ainda',
+        r.faltam ? `${r.faltam} ainda baixando (vão ao chegar)` : null,
+        r.falhas ? `${r.falhas} não foram (veja o espaço livre)` : null,
+      ].filter(Boolean);
+      onNotice(doCurso(`${partes.join('; ')}.`));
+    } catch {
+      onNotice('Não deu para levar a playlist para a pasta de downloads. Tente de novo.');
+    }
+  };
+
   // Apaga só o que foi baixado: o curso e o progresso ficam, e as aulas voltam a tocar pela rede.
   const doRemoverBaixados = async () => {
     close();
@@ -331,6 +354,20 @@ export default function CourseMenu({
             {remoto && (
               <button type="button" className={item} disabled={baixando} onClick={() => setFlow('confirmBaixar')}>
                 {baixando ? 'Baixando…' : 'Baixar…'}
+              </button>
+            )}
+            {course.deLink && (
+              <button type="button" className={item} onClick={() => setFlow('confirmBaixarPlaylist')}>
+                Baixar para downloads…
+              </button>
+            )}
+            {course.deLink && course.playlistNosDownloads && (
+              <button
+                type="button"
+                className={item}
+                onClick={() => { close(); void api.abrirArmazenamento(course.id).catch(() => onNotice('Não deu para abrir a pasta.')); }}
+              >
+                Abrir pasta baixada
               </button>
             )}
             {remoto && (temBaixadas || course.pastaConectada) && (
@@ -471,6 +508,16 @@ export default function CourseMenu({
           }
           confirmLabel="Baixar"
           onConfirm={() => void doBaixar()}
+          onCancel={close}
+        />
+      )}
+
+      {flow === 'confirmBaixarPlaylist' && (
+        <ConfirmDialog
+          title={`Baixar "${course.title}" para downloads`}
+          message="Os vídeos da playlist vão para a pasta de downloads (Configurações → Armazenamento), numa pasta com o nome dela e uma subpasta por sub-playlist, para você levar ou abrir em outro player. No mesmo disco não ocupam espaço a mais. Os que ainda estão baixando vão quando chegarem. O app nunca apaga essa pasta."
+          confirmLabel="Baixar"
+          onConfirm={() => void doBaixarPlaylist()}
           onCancel={close}
         />
       )}

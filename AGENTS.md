@@ -264,7 +264,10 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   o endereço. **Sub-playlist** (uma playlist dentro da outra): uma subpasta `NN - Nome` (o número dá a ordem
   de criação), listada em `manifesto.modulos`, que o scan mostra como módulo; o item leva `modulo` e
   é numerado dentro dela. Criada pelo "+ Nova sub-playlist" da página do curso ou pela extensão
-  ("Dentro da escolhida"). O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),
+  ("Dentro da escolhida"). **"Baixar para downloads"** (menu ⋯ da playlist e o "Baixar" da categoria,
+  `exportarPlaylist`): os vídeos vão para a pasta de armazenamento (`pastaDoCurso`), com as subpastas
+  das sub-playlists, por hard link (mesmo disco, sem ocupar o dobro) ou cópia; `manifesto.exportar`
+  faz cada vídeo que chegar depois ir também. Não entram em `baixados`: o app nunca apaga essa cópia. O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),
   depois h1/h2, depois o da aba. **Importar a página toda** (popup → "Importar a página toda", roda no `background.js`
   porque o popup fecha ao perder o foco): para cada elemento do seletor (padrão
   `p.text-sm.font-family-body.text-body.font-semibold`, o nome da aula no Ferretto; editável e

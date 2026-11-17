@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
-import { sanear } from '../armazenamento';
+import { pastaDoCurso, sanear } from '../armazenamento';
 import { inserirCursoDerivado } from '../scan/scan-course';
 import { reconcileCourse } from '../scan/reconcile';
 import { baixarVideo, listar, temYtDlp, type VideoAchado } from './ytdlp';
@@ -385,6 +385,8 @@ interface Manifesto {
   token?: string | null;
   /** As sub-playlists, na ordem de criação: nomes das subpastas ("01 - Funções"). */
   modulos?: string[];
+  /** "Baixar para downloads" pedido: cada vídeo que chegar também vai para a pasta de downloads. */
+  exportar?: boolean;
   itens: ItemManifesto[];
 }
 
@@ -570,6 +572,11 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
       mudou.erro = null;
       estado.feitos++;
       registrar(`ok: ${mudou.arquivo} (${fs.statSync(final).size} bytes) ← ${mudou.url ?? item.url}${item.login ? ' (com login)' : ''}`);
+      if (lerManifesto(pasta)?.exportar) {
+        await levarParaDownloads(pasta, mudou.arquivo, pastaDoCurso(db, config, courseId)).catch((e) =>
+          registrar(`não foi para a pasta de downloads: ${mudou.arquivo}: ${e instanceof Error ? e.message : e}`),
+        );
+      }
     } catch (e) {
       if (ac.signal.aborted) return registrar(`parado: ${item.url}`);
       mudou.erro = e instanceof Error ? e.message : 'falhou';
@@ -726,6 +733,88 @@ export function adicionarAPlaylist(
   db.prepare('UPDATE courses SET updated_at=? WHERE id=?').run(new Date().toISOString(), courseId);
   enfileirar(db, config, courseId);
   return { posicao: m.itens.filter((i) => (i.modulo ?? null) === modulo).length, repetido: false };
+}
+
+// ---------- "Baixar para downloads" ----------
+// A playlist mora em DATA_DIR/links (a pasta do app, escondida). A pessoa quer os
+// vídeos onde ficam os outros downloads (Configurações → Armazenamento), com o
+// nome do curso, para levar embora ou abrir em outro player. No mesmo disco vai
+// como hard link: o mesmo arquivo em dois lugares, sem ocupar o dobro; em outro
+// disco, cópia. A pasta de downloads fica sendo da pessoa: o app não a apaga
+// (nem o "Limpar tudo", que só apaga o que registrou como baixado do Drive e do Telegram).
+
+/** Um arquivo da playlist para a pasta de downloads. false = já estava lá (mesmo tamanho). */
+async function levarParaDownloads(origemRaiz: string, rel: string, destinoRaiz: string): Promise<boolean> {
+  const de = path.join(origemRaiz, ...rel.split('/'));
+  const para = path.join(destinoRaiz, ...rel.split('/'));
+  const tam = fs.statSync(de).size;
+  try {
+    if (fs.statSync(para).size === tam) return false;
+  } catch {
+    /* não existe: vai */
+  }
+  fs.mkdirSync(path.dirname(para), { recursive: true });
+  // Grava ao lado e troca no fim: uma cópia entre discos que parar no meio não
+  // deixa um vídeo cortado com o nome certo (que a próxima vez trocaria, pelo tamanho).
+  const temp = `${para}.astroflix-tmp`;
+  fs.rmSync(temp, { force: true });
+  try {
+    fs.linkSync(de, temp);
+  } catch {
+    await fs.promises.copyFile(de, temp);
+  }
+  fs.renameSync(temp, para);
+  return true;
+}
+
+/** Os arquivos da playlist (vídeos, nas subpastas dos módulos), sem os do app (dotfiles). */
+function arquivosDaPlaylist(raiz: string, sub = ''): string[] {
+  const saida: string[] = [];
+  let entradas: fs.Dirent[];
+  try {
+    entradas = fs.readdirSync(path.join(raiz, sub), { withFileTypes: true });
+  } catch {
+    return saida;
+  }
+  for (const e of entradas) {
+    if (e.name.startsWith('.')) continue;
+    const rel = sub ? `${sub}/${e.name}` : e.name;
+    if (e.isDirectory()) saida.push(...arquivosDaPlaylist(raiz, rel));
+    else if (e.isFile()) saida.push(rel);
+  }
+  return saida;
+}
+
+export interface ResultadoExportacao {
+  pasta: string;
+  levados: number;
+  jaEstavam: number;
+  /** Vídeos ainda baixando: vão sozinhos quando chegarem. */
+  faltam: number;
+  falhas: number;
+}
+
+/** "Baixar para downloads": o que já chegou vai agora; o resto, ao chegar. */
+export async function exportarPlaylist(db: Db, config: AppConfig, courseId: string): Promise<ResultadoExportacao | null> {
+  const achado = manifestoDoCurso(db, courseId);
+  if (!achado) return null;
+  const { pasta, m } = achado;
+  if (!m.exportar) {
+    m.exportar = true;
+    gravarManifesto(pasta, m);
+  }
+  const destino = pastaDoCurso(db, config, courseId);
+  fs.mkdirSync(destino, { recursive: true });
+  const r: ResultadoExportacao = { pasta: destino, levados: 0, jaEstavam: 0, faltam: m.itens.filter((i) => !i.arquivo && !i.erro).length, falhas: 0 };
+  for (const rel of arquivosDaPlaylist(pasta)) {
+    try {
+      if (await levarParaDownloads(pasta, rel, destino)) r.levados++;
+      else r.jaEstavam++;
+    } catch {
+      r.falhas++;
+    }
+  }
+  return r;
 }
 
 /** Excluir o curso no meio: para o download dele. */

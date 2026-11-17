@@ -15,6 +15,8 @@ export interface CourseSummary {
   baixadas?: number;
   /** Para "Editar capa": a capa é escolhida num quadro da aula. */
   primeiraAulaId?: string | null;
+  /** Playlist (curso de link): tem "Baixar para downloads". */
+  deLink?: boolean;
 }
 export interface LessonDTO {
   id: string; title: string; module: string | null; relPath: string;
@@ -42,6 +44,8 @@ export interface CourseDetail {
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
   /** Curso de link (pasta em DATA_DIR/links): uma playlist que a extensão pode encher. */
   deLink?: boolean;
+  /** "Baixar para downloads" já pedido para esta playlist. */
+  playlistNosDownloads?: boolean;
   /** As sub-playlists (módulos) da playlist, inclusive as ainda vazias. */
   subPlaylists?: Array<{ pasta: string; nome: string }>;
   importacao: {
@@ -496,6 +500,11 @@ export const api = {
     jsonFetch<{ ok: true }>(`/api/courses/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteCourse: (id: string) => jsonFetch<void>(`/api/courses/${id}`, { method: 'DELETE' }),
   baixarCurso: (id: string) => jsonFetch<DownloadCurso>(`/api/courses/${id}/baixar`, { method: 'POST' }),
+  /** A playlist (já no disco) para a pasta de downloads; o que ainda está baixando vai ao chegar. */
+  baixarPlaylist: (id: string) =>
+    jsonFetch<{ playlist: { pasta: string; levados: number; jaEstavam: number; faltam: number; falhas: number } }>(`/api/courses/${id}/baixar`, {
+      method: 'POST',
+    }),
   cancelarDownloadCurso: (id: string) => jsonFetch<void>(`/api/courses/${id}/baixar`, { method: 'DELETE' }),
   baixarAula: (id: string) => jsonFetch<void>(`/api/lessons/${id}/baixar`, { method: 'POST' }),
   conectarPasta: (id: string, pasta: string) =>
