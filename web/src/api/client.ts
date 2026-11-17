@@ -40,7 +40,15 @@ export interface CourseDetail {
   collectionId: string | null;
   source: 'local' | 'drive' | 'telegram';
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
-  importacao: { carregando: boolean; erro: string | null } | null;
+  importacao: {
+    carregando: boolean;
+    erro: string | null;
+    /** Curso importado por link: os vídeos sendo baixados. */
+    feitos?: number;
+    total?: number;
+    falhas?: number;
+    atual?: { titulo: string; pct: number | null } | null;
+  } | null;
   // Curso do Drive ou do Telegram: aulas na pasta de armazenamento e se a aula aberta e as próximas estão baixando.
   download: { total: number; baixadas: number; ativo: boolean; erro: string | null } | null;
   /** O "Baixar" (só Drive e Telegram); null = não pedido desde que o app abriu. */
@@ -210,6 +218,18 @@ async function jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
     throw new Error(payload?.error ?? `${res.status} ${res.statusText}`);
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+// Importar por link (server/src/links): a descoberta roda em segundo plano e a janela consulta.
+export interface VideoAchado { url: string; titulo: string; duracaoSec: number | null; }
+export interface DescobertaLinks {
+  fase: 'lendo' | 'pronto' | 'erro';
+  link: string;
+  titulo: string | null;
+  verificados: number;
+  total: number;
+  itens: VideoAchado[];
+  erro: string | null;
 }
 
 // Rotas de migração respondem 409 com { status: 'root_unavailable' } (pasta indisponível / curso inexistente).
@@ -554,6 +574,13 @@ export const api = {
   telegramCancelarLogin: () => jsonFetch<void>('/api/telegram/login', { method: 'DELETE' }),
   telegramDesconectar: () => jsonFetch<void>('/api/telegram/auth', { method: 'DELETE' }),
   driveIniciarAuth: () => jsonFetch<{ url: string }>('/api/drive/auth/iniciar', { method: 'POST' }),
+  linksStatus: () => jsonFetch<{ ytdlp: boolean }>('/api/links/status'),
+  linksDescobrir: (link: string) => jsonFetch<{ id: string }>('/api/links/descobrir', { method: 'POST', body: JSON.stringify({ link }) }),
+  linksDescoberta: (id: string) => jsonFetch<DescobertaLinks>(`/api/links/descobrir/${id}`),
+  linksCancelar: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}`, { method: 'DELETE' }),
+  linksImportar: (p: { titulo: string; link: string; categoriaId?: string; itens: Array<{ url: string; titulo: string }> }) =>
+    jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
+  linksTentarDeNovo: (courseId: string) => jsonFetch<void>(`/api/links/cursos/${courseId}/tentar-de-novo`, { method: 'POST' }),
   importLibrary: (data: unknown) =>
     jsonFetch<ImportPlan>('/api/library/import', { method: 'POST', body: JSON.stringify(data) }),
 };

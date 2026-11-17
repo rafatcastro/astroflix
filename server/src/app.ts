@@ -44,6 +44,8 @@ import { varrerCapas } from './media/thumbs';
 import { hasFfmpeg } from './media/ffmpeg';
 import { descartarCredenciaisTelegram } from './telegram/credenciais';
 import { armazenamentoRoutes } from './routes/armazenamento';
+import { linksRoutes } from './routes/links';
+import { retomarImportacoes } from './links/importar';
 
 // `opts.fetch`, `opts.telegram` e `opts.anki` existem só para os testes injetarem
 // um Google, um Telegram e um Anki falsos. `retomarDownloads` só o app de verdade liga (index.ts): nos
@@ -181,6 +183,7 @@ export function buildApp(
   app.register(documentosRoutes, { db, config, drive });
   app.register(estudoRoutes, { db });
   app.register(armazenamentoRoutes, { db, config, drive });
+  app.register(linksRoutes, { db, config });
   // [ROUTES]
 
   if (opts?.retomarDownloads) {
@@ -198,6 +201,8 @@ export function buildApp(
       void descartarCredenciaisTelegram(db, () => telegram.aoTrocarCredenciais());
       // Os "Baixar" que o app fechou no meio continuam sozinhos.
       drive.baixador.retomar();
+      // E as importações por link que ficaram pela metade.
+      retomarImportacoes(db, config);
     });
   }
   // A casca do desktop impede o sistema de dormir (e o macOS de pôr o app em

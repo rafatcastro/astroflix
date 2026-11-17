@@ -10,6 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
+import { importacaoLink, pararImportacao } from '../links/importar';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
@@ -172,7 +173,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         collectionId: c.collection_id ?? null,
         source: origemPublica(c.source),
         // Baixar as próximas aulas não é "carregar o curso": o card fica quieto.
-        carregando: c.source === 'drive' && importacaoDrive(c.id).carregando,
+        carregando: c.source === 'drive' ? importacaoDrive(c.id).carregando : !!importacaoLink(c.id)?.carregando,
         ultimaAula: ultima
           ? { id: ultima.id, titulo: ultima.title, posicaoSec: ultima.position_sec, duracaoSec: ultima.dur ?? null }
           : null,
@@ -235,7 +236,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       collectionId: course.collection_id ?? null,
       source: origemPublica(course.source),
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
-      importacao: course.source === 'drive' ? importacaoDrive(course.id) : null,
+      // Curso de link: os vídeos vão sendo baixados e entrando (links/importar.ts).
+      importacao: course.source === 'drive' ? importacaoDrive(course.id) : importacaoLink(course.id),
       download: remoto ? downloadDe(course.id, baixadas) : null,
       pastaConectada: remoto ? pastaConectada(db, course.id) : null,
       downloadCurso: drive?.baixador.estado(course.id) ?? null,
@@ -381,6 +383,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
   app.delete('/api/courses/:id', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     if (!db.prepare('SELECT 1 FROM courses WHERE id=?').get(id)) return reply.code(404).send({ error: 'not_found' });
+    pararImportacao(id);
     const lessonIds = (db.prepare('SELECT id FROM lessons WHERE course_id=?').all(id) as any[]).map((r) => r.id);
     // O que foi baixado fica na pasta: a pessoa exclui um curso e o importa de
     // novo depois, e os arquivos (às vezes gigas) são adotados em vez de baixados

@@ -212,6 +212,18 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   último bloco inteiro). Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
   `scan/scan-telegram.ts` espelham o Drive. O `telegram_peer` do curso guarda o access hash: sem
   ele, um canal privado não é achado depois de reiniciar.
+- `links/`: **importar por link** (Adicionar → "De um link", `LinkModal.tsx`). Cola o link de uma página
+  (playlist do YouTube, página de um curso), `importar.ts` acha os vídeos e a pessoa revisa a lista
+  (desmarca, renomeia) antes de criar. Quem tira o vídeo é o **yt-dlp** (`ytdlp.ts`), opcional como o
+  ffmpeg e procurado no PATH. Site que ele conhece (YouTube, Vimeo) responde direto; página genérica
+  tem os links lidos (`pagina.ts`: iframes, `<video>`, links do mesmo site e de players conhecidos) e
+  cada um é aberto pelo yt-dlp, 4 por vez, na ordem da página (playlists e canais linkados ficam fora).
+  A descoberta é um trabalho em memória que a janela consulta (`/api/links/descobrir/:id`). Importar
+  cria um **curso local** em `DATA_DIR/links/<curso>` (sem origem nova: player, capas, nuvem e
+  progresso são os de sempre) e baixa um vídeo por vez para `.baixando/` (oculto, o scan pula),
+  movendo para `NN - <título>.mp4` (o número dá a ordem) e re-escaneando a cada um. O pedido fica em
+  `.astroflix-link.json` na pasta: ao abrir, `retomarImportacoes` continua o que faltou. Ainda não há
+  login: página que pede conta (curso assinado) não é lida.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

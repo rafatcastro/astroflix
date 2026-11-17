@@ -26,7 +26,9 @@ export function allowedRootsFor(config: AppConfig, db: Db): string[] {
   // compartilhado): as unidades detectadas não entram, ou a restrição seria
   // burlada em silêncio.
   const doSistema = config.allowedRootsFromEnv ? [] : systemRoots();
-  return semRedundancia([...config.allowedRoots, ...doSistema, ...getAllowedRootsExtra(db)]);
+  // A pasta dos cursos importados por link é do próprio app: vale mesmo com
+  // ALLOWED_ROOTS restrito ou um DATA_DIR fora da home.
+  return semRedundancia([...config.allowedRoots, ...doSistema, ...getAllowedRootsExtra(db), path.join(config.dataDir, 'links')]);
 }
 
 export async function settingsRoutes(app: FastifyInstance, opts: { db: Db }): Promise<void> {

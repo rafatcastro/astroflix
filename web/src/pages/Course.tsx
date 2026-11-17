@@ -332,7 +332,33 @@ export default function Course() {
         </span>
       )}
 
-      {data.importacao?.carregando && (
+      {data.source === 'local' && data.importacao && (data.importacao.carregando || data.importacao.erro) && (
+        <div className="mt-4" role="status">
+          {data.importacao.carregando ? (
+            <Banner tone="info">
+              Baixando os vídeos do link: {data.importacao.feitos ?? 0} de {data.importacao.total ?? 0}
+              {data.importacao.atual
+                ? ` · ${data.importacao.atual.titulo}${data.importacao.atual.pct != null ? ` (${Math.round(data.importacao.atual.pct)}%)` : ''}`
+                : ''}
+              . As aulas aparecem aqui conforme chegam.
+            </Banner>
+          ) : (
+            <Banner>
+              {data.importacao.erro === 'sem-ytdlp'
+                ? 'O download parou: o yt-dlp não foi encontrado. Instale e tente de novo.'
+                : `O download parou: ${data.importacao.erro}.`}{' '}
+              <button
+                type="button"
+                onClick={() => void api.linksTentarDeNovo(data.id).then(() => qc.invalidateQueries({ queryKey: ['course', data.id] }))}
+                className="underline underline-offset-2 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+              >
+                Tentar de novo
+              </button>
+            </Banner>
+          )}
+        </div>
+      )}
+      {data.source === 'drive' && data.importacao?.carregando && (
         <div className="mt-4" role="status">
           <Banner tone="info">
             Lendo a pasta do Drive… {allLessons.length > 0 ? `${allLessons.length} aula(s) até agora; as outras vão aparecendo.` : 'as aulas vão aparecendo aqui.'}
@@ -355,7 +381,7 @@ export default function Course() {
           )}
         </div>
       )}
-      {!data.importacao?.carregando && data.importacao?.erro && (
+      {data.source === 'drive' && !data.importacao?.carregando && data.importacao?.erro && (
         <div className="mt-4">
           <Banner>
             A leitura da pasta parou no meio: {mensagemErroDrive(data.importacao.erro)} Use <b>Re-escanear agora</b> no menu ⋯ para terminar.
