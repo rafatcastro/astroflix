@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { EXTENSAO, APP_VERSION } from '../bundled';
-import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists, moverAulaParaSubPlaylist, moverPlaylistParaDentro } from '../links/importar';
+import { adicionarAPlaylist, criarPlaylist, destinoDaPlaylist, criarSubPlaylist, listarPlaylists, moverAulaParaSubPlaylist, moverPlaylistParaDentro } from '../links/importar';
 import { acharNavegador } from '../links/navegador';
 import { abrirNoSistema } from './armazenamento';
 
@@ -131,8 +131,17 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
   app.post('/api/extensao/playlists/:id/modulos', async (req, reply) => {
     const titulo = (req.body as { titulo?: unknown } | undefined)?.titulo;
     if (typeof titulo !== 'string' || !titulo.trim()) return reply.code(400).send({ error: 'sem-titulo' });
-    const r = criarSubPlaylist(db, (req.params as { id: string }).id, titulo);
+    const onde = destinoDaPlaylist(db, (req.params as { id: string }).id, null);
+    const r = onde ? criarSubPlaylist(db, onde.id, titulo) : null;
     return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
+  });
+
+  // A playlist guardada na extensão foi movida para dentro de outra: onde ela está
+  // agora, no formato da opção do popup ("id|subpasta").
+  app.get('/api/extensao/playlists/:id/destino', async (req, reply) => {
+    const q = req.query as { modulo?: string };
+    const onde = destinoDaPlaylist(db, (req.params as { id: string }).id, q.modulo || null);
+    return onde ? { valor: `${onde.id}|${onde.modulo ?? ''}` } : reply.code(404).send({ error: 'playlist-nao-existe' });
   });
 
   app.post('/api/extensao/playlists/:id/itens', async (req, reply) => {
@@ -146,12 +155,15 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
           .map((c) => ({ nome: c.nome as string, valor: (c.valor as string).replace(/[\r\n]+/g, ' ') }))
           .slice(0, 10)
       : [];
-    const r = adicionarAPlaylist(db, config, (req.params as { id: string }).id, {
+    // Playlist movida para dentro de outra: vai para o módulo dela lá.
+    const onde = destinoDaPlaylist(db, (req.params as { id: string }).id, typeof b?.modulo === 'string' && b.modulo ? b.modulo : null);
+    if (!onde) return reply.code(404).send({ error: 'playlist-nao-existe' });
+    const r = adicionarAPlaylist(db, config, onde.id, {
       url,
       titulo: typeof b?.titulo === 'string' ? b.titulo.slice(0, 200) : url,
       pagina: typeof b?.pagina === 'string' && /^https?:\/\//i.test(b.pagina) ? b.pagina : null,
       cabecalhos,
-      modulo: typeof b?.modulo === 'string' && b.modulo ? b.modulo : null,
+      modulo: onde.modulo,
     });
     return r ? reply.code(201).send(r) : reply.code(404).send({ error: 'playlist-nao-existe' });
   });

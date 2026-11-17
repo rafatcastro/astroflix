@@ -406,6 +406,34 @@ let atualAc: { courseId: string; ac: AbortController } | null = null;
 
 export const pastaDosLinks = (config: AppConfig) => path.join(config.dataDir, 'links');
 
+// A playlist é reconhecida pelo manifesto na pasta dela, e não por morar em
+// DATA_DIR/links: re-apontada para a cópia na pasta de downloads, continua
+// playlist (o "Baixar" não some) e os vídeos novos já chegam lá.
+export const ehPlaylist = (raiz: string): boolean => fs.existsSync(path.join(raiz, MANIFESTO));
+
+/**
+ * Re-apontar uma playlist: o manifesto e o log vão para a pasta nova, que passa a
+ * receber os downloads. Os nomes relativos são os mesmos (a cópia do "Baixar para
+ * downloads" espelha a pasta), então os itens já baixados continuam achados. Se a
+ * pasta nova já tem um manifesto (outra playlist), nada muda.
+ */
+export function levarManifesto(db: Db, config: AppConfig, courseId: string, raizAntiga: string, raizNova: string): void {
+  if (path.resolve(raizAntiga) === path.resolve(raizNova) || !ehPlaylist(raizAntiga) || ehPlaylist(raizNova)) return;
+  pararImportacao(courseId);
+  for (const nome of [MANIFESTO, LOG_DO_CURSO]) {
+    const de = path.join(raizAntiga, nome);
+    if (!fs.existsSync(de)) continue;
+    try {
+      fs.renameSync(de, path.join(raizNova, nome));
+    } catch {
+      fs.copyFileSync(de, path.join(raizNova, nome));
+      fs.rmSync(de, { force: true });
+    }
+  }
+  const m = lerManifesto(raizNova);
+  if (m?.itens.some((i) => !(i.arquivo && fs.existsSync(path.join(raizNova, ...i.arquivo.split('/')))) && !i.erro)) enfileirar(db, config, courseId);
+}
+
 export function importacaoLink(courseId: string): EstadoImportacao | null {
   return estados.get(courseId) ?? null;
 }
@@ -574,7 +602,9 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
       mudou.erro = null;
       estado.feitos++;
       registrar(`ok: ${mudou.arquivo} (${fs.statSync(final).size} bytes) ← ${mudou.url ?? item.url}${item.login ? ' (com login)' : ''}`);
-      if (lerManifesto(pasta)?.exportar) {
+      const paraDownloads = lerManifesto(pasta)?.exportar ? pastaDoCurso(db, config, courseId) : null;
+      // Re-apontada para a pasta de downloads: o vídeo já chegou lá.
+      if (paraDownloads && path.resolve(paraDownloads) !== path.resolve(pasta)) {
         await levarParaDownloads(pasta, mudou.arquivo, pastaDoCurso(db, config, courseId)).catch((e) =>
           registrar(`não foi para a pasta de downloads: ${mudou.arquivo}: ${e instanceof Error ? e.message : e}`),
         );
@@ -680,10 +710,9 @@ export function criarSubPlaylist(db: Db, courseId: string, titulo: string): { pa
 }
 
 export function listarPlaylists(db: Db, config: AppConfig): Playlist[] {
-  const raiz = pastaDosLinks(config);
   const cursos = db
-    .prepare('SELECT id, title, root_path, collection_id FROM courses WHERE root_path LIKE ? AND archived=0 ORDER BY updated_at DESC')
-    .all(`${raiz}${path.sep}%`) as Array<{ id: string; title: string; root_path: string; collection_id: string | null }>;
+    .prepare("SELECT id, title, root_path, collection_id FROM courses WHERE source='local' AND archived=0 ORDER BY updated_at DESC")
+    .all() as Array<{ id: string; title: string; root_path: string; collection_id: string | null }>;
   return cursos
     .map((c) => {
       const m = lerManifesto(c.root_path);
@@ -808,6 +837,11 @@ export async function exportarPlaylist(db: Db, config: AppConfig, courseId: stri
   const destino = pastaDoCurso(db, config, courseId);
   fs.mkdirSync(destino, { recursive: true });
   const r: ResultadoExportacao = { pasta: destino, levados: 0, jaEstavam: 0, faltam: m.itens.filter((i) => !i.arquivo && !i.erro).length, falhas: 0 };
+  // A playlist já mora na pasta de downloads (re-apontada): tudo já está lá.
+  if (path.resolve(destino) === path.resolve(pasta)) {
+    r.jaEstavam = arquivosDaPlaylist(pasta).length;
+    return r;
+  }
   for (const rel of arquivosDaPlaylist(pasta)) {
     try {
       if (await levarParaDownloads(pasta, rel, destino)) r.levados++;
@@ -840,15 +874,31 @@ function novaSubpasta(pasta: string, m: Manifesto, titulo: string): string {
   return sub;
 }
 
+const CHAVE_MOVIDA = 'playlist.movida.';
+
+/**
+ * Onde fica hoje a playlist (e a sub-playlist) pedida: a mesma, se existe; a que
+ * a recebeu, se ela foi movida para dentro de outra (até algumas vezes seguidas).
+ */
+export function destinoDaPlaylist(db: Db, id: string, modulo: string | null): { id: string; modulo: string | null } | null {
+  for (let i = 0; i < 10; i++) {
+    if (db.prepare('SELECT 1 FROM courses WHERE id=?').get(id)) return { id, modulo };
+    const r = db.prepare('SELECT value FROM settings WHERE key=?').get(`${CHAVE_MOVIDA}${id}`) as { value: string } | undefined;
+    if (!r) return null;
+    const a = JSON.parse(r.value) as { id: string; raiz: string | null; subs: Record<string, string> };
+    modulo = (modulo && a.subs[modulo]) || a.raiz;
+    id = a.id;
+  }
+  return null;
+}
+
 export type ErroMover = 'nao-existe' | 'mesma' | 'nao-e-playlist';
 
 export function moverPlaylistParaDentro(db: Db, config: AppConfig, origemId: string, destinoId: string): { modulos: string[]; videos: number } | ErroMover {
   if (origemId === destinoId) return 'mesma';
   const origem = manifestoDoCurso(db, origemId);
   const destino = manifestoDoCurso(db, destinoId);
-  const raiz = pastaDosLinks(config) + path.sep;
   if (!origem || !destino) return 'nao-existe';
-  if (!origem.pasta.startsWith(raiz) || !destino.pasta.startsWith(raiz)) return 'nao-e-playlist';
   const tituloOrigem = (db.prepare('SELECT title FROM courses WHERE id=?').get(origemId) as { title: string }).title;
 
   // O download da origem para: o que faltava continua na playlist de destino.
@@ -923,6 +973,14 @@ export function moverPlaylistParaDentro(db: Db, config: AppConfig, origemId: str
     db.prepare('UPDATE courses SET updated_at=? WHERE id=?').run(new Date().toISOString(), destinoId);
     db.prepare('DELETE FROM courses WHERE id=?').run(origemId);
   });
+  // A extensão ainda tem a playlist antiga escolhida (e um "Importar várias aulas"
+  // pode estar rodando): o que chegar para ela vai para o módulo novo, não para a raiz.
+  const subs: Record<string, string> = {};
+  for (const [antiga, nova] of mapa) if (antiga) subs[antiga] = nova;
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(
+    `${CHAVE_MOVIDA}${origemId}`,
+    JSON.stringify({ id: destinoId, raiz: mapa.get(null) ?? [...mapa.values()][0] ?? null, subs }),
+  );
   // Só sobrou o que é do app (manifesto, log, .baixando).
   fs.rmSync(de, { recursive: true, force: true });
   if (md.itens.some((i) => !i.arquivo && !i.erro)) enfileirar(db, config, destinoId);
@@ -942,7 +1000,7 @@ export function moverAulaParaSubPlaylist(
     | { id: string; course_id: string; rel_path: string; titulo_editado: string | null }
     | undefined;
   const achado = aula ? manifestoDoCurso(db, aula.course_id) : null;
-  if (!aula || !achado || !achado.pasta.startsWith(pastaDosLinks(config) + path.sep)) return 'nao-existe';
+  if (!aula || !achado) return 'nao-existe';
   const { pasta } = achado;
   const m = lerManifesto(pasta)!;
   if (modulo !== null && !(m.modulos ?? []).includes(modulo)) return 'sub-nao-existe';
@@ -1010,8 +1068,7 @@ export function retentarImportacao(db: Db, config: AppConfig, courseId: string):
 
 /** Ao abrir o app: continua os cursos de link que ficaram pela metade. */
 export function retomarImportacoes(db: Db, config: AppConfig): void {
-  const raiz = pastaDosLinks(config);
-  const cursos = db.prepare('SELECT id, root_path FROM courses WHERE root_path LIKE ?').all(`${raiz}${path.sep}%`) as Array<{
+  const cursos = db.prepare("SELECT id, root_path FROM courses WHERE source='local'").all() as Array<{
     id: string;
     root_path: string;
   }>;

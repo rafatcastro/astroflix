@@ -268,7 +268,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   outra playlist** (menu ⋯, `moverPlaylistParaDentro`, `POST /api/links/playlists/:id/mover`): a playlist vira
   a subpasta `NN - <nome>` da outra (as sub-playlists dela, módulos irmãos `NN - <nome> - <sub>`, porque o scan
   só conhece um nível), os itens entram no manifesto do destino, o progresso, o título renomeado e os
-  flashcards vão para as aulas novas (achadas pelo caminho novo) e a playlist de origem é excluída. **Arrastar e
+  flashcards vão para as aulas novas (achadas pelo caminho novo) e a playlist de origem é excluída
+  (fica `playlist.movida.<id>` em `settings`: `destinoDaPlaylist` leva o que a extensão ainda mandar
+  para o id antigo ao módulo novo, e o popup troca a escolha guardada). **A playlist é reconhecida
+  pelo manifesto na pasta** (`ehPlaylist`), não por morar em `DATA_DIR/links`: re-apontada (por
+  exemplo para a cópia na pasta de downloads), `levarManifesto` leva o manifesto e o log para a pasta
+  nova, o "Baixar" continua e os vídeos novos já chegam lá. **Arrastar e
   soltar** (HTML5, `dragDropEnabled: false` no `tauri.conf.json`, senão o Windows engole o arraste): uma
   playlist sobre outra no menu da categoria faz o mesmo mover; uma aula da playlist sobre uma sub-playlist
   (o chip ou o cabeçalho do módulo) ou em "Fora das sub-playlists" muda a aula de subpasta
@@ -290,10 +295,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   nem maiúscula), espera o vídeo novo (20 s) e repete. Aula sem vídeo (texto, exercício, player
   protegido) é **pulada** e listada; para sem o botão, se nem o vídeo nem o título trocarem depois do
   clique, depois de 15 puladas seguidas ou em 500. A página tem mais de um "Próxima" (o de dentro da
-  aula troca a questão), então `clicarNoBotao` escolhe: com `<video>` na página, o "Próxima" logo
-  **abaixo do vídeo** (o mais perto, de preferência na mesma coluna); sem `<video>` (o **Gabarito de
-  questões**), o **segundo** com a classe `text-sm font-family-body`. Se o clique não trocou a aula,
-  tenta o botão seguinte dessa ordem antes de desistir.
+  aula troca a questão), então `clicarNoBotao` escolhe: com o título de aula de vídeo do Ferretto (o
+  `<span class="font-family-headlines text-headings text-xl sm:text-2xl font-semibold leading-8">`),
+  o "Próxima" logo **abaixo do `<video>`** (ou do título, se o vídeo está num iframe); sem esse título
+  (o **Gabarito de questões**), o botão com as classes `text-sm font-family-body` (havendo dois, o
+  segundo). A aula trocou se o título ou o endereço da aba mudou; se não trocou, tenta o botão
+  seguinte dessa ordem antes de desistir.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

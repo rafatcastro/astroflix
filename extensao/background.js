@@ -192,59 +192,69 @@ async function tituloDaAba(tabId) {
 // Clica no botão (ou link) visível e habilitado cujo texto começa com `texto`
 // ("Próxima", "Próxima aula"), sem ligar para acento e maiúscula. A página tem
 // mais de um "Próxima" (o de dentro da aula, que troca a questão, e o que vai
-// para a próxima aula), então a ordem de preferência é:
-// - com <video> na página: o que está logo abaixo do vídeo (o mais perto, de
-//   preferência na mesma coluna); o de dentro da aula fica em outro lugar;
-// - sem <video> (texto, Gabarito de questões): o segundo com a classe
-//   `text-sm font-family-body` (no Ferretto, o primeiro troca a questão).
+// para a próxima aula). No Ferretto, a aula de vídeo tem o título num
+// <span class="font-family-headlines text-headings text-xl sm:text-2xl font-semibold leading-8">:
+// - com esse título: o "Próxima" logo abaixo do <video> (o mais perto, de
+//   preferência na mesma coluna); sem <video> visível (player num iframe), o
+//   logo abaixo do título;
+// - sem ele (Gabarito de questões, texto): o botão com as classes
+//   `text-sm font-family-body` (havendo dois, o segundo: o primeiro troca a questão).
 // Depois vêm os outros, na ordem da página. `tentativa`: qual da lista clicar
 // (0 = o preferido; a aula que não trocou tenta o seguinte). Devolve quantos há.
+const CLASSES_DO_TITULO = ['font-family-headlines', 'text-headings', 'text-xl', 'sm:text-2xl', 'font-semibold', 'leading-8'];
+const CLASSES_DO_BOTAO = ['text-sm', 'font-family-body'];
+
 async function clicarNoBotao(tabId, texto, tentativa = 0) {
   const [r] = await chrome.scripting
     .executeScript({
       target: { tabId },
-      args: [texto, tentativa],
-      func: (txt, ind) => {
+      args: [texto, tentativa, CLASSES_DO_TITULO, CLASSES_DO_BOTAO],
+      func: (txt, ind, classesTitulo, classesBotao) => {
         const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
         const alvo = norm(txt);
         const visivel = (e) => {
           const r = e.getBoundingClientRect();
           return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden';
         };
+        const temClasses = (e, cs) => cs.every((c) => e.classList.contains(c));
         const todos = [...document.querySelectorAll('button, a, [role=button]')].filter(
           (e) => visivel(e) && !e.disabled && e.getAttribute('aria-disabled') !== 'true' && norm(e.innerText || e.getAttribute('aria-label') || '').startsWith(alvo),
         );
-        // O vídeo da aula: o maior visível (um preview pequeno não conta).
-        const video = [...document.querySelectorAll('video')]
-          .filter(visivel)
-          .sort((a, b) => {
-            const ra = a.getBoundingClientRect();
-            const rb = b.getBoundingClientRect();
-            return rb.width * rb.height - ra.width * ra.height;
-          })[0];
+        const titulo = [...document.querySelectorAll('span')].find((e) => temClasses(e, classesTitulo) && visivel(e));
         let preferidos = [];
-        if (video) {
+        let regra;
+        if (titulo) {
+          // O vídeo da aula: o maior visível (um preview pequeno não conta).
+          const video = [...document.querySelectorAll('video')]
+            .filter(visivel)
+            .sort((a, b) => {
+              const ra = a.getBoundingClientRect();
+              const rb = b.getBoundingClientRect();
+              return rb.width * rb.height - ra.width * ra.height;
+            })[0];
+          const ancora = (video ?? titulo).getBoundingClientRect();
+          regra = video ? 'abaixo do vídeo' : 'abaixo do título';
           // Os dois retângulos são da mesma tela: a distância vale mesmo com o botão fora dela.
-          const v = video.getBoundingClientRect();
           const abaixo = todos
             .map((e) => {
               const r = e.getBoundingClientRect();
-              const mesmaColuna = r.right > v.left && r.left < v.right;
-              return { e, d: r.top - v.bottom, mesmaColuna };
+              return { e, d: r.top - ancora.bottom, mesmaColuna: r.right > ancora.left && r.left < ancora.right };
             })
             .filter((x) => x.d >= -8);
           abaixo.sort((a, b) => (a.mesmaColuna === b.mesmaColuna ? a.d - b.d : a.mesmaColuna ? -1 : 1));
           preferidos = abaixo.map((x) => x.e);
         } else {
-          const comClasse = todos.filter((e) => e.matches('.text-sm.font-family-body') || e.querySelector('.text-sm.font-family-body'));
+          regra = 'classe text-sm font-family-body';
+          // A classe no próprio botão ou no texto dentro dele.
+          const comClasse = todos.filter((e) => temClasses(e, classesBotao) || [...e.querySelectorAll('*')].some((d) => temClasses(d, classesBotao)));
           preferidos = comClasse.length >= 2 ? [comClasse[1], comClasse[0], ...comClasse.slice(2)] : comClasse;
         }
         const ordem = [...preferidos, ...todos.filter((e) => !preferidos.includes(e))];
         const b = ordem[ind];
-        if (!b) return { clicou: false, total: ordem.length, comVideo: !!video };
+        if (!b) return { clicou: false, total: ordem.length, regra };
         b.scrollIntoView({ block: 'center' });
         b.click();
-        return { clicou: true, total: ordem.length, comVideo: !!video };
+        return { clicou: true, total: ordem.length, regra };
       },
     })
     .catch(() => [null]);
@@ -264,7 +274,11 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
   const usados = new Set();
   const falhas = [];
   let desde = 0;
-  let ultimoTitulo = null;
+  // A aula trocou se o título ou o endereço da aba mudou: duas questões seguidas
+  // do gabarito podem ter o mesmo título, mas não o mesmo endereço.
+  let ultimaMarca = null;
+  const marca = async (titulo) => `${titulo}|${(await chrome.tabs.get(tabId).catch(() => null))?.url ?? ''}`;
+  let regra = '';
   let puladasSeguidas = 0;
   let fim = 'ok';
   // O botão clicado na última volta (a posição na ordem de clicarNoBotao): se a
@@ -285,13 +299,15 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
     // O título troca junto com o vídeo, às vezes um instante depois.
     await dormir(800);
     let titulo = await tituloDaAba(tabId);
-    if (n > 0 && titulo === ultimoTitulo) {
+    let m = await marca(titulo);
+    if (n > 0 && m === ultimaMarca) {
       await dormir(2000);
       titulo = await tituloDaAba(tabId);
+      m = await marca(titulo);
     }
-    // Clicou e nada mudou (nem vídeo, nem título): era um "Próxima" de dentro da
-    // aula. Tenta o botão seguinte; sem mais nenhum, a página travou ou acabou.
-    if (!v && n > 0 && titulo === ultimoTitulo) {
+    // Clicou e nada mudou (nem vídeo, nem título, nem endereço): era um "Próxima"
+    // de dentro da aula. Tenta o botão seguinte; sem mais nenhum, a página travou ou acabou.
+    if (!v && n > 0 && m === ultimaMarca) {
       if (indiceUsado + 1 < botoes) {
         indiceUsado++;
         desde = Date.now();
@@ -299,7 +315,7 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
         botoes = r.total;
         if (r.clicou) continue;
       }
-      fim = `a aula "${titulo}" não trocou depois de "${textoBotao}"`;
+      fim = `a aula "${titulo}" não trocou depois de "${textoBotao}" (botão escolhido pela regra: ${regra || '?'})`;
       break;
     }
     titulo ||= `Aula ${n + 1}`;
@@ -333,11 +349,12 @@ async function importarSeguindo({ tabId, playlist, modulo, textoBotao }) {
       }
     }
     n++;
-    ultimoTitulo = titulo;
+    ultimaMarca = m;
     desde = Date.now();
     indiceUsado = 0;
     const r = await clicarNoBotao(tabId, textoBotao, 0);
     botoes = r.total;
+    regra = r.regra ?? '';
     if (!r.clicou) break; // sem "Próxima": era a última aula
   }
   await estado({ ativo: false, atual: null, terminou: parar ? 'parado' : fim });

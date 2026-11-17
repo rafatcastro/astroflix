@@ -12,6 +12,7 @@ import type { ServicosTelegram } from '../telegram/servicos';
 import { respostaDeFalhaTelegram } from '../telegram/stream';
 import { reconcileTelegramCourse } from '../scan/scan-telegram';
 import { adotarArquivosDaPasta, reorganizarBaixados } from '../armazenamento';
+import { levarManifesto } from '../links/importar';
 import type { ServicosDrive } from '../drive/servicos';
 import { statusDaFalha, resourceKeyDoCurso } from '../drive/status';
 
@@ -55,8 +56,11 @@ export async function migrationRoutes(
     if (fonte === 'drive' || fonte === 'telegram') return reply.code(409).send({ error: `curso-do-${fonte}` });
     const v = validatePath((req.body as { path?: string })?.path);
     if (!v.ok) return reply.code(v.code).send({ error: 'invalid_path' });
+    const antiga = (db.prepare('SELECT root_path FROM courses WHERE id=?').get(id) as { root_path: string } | undefined)?.root_path;
     const r = reconcileCourse(db, config, id, { newRootPath: v.path });
     if ('status' in r) return reply.code(409).send(r);
+    // Playlist: continua playlist na pasta nova (o "Baixar" fica e o que vier já chega lá).
+    if (antiga) levarManifesto(db, config, id, antiga, v.path);
     return r;
   });
 

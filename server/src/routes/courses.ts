@@ -10,7 +10,7 @@ import { reconcileCourse } from '../scan/reconcile';
 import { isWithinRoots } from './fs';
 import { allowedRootsFor } from './settings';
 import { importacaoDrive } from '../scan/scan-drive';
-import { exportarPlaylist, importacaoLink, manifestoDoCurso, nomeDoModulo, pararImportacao, pastaDosLinks } from '../links/importar';
+import { ehPlaylist, exportarPlaylist, importacaoLink, manifestoDoCurso, nomeDoModulo, pararImportacao } from '../links/importar';
 import { adotarArquivosDaPasta, apagarBaixados, aulasBaixadas, pastaConectada } from '../armazenamento';
 import { apagarCacheDoCurso } from '../cache-aulas';
 import type { ServicosDrive } from '../drive/servicos';
@@ -122,7 +122,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     return reply.code(204).send();
   });
 
-  const ehDeLink = (rootPath: string) => rootPath.startsWith(pastaDosLinks(config) + path.sep);
+  const ehDeLink = (rootPath: string) => ehPlaylist(rootPath);
 
   app.get('/api/courses', async (req) => {
     const archived = (req.query as { archived?: string }).archived === '1' ? 1 : 0;
@@ -245,7 +245,7 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       // Curso de link (playlist da extensão): a página mostra como acrescentar aulas.
       deLink: ehDeLink(course.root_path),
       // As sub-playlists (módulos) da playlist, inclusive as que ainda não têm aula.
-      subPlaylists: course.root_path.startsWith(pastaDosLinks(config) + path.sep)
+      subPlaylists: ehDeLink(course.root_path)
         ? (manifestoDoCurso(db, course.id)?.m.modulos ?? []).map((p) => ({ pasta: p, nome: nomeDoModulo(p) }))
         : [],
       // "Baixar para downloads" já pedido: o menu mostra "Abrir pasta baixada".
@@ -368,10 +368,12 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
   const playlistsDa = (cat: string) =>
     (db
       .prepare(
-        `SELECT id FROM courses WHERE archived=0 AND source='local' AND root_path LIKE ?
+        `SELECT id, root_path FROM courses WHERE archived=0 AND source='local'
            AND ${cat === 'sem' ? 'collection_id IS NULL' : 'collection_id=?'} ORDER BY title`,
       )
-      .all(`${pastaDosLinks(config)}${path.sep}%`, ...(cat === 'sem' ? [] : [cat])) as Array<{ id: string }>).map((r) => r.id);
+      .all(...(cat === 'sem' ? [] : [cat])) as Array<{ id: string; root_path: string }>)
+      .filter((r) => ehDeLink(r.root_path))
+      .map((r) => r.id);
 
   app.post('/api/collections/:cat/baixar', async (req, reply) => {
     const cat = (req.params as { cat: string }).cat;

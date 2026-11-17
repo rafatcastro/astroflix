@@ -111,7 +111,18 @@ async function carregarPlaylists(escolher) {
       sel.appendChild(s);
     }
   }
-  const alvo = escolher ?? cfg.ultimaPlaylist;
+  let alvo = escolher ?? cfg.ultimaPlaylist;
+  // A playlist guardada foi movida para dentro de outra: escolhe o módulo dela lá
+  // (sem isso o popup caía na primeira da lista, e as aulas iam para a raiz).
+  if (alvo && ![...sel.options].some((o) => o.value === alvo)) {
+    const [id, modulo] = alvo.split('|');
+    const r = await api(`/api/extensao/playlists/${id}/destino?modulo=${encodeURIComponent(modulo || '')}`).catch(() => null);
+    if (r?.valor) {
+      alvo = r.valor;
+      cfg.ultimaPlaylist = alvo;
+      await chrome.storage.local.set({ ultimaPlaylist: alvo });
+    }
+  }
   if (alvo && [...sel.options].some((o) => o.value === alvo)) sel.value = alvo;
   if (!playlists.length) msg('Nenhuma playlist ainda: crie uma com o +.');
   return playlists;
