@@ -268,7 +268,11 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   outra playlist** (menu ⋯, `moverPlaylistParaDentro`, `POST /api/links/playlists/:id/mover`): a playlist vira
   a subpasta `NN - <nome>` da outra (as sub-playlists dela, módulos irmãos `NN - <nome> - <sub>`, porque o scan
   só conhece um nível), os itens entram no manifesto do destino, o progresso, o título renomeado e os
-  flashcards vão para as aulas novas (achadas pelo caminho novo) e a playlist de origem é excluída. **"Baixar para downloads"** (menu ⋯ da playlist e o "Baixar" da categoria,
+  flashcards vão para as aulas novas (achadas pelo caminho novo) e a playlist de origem é excluída. **Arrastar e
+  soltar** (HTML5, `dragDropEnabled: false` no `tauri.conf.json`, senão o Windows engole o arraste): uma
+  playlist sobre outra no menu da categoria faz o mesmo mover; uma aula da playlist sobre uma sub-playlist
+  (o chip ou o cabeçalho do módulo) ou em "Fora das sub-playlists" muda a aula de subpasta
+  (`moverAulaParaSubPlaylist`, `POST /api/links/aulas/:id/mover`), indo para o fim dela com o progresso. **"Baixar para downloads"** (menu ⋯ da playlist e o "Baixar" da categoria,
   `exportarPlaylist`): os vídeos vão para a pasta de armazenamento (`pastaDoCurso`), com as subpastas
   das sub-playlists, por hard link (mesmo disco, sem ocupar o dobro) ou cópia; `manifesto.exportar`
   faz cada vídeo que chegar depois ir também. Não entram em `baixados`: o app nunca apaga essa cópia. O título da aula na extensão vem de `span.font-family-headlines` (Ferretto),

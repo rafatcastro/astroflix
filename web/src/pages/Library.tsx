@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type DragEvent, type ReactNode } from 'react';
 import { escolherPasta } from '../lib/desktop';
 import CabecalhoCategoria, { SEM } from '../components/CabecalhoCategoria';
 import { Link } from 'react-router-dom';
@@ -41,6 +41,20 @@ function paradaEm(c: CourseSummary): string | null {
   return u ? `${u.titulo} · parou em ${formatDuration(u.posicaoSec)}` : null;
 }
 
+// Arrastar uma playlist e soltar sobre outra: ela vira uma sub-playlist (módulo) da outra.
+interface Arraste {
+  draggable: true;
+  onDragStart: (e: DragEvent) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: DragEvent) => void;
+  onDragLeave: () => void;
+  onDrop: (e: DragEvent) => void;
+  /** Outra playlist está sendo arrastada por cima desta. */
+  alvo: boolean;
+}
+const TIPO_ARRASTE = 'application/x-astroflix-playlist';
+const semAlvo = ({ alvo: _alvo, ...resto }: Arraste) => resto;
+
 // Card-pôster da estante: a capa é o card; título/progresso vivem sobre o scrim.
 function CourseCard({
   c,
@@ -52,8 +66,10 @@ function CourseCard({
   selectable = false,
   selected = false,
   onToggleSelect,
+  arraste,
 }: {
   c: CourseSummary;
+  arraste?: Arraste;
   featured?: boolean;
   eyebrow?: boolean;
   archived?: boolean;
@@ -70,7 +86,8 @@ function CourseCard({
       to={parada && !selectable ? `/lesson/${c.ultimaAula!.id}` : `/course/${c.id}`}
       aria-pressed={selectable ? selected : undefined}
       onClick={selectable ? (e) => { e.preventDefault(); onToggleSelect?.(c.id); } : undefined}
-      className={`group relative block aspect-video overflow-hidden rounded-xl bg-neutral-900 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${featured ? ' sm:col-span-2 sm:row-span-2' : ''}${selected ? ' ring-2 ring-blue-600' : ''}`}
+      {...(arraste ? semAlvo(arraste) : {})}
+      className={`group relative block aspect-video overflow-hidden rounded-xl bg-neutral-900 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${featured ? ' sm:col-span-2 sm:row-span-2' : ''}${selected || arraste?.alvo ? ' ring-2 ring-blue-600' : ''}${arraste?.alvo ? ' ring-4' : ''}`}
     >
       <div className="absolute inset-0 grid place-items-center bg-neutral-900 text-neutral-700">
         <Play size={featured ? 48 : 32} />
@@ -134,8 +151,10 @@ function CourseRow({
   selectable = false,
   selected = false,
   onToggleSelect,
+  arraste,
 }: {
   c: CourseSummary;
+  arraste?: Arraste;
   eyebrow?: boolean;
   archived?: boolean;
   onUnarchive?: (id: string) => void;
@@ -151,7 +170,8 @@ function CourseRow({
       to={parada && !selectable ? `/lesson/${c.ultimaAula!.id}` : `/course/${c.id}`}
       aria-pressed={selectable ? selected : undefined}
       onClick={selectable ? (e) => { e.preventDefault(); onToggleSelect?.(c.id); } : undefined}
-      className={`group flex items-center gap-3 rounded-xl bg-neutral-900 p-2.5 pr-3 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${selected ? ' ring-2 ring-blue-600' : ''}`}
+      {...(arraste ? semAlvo(arraste) : {})}
+      className={`group flex items-center gap-3 rounded-xl bg-neutral-900 p-2.5 pr-3 outline-none transition-shadow motion-reduce:transition-none hover:ring-2 hover:ring-blue-600 focus-visible:ring-2 focus-visible:ring-blue-600${selected || arraste?.alvo ? ' ring-2 ring-blue-600' : ''}${arraste?.alvo ? ' ring-4' : ''}`}
     >
       {selectable && (
         <span
@@ -541,12 +561,60 @@ export default function Library({ categoria }: { categoria: string }) {
     exitSelect();
   };
 
+  // Arrastar uma playlist sobre outra: pergunta e a transforma num módulo da outra.
+  const [arrastando, setArrastando] = useState<string | null>(null);
+  const [alvoArraste, setAlvoArraste] = useState<string | null>(null);
+  const [pedidoMover, setPedidoMover] = useState<{ origem: CourseSummary; destino: CourseSummary } | null>(null);
+  const arrasteDe = (c: CourseSummary): Arraste => ({
+    draggable: true,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(TIPO_ARRASTE, c.id);
+      e.dataTransfer.effectAllowed = 'move';
+      setArrastando(c.id);
+    },
+    onDragEnd: () => {
+      setArrastando(null);
+      setAlvoArraste(null);
+    },
+    onDragOver: (e) => {
+      if (!arrastando || arrastando === c.id) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (alvoArraste !== c.id) setAlvoArraste(c.id);
+    },
+    onDragLeave: () => setAlvoArraste((a) => (a === c.id ? null : a)),
+    onDrop: (e) => {
+      e.preventDefault();
+      const origem = (courses ?? []).find((x) => x.id === e.dataTransfer.getData(TIPO_ARRASTE));
+      setArrastando(null);
+      setAlvoArraste(null);
+      if (origem && origem.id !== c.id) setPedidoMover({ origem, destino: c });
+    },
+    alvo: alvoArraste === c.id,
+  });
+  const moverPlaylist = async () => {
+    const p = pedidoMover;
+    setPedidoMover(null);
+    if (!p) return;
+    try {
+      await api.moverPlaylistParaDentro(p.origem.id, p.destino.id);
+      refresh();
+      qc.invalidateQueries({ queryKey: ['course', p.destino.id] });
+      setNotice(`"${p.origem.title}" agora é um módulo de "${p.destino.title}".`);
+    } catch {
+      setNotice('Não deu para mover a playlist. Tente de novo.');
+    }
+  };
+
   // Props compartilhadas dos cards: em modo seleção alternam; fora dele, o menu ⋯
   // (só em Ativos — em Arquivados o card já tem o botão Desarquivar).
   const cardProps = (c: CourseSummary) =>
     selectMode
       ? { selectable: true, selected: selected.has(c.id), onToggleSelect: toggleSelect }
-      : { menu: tab === 'active' ? <CourseMenu course={c} onNotice={setNotice} noCartao /> : undefined };
+      : {
+          menu: tab === 'active' ? <CourseMenu course={c} onNotice={setNotice} noCartao /> : undefined,
+          arraste: tab === 'active' && c.deLink ? arrasteDe(c) : undefined,
+        };
 
   // O destaque é o ÚLTIMO CURSO ACESSADO (lastActivityAt mais recente); o resto
   // mantém a ordem do servidor. Sem atividade nenhuma, nada se move. Só em Ativos.
@@ -944,6 +1012,15 @@ export default function Library({ categoria }: { categoria: string }) {
         />
       )}
       {picking === 'drive-link' && <DriveLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
+      {pedidoMover && (
+        <ConfirmDialog
+          title={`Mover "${pedidoMover.origem.title}" para dentro de "${pedidoMover.destino.title}"?`}
+          message="Ela vira um módulo da outra playlist (uma pasta dentro dela), com os vídeos, o progresso e os flashcards. As sub-playlists dela viram módulos também."
+          confirmLabel="Mover"
+          onConfirm={() => void moverPlaylist()}
+          onCancel={() => setPedidoMover(null)}
+        />
+      )}
       {picking === 'playlist' && <NovaPlaylistModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {picking === 'link' && <LinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}
       {picking === 'telegram' && <TelegramLinkModal categoriaId={categoria === SEM ? undefined : categoria} onClose={() => setPicking(null)} />}

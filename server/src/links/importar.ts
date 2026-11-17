@@ -565,7 +565,9 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
         baixado = await baixar(novo, item.pagina!);
       }
       fs.mkdirSync(destinoDir, { recursive: true });
-      const final = path.join(destinoDir, `${nome}${path.extname(baixado)}`);
+      // Uma aula arrastada para esta sub-playlist pode ter ficado com o mesmo número: não grava por cima.
+      let final = path.join(destinoDir, `${nome}${path.extname(baixado)}`);
+      for (let n = 2; fs.existsSync(final); n++) final = path.join(destinoDir, `${nome} (${n})${path.extname(baixado)}`);
       fs.renameSync(baixado, final);
       // Relativo à pasta do curso: "01 - Funções/03 - Aula.mp4".
       mudou.arquivo = path.relative(pasta, final).split(path.sep).join('/');
@@ -925,6 +927,69 @@ export function moverPlaylistParaDentro(db: Db, config: AppConfig, origemId: str
   fs.rmSync(de, { recursive: true, force: true });
   if (md.itens.some((i) => !i.arquivo && !i.erro)) enfileirar(db, config, destinoId);
   return { modulos: [...mapa.values()].map(nomeDoModulo), videos: relNovo.size };
+}
+
+// ---------- Arrastar uma aula para outra sub-playlist ----------
+
+/** null = fora das sub-playlists (na raiz da playlist). */
+export function moverAulaParaSubPlaylist(
+  db: Db,
+  config: AppConfig,
+  lessonId: string,
+  modulo: string | null,
+): 'ok' | 'nao-existe' | 'sub-nao-existe' {
+  const aula = db.prepare('SELECT id, course_id, rel_path, titulo_editado FROM lessons WHERE id=?').get(lessonId) as
+    | { id: string; course_id: string; rel_path: string; titulo_editado: string | null }
+    | undefined;
+  const achado = aula ? manifestoDoCurso(db, aula.course_id) : null;
+  if (!aula || !achado || !achado.pasta.startsWith(pastaDosLinks(config) + path.sep)) return 'nao-existe';
+  const { pasta } = achado;
+  const m = lerManifesto(pasta)!;
+  if (modulo !== null && !(m.modulos ?? []).includes(modulo)) return 'sub-nao-existe';
+  const partes = aula.rel_path.split('/');
+  const atual = partes.length > 1 ? partes[0] : null;
+  if (atual === modulo) return 'ok';
+  const de = path.join(pasta, ...partes);
+  if (!fs.existsSync(de)) return 'nao-existe';
+
+  // Vai para o fim da sub-playlist: o número na frente do nome dá a ordem.
+  const dir = modulo ? path.join(pasta, modulo) : pasta;
+  fs.mkdirSync(dir, { recursive: true });
+  let maior = 0;
+  for (const f of fs.readdirSync(dir)) {
+    const n = /^(\d+)\s*-\s/.exec(f);
+    if (n && fs.statSync(path.join(dir, f)).isFile()) maior = Math.max(maior, Number(n[1]));
+  }
+  const nomeSemNumero = partes[partes.length - 1].replace(/^\d+\s*-\s*/, '');
+  const base = `${String(maior + 1).padStart(2, '0')} - ${nomeSemNumero}`;
+  let alvo = path.join(dir, base);
+  for (let n = 2; fs.existsSync(alvo); n++) alvo = path.join(dir, `${path.basename(base, path.extname(base))} (${n})${path.extname(base)}`);
+  fs.renameSync(de, alvo);
+  const rel = path.relative(pasta, alvo).split(path.sep).join('/');
+
+  const item = m.itens.find((i) => i.arquivo === aula.rel_path);
+  if (item) {
+    item.arquivo = rel;
+    item.modulo = modulo;
+  }
+  gravarManifesto(pasta, m);
+  reconcileCourse(db, config, aula.course_id);
+
+  // O re-escaneio religa pelo nome do arquivo só quando ele é único; senão a aula
+  // nova é outra linha, e o progresso, o título e os cards passam para ela.
+  const nova = db.prepare('SELECT id FROM lessons WHERE course_id=? AND rel_path=?').get(aula.course_id, rel) as { id: string } | undefined;
+  if (nova && nova.id !== aula.id) {
+    transaction(db, () => {
+      db.prepare(
+        `INSERT OR REPLACE INTO progress (lesson_id, position_sec, furthest_sec, duration_sec, completed, completed_at, auto_completed, updated_at)
+         SELECT ?, position_sec, furthest_sec, duration_sec, completed, completed_at, auto_completed, updated_at FROM progress WHERE lesson_id=?`,
+      ).run(nova.id, aula.id);
+      if (aula.titulo_editado) db.prepare('UPDATE lessons SET titulo_editado=?, title=? WHERE id=?').run(aula.titulo_editado, aula.titulo_editado, nova.id);
+      db.prepare('UPDATE flashcards SET lesson_id=? WHERE lesson_id=?').run(nova.id, aula.id);
+      db.prepare('DELETE FROM lessons WHERE id=?').run(aula.id);
+    });
+  }
+  return 'ok';
 }
 
 /** Excluir o curso no meio: para o download dele. */

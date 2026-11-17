@@ -613,6 +613,9 @@ export const api = {
   /** A playlist vira uma sub-playlist (módulo) da outra, com os vídeos, o progresso e os flashcards. */
   moverPlaylistParaDentro: (courseId: string, destino: string) =>
     jsonFetch<{ modulos: string[]; videos: number }>(`/api/links/playlists/${courseId}/mover`, { method: 'POST', body: JSON.stringify({ destino }) }),
+  /** Arrastar a aula para outra sub-playlist; null = fora delas. */
+  moverAulaParaSubPlaylist: (lessonId: string, modulo: string | null) =>
+    jsonFetch<void>(`/api/links/aulas/${lessonId}/mover`, { method: 'POST', body: JSON.stringify({ modulo }) }),
   renomearAula: (lessonId: string, titulo: string) =>
     jsonFetch<{ id: string; title: string }>(`/api/lessons/${lessonId}`, { method: 'PATCH', body: JSON.stringify({ titulo }) }),
   linksEntrar: (link: string) => jsonFetch<void>('/api/links/entrar', { method: 'POST', body: JSON.stringify({ link }) }),

@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import type { DragEvent, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { api, materialUrl } from '../api/client';
 import { formatBytes, formatDuration } from '../lib/format';
@@ -18,7 +18,10 @@ export default function LessonGrid({
   onToggleComplete,
   onMenu,
   onAbrirArquivo,
+  arrastar,
 }: {
+  /** Playlist: a aula pode ser arrastada para uma sub-playlist. */
+  arrastar?: (l: LessonDTO) => { draggable?: boolean; onDragStart?: (e: DragEvent) => void; onDragEnd?: () => void };
   itens: Array<LessonDTO | MaterialDTO>;
   /** O título dentro da árvore de pastas (sem o prefixo da pasta); sem ele, o da aula. */
   titulos?: Map<string, string>;
@@ -52,7 +55,7 @@ export default function LessonGrid({
             </div>
           </a>
         ) : (
-        <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative" onContextMenu={onMenu ? (e) => onMenu(l, e) : undefined}>
+        <div key={l.id} className="bg-neutral-900 rounded-lg overflow-hidden relative" onContextMenu={onMenu ? (e) => onMenu(l, e) : undefined} {...arrastar?.(l)}>
           <Link to={`/lesson/${l.id}`}>
             {/* Tocar pela rede é o normal da aula remota: nada de cinza. Só a que falta no disco fica apagada. */}
             <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : ''}`}>

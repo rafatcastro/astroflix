@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useState, useEffect, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
@@ -57,6 +57,9 @@ export default function Course() {
   // "Renomear" (botão direito da aula) e "Nova sub-playlist" (playlist da extensão).
   const [renomeando, setRenomeando] = useState<LessonDTO | null>(null);
   const [novaSub, setNovaSub] = useState(false);
+  // Arrastar uma aula da playlist e soltar numa sub-playlist (ou fora delas).
+  const [aulaArrastada, setAulaArrastada] = useState<string | null>(null);
+  const [alvoSub, setAlvoSub] = useState<string | null | undefined>(undefined);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
 
@@ -124,12 +127,52 @@ export default function Course() {
     e.preventDefault();
     setMenuAula({ l, x: e.clientX, y: e.clientY });
   };
+  // Só na playlist: a aula vira um arquivo de outra subpasta (servidor), com o progresso.
+  const arrasteDaAula = (l: LessonDTO) =>
+    data.deLink && !l.missing
+      ? {
+          draggable: true,
+          onDragStart: (e: DragEvent) => {
+            e.dataTransfer.setData('application/x-astroflix-aula', l.id);
+            e.dataTransfer.effectAllowed = 'move';
+            setAulaArrastada(l.id);
+          },
+          onDragEnd: () => {
+            setAulaArrastada(null);
+            setAlvoSub(undefined);
+          },
+        }
+      : {};
+  const soltarEm = (modulo: string | null) => ({
+    onDragOver: (e: DragEvent) => {
+      if (!aulaArrastada) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (alvoSub !== modulo) setAlvoSub(modulo);
+    },
+    onDragLeave: () => setAlvoSub((a) => (a === modulo ? undefined : a)),
+    onDrop: (e: DragEvent) => {
+      e.preventDefault();
+      const lid = e.dataTransfer.getData('application/x-astroflix-aula');
+      setAulaArrastada(null);
+      setAlvoSub(undefined);
+      if (!lid) return;
+      api.moverAulaParaSubPlaylist(lid, modulo).then(
+        () => {
+          qc.invalidateQueries({ queryKey: ['course', id] });
+          setNotice(modulo ? `Aula movida para "${(data.subPlaylists ?? []).find((s) => s.pasta === modulo)?.nome ?? modulo}".` : 'Aula movida para fora das sub-playlists.');
+        },
+        () => setNotice('Não deu para mover a aula. Tente de novo.'),
+      );
+    },
+  });
   const arvore = montarArvore(allLessons, data.materials);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
       key={l.id}
-      className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}`}
+      className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 ${l.missing ? 'opacity-50' : ''}${aulaArrastada === l.id ? ' opacity-50' : ''}`}
       onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
+      {...arrasteDaAula(l)}
     >
       <Link
         to={`/lesson/${l.id}`}
@@ -219,6 +262,7 @@ export default function Course() {
             onToggleComplete={onToggle}
             onMenu={abrirMenuAula}
             onAbrirArquivo={abrirArquivo}
+            arrastar={data.deLink ? arrasteDaAula : undefined}
           />
         ) : (
           <div key={chave} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
@@ -236,8 +280,14 @@ export default function Course() {
       const recolhido = recolhidosDoCurso.includes(no.chave);
       const concluidas = no.aulas.filter((l) => l.completed).length;
       const id = `pasta-${no.chave}`;
+      // Na playlist, o módulo de uma sub-playlist também recebe a aula arrastada.
+      const ehSub = !!data.deLink && (data.subPlaylists ?? []).some((sp) => sp.pasta === no.chave);
       saida.push(
-        <section key={no.chave} className={profundidade ? 'ml-2 border-l border-neutral-800 pl-3' : ''}>
+        <section
+          key={no.chave}
+          {...(ehSub ? soltarEm(no.chave) : {})}
+          className={`${profundidade ? 'ml-2 border-l border-neutral-800 pl-3' : ''}${ehSub && alvoSub === no.chave ? ' rounded-lg ring-2 ring-blue-600' : ''}`}
+        >
           <h2 className="mb-1">
             <button
               type="button"
@@ -341,11 +391,27 @@ export default function Course() {
         <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
           <span className="text-neutral-400">Sub-playlists:</span>
           {(data.subPlaylists ?? []).length === 0 && <span className="text-neutral-500">nenhuma</span>}
+          {/* Também são alvos: solte uma aula arrastada numa delas. */}
           {(data.subPlaylists ?? []).map((sp) => (
-            <span key={sp.pasta} className="rounded bg-neutral-800 px-2 py-0.5 text-neutral-300">
+            <span
+              key={sp.pasta}
+              {...soltarEm(sp.pasta)}
+              className={`rounded px-2 py-0.5 ${alvoSub === sp.pasta ? 'bg-blue-600 text-white' : aulaArrastada ? 'bg-neutral-700 text-neutral-100 ring-1 ring-blue-600/60' : 'bg-neutral-800 text-neutral-300'}`}
+            >
               {sp.nome}
             </span>
           ))}
+          {aulaArrastada && (data.subPlaylists ?? []).length > 0 && (
+            <span
+              {...soltarEm(null)}
+              className={`rounded border border-dashed px-2 py-0.5 ${alvoSub === null ? 'border-blue-600 bg-blue-600 text-white' : 'border-neutral-600 text-neutral-300'}`}
+            >
+              Fora das sub-playlists
+            </span>
+          )}
+          {(data.subPlaylists ?? []).length > 0 && !aulaArrastada && (
+            <span className="text-xs text-neutral-500">arraste uma aula para cá para mudá-la de sub-playlist</span>
+          )}
           <button
             type="button"
             onClick={() => setNovaSub(true)}

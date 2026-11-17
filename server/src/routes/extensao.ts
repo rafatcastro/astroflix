@@ -6,7 +6,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import { EXTENSAO, APP_VERSION } from '../bundled';
-import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists, moverPlaylistParaDentro } from '../links/importar';
+import { adicionarAPlaylist, criarPlaylist, criarSubPlaylist, listarPlaylists, moverAulaParaSubPlaylist, moverPlaylistParaDentro } from '../links/importar';
 import { acharNavegador } from '../links/navegador';
 import { abrirNoSistema } from './armazenamento';
 
@@ -101,6 +101,14 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
     const r = moverPlaylistParaDentro(db, config, (req.params as { id: string }).id, destino);
     if (typeof r === 'string') return reply.code(r === 'nao-existe' ? 404 : 400).send({ error: r });
     return r;
+  });
+
+  // Arrastar a aula para outra sub-playlist (modulo null = fora delas).
+  app.post('/api/links/aulas/:id/mover', async (req, reply) => {
+    const modulo = (req.body as { modulo?: unknown } | undefined)?.modulo;
+    if (modulo !== null && typeof modulo !== 'string') return reply.code(400).send({ error: 'sem-modulo' });
+    const r = moverAulaParaSubPlaylist(db, config, (req.params as { id: string }).id, modulo);
+    return r === 'ok' ? reply.code(204).send() : reply.code(r === 'nao-existe' ? 404 : 400).send({ error: r });
   });
 
   // ----- Para a extensão (chrome-extension://, com a chave) -----
