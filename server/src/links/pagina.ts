@@ -82,7 +82,7 @@ export function candidatosDaPagina(html: string, base: string, max = 120): Candi
 const semHash = (href: string) => href.split('#')[0];
 
 // "aulas.site.com.br" e "site.com.br" são o mesmo site para quem lista as aulas.
-function dominio(host: string): string {
+export function dominio(host: string): string {
   const partes = host.toLowerCase().replace(/^www\./, '').split('.');
   const curto = partes.length >= 3 && partes[partes.length - 1].length === 2 && partes[partes.length - 2].length <= 3;
   return partes.slice(curto ? -3 : -2).join('.');
@@ -96,12 +96,44 @@ const CABECALHOS = {
 };
 
 /** O HTML da página, ou null se não for uma página (vídeo direto, erro, fora do ar). */
-export async function lerPagina(url: string, signal?: AbortSignal): Promise<{ html: string; url: string } | null> {
+export async function lerPagina(url: string, signal?: AbortSignal, login?: Cabecalho | null): Promise<{ html: string; url: string } | null> {
   try {
-    const res = await fetch(url, { headers: CABECALHOS, redirect: 'follow', signal: signal ?? AbortSignal.timeout(30_000) });
+    const headers: Record<string, string> = { ...CABECALHOS };
+    if (login) headers[login.nome] = login.valor;
+    const res = await fetch(url, { headers, redirect: 'follow', signal: signal ?? AbortSignal.timeout(30_000) });
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('html')) return null;
     return { html: (await res.text()).slice(0, 5_000_000), url: res.url || url };
   } catch {
     return null;
+  }
+}
+
+export interface Cabecalho {
+  nome: string;
+  valor: string;
+}
+
+/**
+ * O "Token de login" da janela de importar, no formato que a pessoa tiver em mãos
+ * (o DevTools mostra os três): a linha inteira ("Authorization: Bearer x",
+ * "Cookie: a=b"), só os cookies ("a=b; c=d") ou só o token (vira Bearer).
+ */
+export function cabecalhoDeLogin(texto: string | null | undefined): Cabecalho | null {
+  const t = (texto ?? '').replace(/[\r\n]+/g, ' ').trim();
+  if (!t) return null;
+  const linha = /^([A-Za-z][A-Za-z0-9-]*)\s*:\s*(.+)$/.exec(t);
+  if (linha && !/^https?$/i.test(linha[1])) return { nome: linha[1], valor: linha[2].trim() };
+  // Um token em base64 termina em "=" e não é cookie.
+  if (!/=+$/.test(t) && /^[^\s=;]+=[^;]*(;\s*[^\s=;]+=[^;]*)*;?$/.test(t)) return { nome: 'Cookie', valor: t };
+  return { nome: 'Authorization', valor: /^bearer\s/i.test(t) ? t : `Bearer ${t}` };
+}
+
+/** O login vai só para o site do link colado e para o player embutido na página dele. */
+export function mandaLogin(url: string, link: string, embutidos: Set<string>): boolean {
+  try {
+    const h = new URL(url).hostname;
+    return dominio(h) === dominio(new URL(link).hostname) || embutidos.has(h);
+  } catch {
+    return false;
   }
 }

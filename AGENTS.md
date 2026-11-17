@@ -222,8 +222,13 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   cria um **curso local** em `DATA_DIR/links/<curso>` (sem origem nova: player, capas, nuvem e
   progresso são os de sempre) e baixa um vídeo por vez para `.baixando/` (oculto, o scan pula),
   movendo para `NN - <título>.mp4` (o número dá a ordem) e re-escaneando a cada um. O pedido fica em
-  `.astroflix-link.json` na pasta: ao abrir, `retomarImportacoes` continua o que faltou. Ainda não há
-  login: página que pede conta (curso assinado) não é lida.
+  `.astroflix-link.json` na pasta: ao abrir, `retomarImportacoes` continua o que faltou. **Curso
+  assinado:** "A página pede login" abre o campo **Token de login** (`cabecalhoDeLogin`: só o token vira
+  `Authorization: Bearer`, `a=b; c=d` vira `Cookie`, `Nome: valor` vai como está). Ele vai à leitura da
+  página e ao yt-dlp (`--add-headers`), mas só para o site do link e os players embutidos nela
+  (`mandaLogin`; um YouTube linkado não recebe), e fica no manifesto para os downloads continuarem.
+  O yt-dlp chama a página que ele não conhece de `Generic` ou `HTML5MediaEmbed` (`ehGenerico`): aí
+  os links dela também são abertos.
 - `anki/`: flashcards com o Anki da pessoa, pelo add-on **AnkiConnect** (`127.0.0.1:8765`; o
   AnkiWeb não tem API pública). Quem chama é o servidor. `cliente` fala o protocolo (tipo de nota
   próprio "Astroflix", porque o "Básico" muda de nome com o idioma), `texto` converte texto ↔ HTML

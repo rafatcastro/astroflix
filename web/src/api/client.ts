@@ -575,10 +575,19 @@ export const api = {
   telegramDesconectar: () => jsonFetch<void>('/api/telegram/auth', { method: 'DELETE' }),
   driveIniciarAuth: () => jsonFetch<{ url: string }>('/api/drive/auth/iniciar', { method: 'POST' }),
   linksStatus: () => jsonFetch<{ ytdlp: boolean }>('/api/links/status'),
-  linksDescobrir: (link: string) => jsonFetch<{ id: string }>('/api/links/descobrir', { method: 'POST', body: JSON.stringify({ link }) }),
+  linksDescobrir: (link: string, token?: string) =>
+    jsonFetch<{ id: string }>('/api/links/descobrir', { method: 'POST', body: JSON.stringify({ link, token: token || undefined }) }),
   linksDescoberta: (id: string) => jsonFetch<DescobertaLinks>(`/api/links/descobrir/${id}`),
   linksCancelar: (id: string) => jsonFetch<void>(`/api/links/descobrir/${id}`, { method: 'DELETE' }),
-  linksImportar: (p: { titulo: string; link: string; categoriaId?: string; itens: Array<{ url: string; titulo: string }> }) =>
+  linksImportar: (p: {
+    titulo: string;
+    link: string;
+    categoriaId?: string;
+    token?: string;
+    /** O id da descoberta: diz quais vídeos levam o login no download. */
+    descoberta?: string;
+    itens: Array<{ url: string; titulo: string }>;
+  }) =>
     jsonFetch<{ id: string }>('/api/links/importar', { method: 'POST', body: JSON.stringify(p) }),
   linksTentarDeNovo: (courseId: string) => jsonFetch<void>(`/api/links/cursos/${courseId}/tentar-de-novo`, { method: 'POST' }),
   importLibrary: (data: unknown) =>

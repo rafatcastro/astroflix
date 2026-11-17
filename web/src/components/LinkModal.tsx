@@ -45,7 +45,12 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
   const [linhas, setLinhas] = useState<Linha[] | null>(null);
   const [titulo, setTitulo] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Curso assinado: o token da sessão no site, copiado do DevTools.
+  const [token, setToken] = useState('');
+  const [comLogin, setComLogin] = useState(false);
   const idRef = useRef<string | null>(null);
+  // O id da última leitura, para o "Importar" (idRef vira null quando ela acaba).
+  const descobertaRef = useRef<string | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const lendo = descoberta?.fase === 'lendo';
@@ -119,8 +124,9 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
     setLinhas(null);
     setTitulo('');
     try {
-      const { id } = await api.linksDescobrir(l);
+      const { id } = await api.linksDescobrir(l, comLogin ? token.trim() : undefined);
       idRef.current = id;
+      descobertaRef.current = id;
       setDescoberta({ fase: 'lendo', link: l, titulo: null, verificados: 0, total: 0, itens: [], erro: null });
     } catch (e) {
       const m = e instanceof Error ? e.message : '';
@@ -144,6 +150,8 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
         titulo: titulo.trim() || descoberta.titulo || 'Curso',
         link: descoberta.link,
         categoriaId,
+        token: comLogin ? token.trim() || undefined : undefined,
+        descoberta: descobertaRef.current ?? undefined,
         itens: marcados.map((l) => ({ url: l.url, titulo: l.titulo })),
       });
       qc.invalidateQueries({ queryKey: ['courses'] });
@@ -209,6 +217,34 @@ export default function LinkModal({ onClose, categoriaId }: { onClose: () => voi
         <p id="link-ajuda" className="mt-2 text-xs text-neutral-500">
           O app abre a página e cada link dela e fica com os que têm vídeo. Os vídeos são baixados para tocarem aqui.
         </p>
+
+        <label className="mt-3 inline-flex items-center gap-2 text-sm text-neutral-300">
+          <input type="checkbox" checked={comLogin} disabled={lendo} onChange={() => setComLogin((v) => !v)} />
+          A página pede login
+        </label>
+        {comLogin && (
+          <div className="mt-2">
+            <label htmlFor="link-token" className="mb-1 block text-sm text-neutral-300">
+              Token de login
+            </label>
+            <TextField
+              id="link-token"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              disabled={lendo}
+              aria-describedby="link-token-ajuda"
+              placeholder="eyJhbGci…, Authorization: Bearer …, ou Cookie: …"
+            />
+            <p id="link-token-ajuda" className="mt-1 text-xs text-neutral-500">
+              Com o site aberto e logado no navegador, F12 → Network → um pedido do site → Headers: copie o valor de
+              Authorization (ou a linha Cookie). Só o token vira <code>Authorization: Bearer</code>. Ele vai só para esse
+              site e para o player da página, e fica guardado nesta máquina para continuar os downloads.
+            </p>
+          </div>
+        )}
 
         {erro && (
           <p role="alert" className="mt-3 text-sm text-amber-200">

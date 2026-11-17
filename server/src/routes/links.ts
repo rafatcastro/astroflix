@@ -3,6 +3,7 @@ import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import {
   cancelarDescoberta,
+  comLoginDaDescoberta,
   criarCursoDeLinks,
   estadoDaDescoberta,
   iniciarDescoberta,
@@ -19,10 +20,12 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
   app.get('/api/links/status', async () => ({ ytdlp: temYtDlp() }));
 
   app.post('/api/links/descobrir', async (req, reply) => {
-    const link = (req.body as { link?: unknown } | undefined)?.link;
+    const b = req.body as { link?: unknown; token?: unknown } | undefined;
+    const link = b?.link;
     if (typeof link !== 'string' || !/^https?:\/\/\S+$/i.test(link.trim())) return reply.code(400).send({ error: 'link-invalido' });
     if (!temYtDlp()) return reply.code(424).send({ error: 'sem-ytdlp' });
-    return reply.code(202).send({ id: iniciarDescoberta(link.trim()) });
+    const token = typeof b?.token === 'string' && b.token.trim() ? b.token.trim() : null;
+    return reply.code(202).send({ id: iniciarDescoberta(link.trim(), token) });
   });
 
   app.get('/api/links/descobrir/:id', async (req, reply) => {
@@ -36,7 +39,7 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
   });
 
   app.post('/api/links/importar', async (req, reply) => {
-    const b = req.body as { titulo?: unknown; link?: unknown; categoriaId?: unknown; itens?: unknown } | undefined;
+    const b = req.body as { titulo?: unknown; link?: unknown; categoriaId?: unknown; itens?: unknown; token?: unknown; descoberta?: unknown } | undefined;
     const itens = Array.isArray(b?.itens)
       ? (b.itens as Array<{ url?: unknown; titulo?: unknown }>)
           .filter((i) => typeof i?.url === 'string' && /^https?:\/\//i.test(i.url))
@@ -49,6 +52,8 @@ export async function linksRoutes(app: FastifyInstance, opts: { db: Db; config: 
       titulo: typeof b.titulo === 'string' ? b.titulo : '',
       link: b.link,
       categoriaId,
+      token: typeof b.token === 'string' && b.token.trim() ? b.token.trim() : null,
+      comLogin: typeof b.descoberta === 'string' ? comLoginDaDescoberta(b.descoberta) : new Set(),
       itens,
     });
     return reply.code(201).send({ id });

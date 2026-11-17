@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import type { Cabecalho } from './pagina';
 
 // O yt-dlp é o que sabe tirar o vídeo de uma página (YouTube, players de curso
 // com HLS, milhares de sites). Ele entra como o ffmpeg: opcional, procurado no
@@ -58,11 +59,12 @@ const duracao = (d: unknown) => (typeof d === 'number' && Number.isFinite(d) && 
  */
 export async function listar(
   url: string,
-  opts: { referer?: string; soUm?: boolean; timeoutMs?: number; signal?: AbortSignal } = {},
+  opts: { referer?: string; soUm?: boolean; timeoutMs?: number; signal?: AbortSignal; login?: Cabecalho | null } = {},
 ): Promise<ResultadoListar | null> {
   const args = ['-J', '--flat-playlist'];
   if (opts.soUm) args.push('--no-playlist');
   if (opts.referer) args.push('--referer', opts.referer);
+  if (opts.login) args.push('--add-headers', `${opts.login.nome}:${opts.login.valor}`);
   const r = await rodar([...args, url], opts.timeoutMs ?? 60_000, opts.signal);
   if (r.codigo !== 0) return null;
   let info: Record<string, unknown>;
@@ -98,7 +100,7 @@ export function baixarVideo(
   url: string,
   pastaTemp: string,
   nome: string,
-  opts: { referer?: string; signal?: AbortSignal; aoProgresso?: (pct: number) => void } = {},
+  opts: { referer?: string; signal?: AbortSignal; aoProgresso?: (pct: number) => void; login?: Cabecalho | null } = {},
 ): Promise<string> {
   fs.mkdirSync(pastaTemp, { recursive: true });
   const args = [
@@ -121,6 +123,7 @@ export function baixarVideo(
     `${pastaTemp}/${nome}.%(ext)s`,
   ];
   if (opts.referer) args.push('--referer', opts.referer);
+  if (opts.login) args.push('--add-headers', `${opts.login.nome}:${opts.login.valor}`);
   args.push(url);
 
   return new Promise((resolve, reject) => {

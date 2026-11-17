@@ -7,7 +7,7 @@ import { sanear } from '../armazenamento';
 import { inserirCursoDerivado } from '../scan/scan-course';
 import { reconcileCourse } from '../scan/reconcile';
 import { baixarVideo, listar, temYtDlp, type VideoAchado } from './ytdlp';
-import { candidatosDaPagina, lerPagina } from './pagina';
+import { cabecalhoDeLogin, candidatosDaPagina, lerPagina, mandaLogin } from './pagina';
 
 // Importar por link: a pessoa cola o link de uma página (uma playlist do YouTube,
 // a página de um curso), o app acha os vídeos, ela revisa a lista e confirma.
@@ -30,17 +30,25 @@ export interface Descoberta {
   erro: string | null;
 }
 
-const descobertas = new Map<string, { estado: Descoberta; ac: AbortController; criadaEm: number }>();
+// Por vídeo achado: se o download leva o login (ver mandaLogin). Fica fora do
+// estado que a janela lê, que não precisa saber disso.
+const descobertas = new Map<string, { estado: Descoberta; ac: AbortController; criadaEm: number; comLogin: Set<string> }>();
 const SIMULTANEOS = 4;
 
-export function iniciarDescoberta(link: string): string {
+// O yt-dlp não conhece o site e só achou um vídeo solto na página: "Generic", ou
+// "HTML5MediaEmbed" quando é um <video> direto. O título dele aí é o da página com
+// "(1)", e a página pode ter a lista das outras aulas.
+const ehGenerico = (extrator: string) => /^(generic|html5mediaembed)$/i.test(extrator);
+
+export function iniciarDescoberta(link: string, token?: string | null): string {
   // As antigas (a pessoa fechou a janela) saem depois de uma hora.
   for (const [id, d] of descobertas) if (Date.now() - d.criadaEm > 3_600_000) descobertas.delete(id);
   const id = randomUUID();
   const estado: Descoberta = { fase: 'lendo', link, titulo: null, verificados: 0, total: 0, itens: [], erro: null };
   const ac = new AbortController();
-  descobertas.set(id, { estado, ac, criadaEm: Date.now() });
-  void descobrir(estado, ac.signal).catch((e) => {
+  const comLogin = new Set<string>();
+  descobertas.set(id, { estado, ac, criadaEm: Date.now(), comLogin });
+  void descobrir(estado, ac.signal, token ?? null, comLogin).catch((e) => {
     estado.fase = 'erro';
     estado.erro = e instanceof Error ? e.message : 'falhou';
   });
@@ -49,14 +57,22 @@ export function iniciarDescoberta(link: string): string {
 
 export const estadoDaDescoberta = (id: string): Descoberta | null => descobertas.get(id)?.estado ?? null;
 
+/** Os vídeos achados que levam o login no download (o pedido de importar vem com o id da descoberta). */
+export const comLoginDaDescoberta = (id: string): Set<string> => descobertas.get(id)?.comLogin ?? new Set();
+
+// Só para: o que já achou (e quem leva o login) continua valendo para o "Importar".
 export function cancelarDescoberta(id: string): void {
   descobertas.get(id)?.ac.abort();
-  descobertas.delete(id);
 }
 
-async function descobrir(estado: Descoberta, signal: AbortSignal): Promise<void> {
+async function descobrir(estado: Descoberta, signal: AbortSignal, token: string | null, comLogin: Set<string>): Promise<void> {
   if (!temYtDlp()) throw new Error('sem-ytdlp');
   const link = estado.link;
+  // Curso assinado: o token que a pessoa colou. Vai só para o site do link e para
+  // os players embutidos na página dele, nunca para um YouTube linkado no rodapé.
+  const login = cabecalhoDeLogin(token);
+  const embutidos = new Set<string>();
+  const loginPara = (url: string) => (login && mandaLogin(url, link, embutidos) ? login : null);
   const vistos = new Set<string>();
   const acrescentar = (v: VideoAchado) => {
     if (vistos.has(v.url)) return;
@@ -66,35 +82,46 @@ async function descobrir(estado: Descoberta, signal: AbortSignal): Promise<void>
 
   // Primeiro o yt-dlp na própria página. Um site que ele conhece (uma playlist
   // do YouTube, um vídeo do Vimeo) já vem inteiro daqui, sem abrir link nenhum.
-  const direto = await listar(link, { signal });
+  const direto = await listar(link, { signal, login });
   if (signal.aborted) return;
   const daPagina: VideoAchado[] = direto?.tipo === 'playlist' ? direto.itens : direto ? [direto.video] : [];
+  if (login) for (const v of daPagina) comLogin.add(v.url);
   daPagina.forEach(acrescentar);
   estado.titulo = direto?.tipo === 'playlist' ? direto.titulo : (direto?.video.titulo ?? null);
-  if (direto && !/generic/i.test(direto.extrator) && daPagina.length) {
+  if (direto && !ehGenerico(direto.extrator) && daPagina.length) {
     estado.fase = 'pronto';
     return;
   }
 
   // Uma página qualquer: abre cada link dela e fica com os que têm vídeo, na
   // ordem da página (é a ordem das aulas numa lista de curso).
-  const pagina = await lerPagina(link, signal);
+  const pagina = await lerPagina(link, signal, login);
   if (pagina) {
     // O <title> da página nomeia melhor o curso que o do vídeo embutido.
     estado.titulo = tituloDaPagina(pagina.html) ?? estado.titulo;
     const candidatos = candidatosDaPagina(pagina.html, pagina.url);
     estado.total = candidatos.length;
+    for (const c of candidatos) {
+      if (!c.embutido) continue;
+      try {
+        embutidos.add(new URL(c.url).hostname);
+      } catch {
+        /* sem host */
+      }
+    }
     const achados: Array<VideoAchado[] | undefined> = new Array(candidatos.length);
     let proximo = 0;
     const trabalhador = async () => {
       while (proximo < candidatos.length && !signal.aborted) {
         const i = proximo++;
         const c = candidatos[i];
-        const r = await listar(c.url, { referer: pagina.url, soUm: !c.embutido, timeoutMs: 45_000, signal }).catch(() => null);
+        const loginDele = loginPara(c.url);
+        const r = await listar(c.url, { referer: pagina.url, soUm: !c.embutido, timeoutMs: 45_000, signal, login: loginDele }).catch(() => null);
         if (r?.tipo === 'video') {
+          if (loginDele) comLogin.add(r.video.url);
           // O título do yt-dlp num site genérico costuma ser o nome do arquivo ou o
           // do site inteiro; o texto do link é o nome da aula na lista.
-          const generico = /generic/i.test(r.extrator);
+          const generico = ehGenerico(r.extrator);
           achados[i] = [{ ...r.video, titulo: generico && c.texto ? c.texto : r.video.titulo }];
         }
         // Uma playlist ou um canal linkado (o rodapé com o canal do site no YouTube)
@@ -136,11 +163,15 @@ interface ItemManifesto {
   titulo: string;
   /** O nome do arquivo na pasta, quando baixado. */
   arquivo: string | null;
+  /** O download leva o login do manifesto (o vídeo é do site do link ou do player dele). */
+  login?: boolean;
   erro: string | null;
 }
 interface Manifesto {
   link: string;
   referer: string | null;
+  /** O token de login colado; fica só nesta máquina, dentro da pasta de dados. */
+  token?: string | null;
   itens: ItemManifesto[];
 }
 
@@ -180,7 +211,14 @@ function gravarManifesto(pasta: string, m: Manifesto): void {
 export function criarCursoDeLinks(
   db: Db,
   config: AppConfig,
-  pedido: { titulo: string; link: string; categoriaId: string | null; itens: Array<{ url: string; titulo: string }> },
+  pedido: {
+    titulo: string;
+    link: string;
+    categoriaId: string | null;
+    token: string | null;
+    comLogin: Set<string>;
+    itens: Array<{ url: string; titulo: string }>;
+  },
 ): string {
   const raiz = pastaDosLinks(config);
   const base = sanear(pedido.titulo.trim() || 'Curso', 120);
@@ -190,7 +228,14 @@ export function criarCursoDeLinks(
   gravarManifesto(pasta, {
     link: pedido.link,
     referer: pedido.link,
-    itens: pedido.itens.map((i) => ({ url: i.url, titulo: i.titulo.trim() || i.url, arquivo: null, erro: null })),
+    token: pedido.token,
+    itens: pedido.itens.map((i) => ({
+      url: i.url,
+      titulo: i.titulo.trim() || i.url,
+      arquivo: null,
+      erro: null,
+      login: !!pedido.token && (pedido.comLogin.has(i.url) || mandaLogin(i.url, pedido.link, new Set())),
+    })),
   });
   // O curso existe já vazio: a pessoa vai para ele e vê as aulas entrando.
   const id = inserirCursoDerivado(db, { title: pedido.titulo.trim() || base, rootPath: pasta, source: 'local' }, { structure: 'flat', lessons: [] }, []);
@@ -241,6 +286,7 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
   estado.falhas = 0;
   estado.erro = null;
   if (!temYtDlp()) throw new Error('sem-ytdlp');
+  const login = cabecalhoDeLogin(m.token);
 
   // O número na frente do nome mantém a ordem da lista revisada (o scan ordena pelo nome).
   const largura = String(m.itens.length).length < 2 ? 2 : String(m.itens.length).length;
@@ -255,6 +301,7 @@ async function importarCurso(db: Db, config: AppConfig, courseId: string): Promi
     try {
       const baixado = await baixarVideo(item.url, path.join(pasta, TEMP), nome, {
         referer: m.referer ?? undefined,
+        login: item.login ? login : null,
         signal: ac.signal,
         aoProgresso: (pct) => {
           if (estado.atual) estado.atual.pct = pct;
