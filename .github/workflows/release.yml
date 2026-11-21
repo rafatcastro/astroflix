@@ -106,7 +106,7 @@ jobs:
       # Antes do build: o APP_VERSION embutido no servidor sai do package.json.
       - run: node scripts/sincronizar-versao.mjs "${{ needs.versao.outputs.versao }}"
       - name: Build
-        run: pnpm build
+        run: pnpm build:servidor
         env:
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}

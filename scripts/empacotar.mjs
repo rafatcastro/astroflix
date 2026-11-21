@@ -2,7 +2,7 @@
 // Junta o servidor inteiro — código, dependências e a interface embutida — num
 // único dist/astroflix.cjs.
 //
-// É esse arquivo que o `pnpm start` executa e que, mais adiante, vira o
+// É esse arquivo que, mais adiante, vira o
 // executável único (o sidecar do app desktop). Nada de node_modules no
 // destino, nada de compilar na instalação.
 import esbuild from 'esbuild';

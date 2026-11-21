@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Antes do `pnpm desktop:build`: dá ao build desta máquina uma versão acima da
+// No começo do `pnpm build`: dá ao build desta máquina uma versão acima da
 // última release (v<major.minor>.N → N+1). Com a versão do package.json (2.1.0),
 // o atualizador achava a release "mais nova" ao abrir e se instalava por cima:
 // em 11/2026, com o CI parado, o build local virou a 2.1.55 de semanas antes e as

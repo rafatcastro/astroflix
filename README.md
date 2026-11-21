@@ -13,10 +13,10 @@ rustup default stable
 
 pnpm install
 pnpm dev             # development: Tauri window over Vite + server, with hot reload
-pnpm desktop:build   # installer for this machine
+pnpm build           # installer for this machine
 ```
 
-`pnpm desktop:build` writes the app and the installer to `desktop/src-tauri/target/release/bundle/`:
+`pnpm build` writes the app and the installer to `desktop/src-tauri/target/release/bundle/`:
 
 - `macos/Astroflix.app`
 - `dmg/Astroflix_<version>_<arch>.dmg`

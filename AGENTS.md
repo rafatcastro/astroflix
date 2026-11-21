@@ -43,12 +43,12 @@ opcionais). O commit vai **direto na `main`** (sem branch nem Pull Request). Cad
 uma release (~10 min, em fila), então junte as mudanças num commit só em vez de vários pushes
 seguidos.
 
-**Build depois de toda mudança:** ao terminar qualquer mudança de código, rode **`pnpm desktop:build`**
-(com o Rust no PATH, ver Comandos) e diga onde ficou o instalador
+**Build depois de toda mudança:** ao terminar qualquer mudança de código, rode **`pnpm build`**
+(`scripts/build.mjs`, que gera o instalador desta máquina) e diga onde ficou o instalador
 (`desktop/src-tauri/target/release/bundle`). É assim que o dono atualiza o app na máquina dele, sem
 depender da release do CI, que pode estar parada (em 11/2026 o GitHub Actions travou por cobrança
 e cinco releases seguidas falharam sem ninguém notar). Se o build falhar, conserte antes de dar a
-tarefa por encerrada. O `desktop:build` dá ao build a versão da última release + 1
+tarefa por encerrada. O `pnpm build` dá ao build a versão da última release + 1
 (`scripts/versao-local.mjs`, que grava no package.json, tauri.conf.json e Cargo.toml; commite junto):
 com a versão do package.json, o atualizador trocava o build pela release antiga ao abrir. Ele também
 pula o pacote assinado do atualizador (`tauri.local.conf.json`, a chave privada não fica nesta
@@ -57,7 +57,9 @@ ejeta antes o `.dmg` que ficou montado (`scripts/ejetar-dmg.mjs`: com ele aberto
 falha). **O build local precisa de `.google-oauth.local.json`, `.telegram.local.json` e
 `.supabase.local.json` na raiz** (ignorados pelo git): sem eles, o app sai sem conta, sem Telegram e
 com todo arquivo do Drive dando 502 `google` (o token não renova). Confira no `server/src/bundled.ts`
-que os `*_PADRAO` não estão `null`.
+que os `*_PADRAO` não estão `null`. O `build.mjs` para antes de começar se faltar um deles ou o `rustc`
+(o rustup do Homebrew ele acha sozinho). Não há flag de plataforma: o instalador é sempre o do sistema
+em que se está (o Node SEA copia o Node da máquina); os outros saem do CI.
 
 ## Comandos
 
@@ -68,22 +70,21 @@ workspaces (`pnpm-workspace.yaml`): `server`, `web` e `desktop`. Para o app desk
 ```bash
 pnpm install               # primeira vez
 pnpm dev                   # janela do Tauri sobre o Vite (:5173, /api → :7777) + Fastify, hot reload
-pnpm build                 # web → gerar-bundled → tipos do server → esbuild → dist/astroflix.cjs
-pnpm start                 # roda dist/astroflix.cjs (precisa do build antes)
-pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build
-pnpm desktop:build         # instalador desta máquina em desktop/src-tauri/target/release/bundle
+pnpm build                 # instalador desta máquina em desktop/src-tauri/target/release/bundle
+pnpm build:servidor        # só web → gerar-bundled → tipos do server → esbuild → dist/astroflix.cjs (o CI usa)
+pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build:servidor
 pnpm run repo              # audita onde o nome do repositório GitHub aparece (o `pnpm repo` puro é um comando do próprio pnpm)
 pnpm run repo dono/repo    # troca o repositório em package.json, README.md e tauri.conf.json
 ```
 
 **Não há script separado de typecheck nem de lint.** O `tsc --noEmit` roda dentro do `build` de
-cada workspace. O servidor nunca emite JS: roda via `tsx` em dev e é empacotado pelo esbuild
+cada workspace (`pnpm build:servidor` é o jeito rápido de checar os tipos). O servidor nunca emite JS: roda via `tsx` em dev e é empacotado pelo esbuild
 (`scripts/empacotar.mjs`) no build. Os imports são ESM **sem extensão de arquivo**
 (`moduleResolution: "Bundler"`).
 
 O pacote não é publicado no npm (`"private": true`). As releases saem de
 `.github/workflows/release.yml`, disparado por **todo push na `main`** que não seja só de
-documentação; a versão é automática (`major.minor` do `package.json` + `GITHUB_RUN_NUMBER`), então
+documentação (lá o build é `build:servidor` e o Tauri fica com o `tauri-action`); a versão é automática (`major.minor` do `package.json` + `GITHUB_RUN_NUMBER`), então
 ninguém cria tag à mão. Um runner por plataforma gera o sidecar
 (`build:binario` → `scripts/preparar-sidecar.mjs`, que dá o nome com o target triple do Rust), a
 versão é gravada no `package.json`, no `tauri.conf.json` e no `Cargo.toml`
