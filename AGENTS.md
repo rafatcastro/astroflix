@@ -63,15 +63,15 @@ em que se está (o Node SEA copia o Node da máquina); os outros saem do CI.
 
 ## Comandos
 
-Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com três
-workspaces (`pnpm-workspace.yaml`): `server`, `web` e `desktop`. Para o app desktop, também o Rust
+Node >= 22.5 e **pnpm** (gerenciador padrão; `packageManager` no package.json). Monorepo com quatro
+workspaces (`pnpm-workspace.yaml`): `server`, `web`, `desktop` e `extension`. Para o app desktop, também o Rust
 (rustup; no Homebrew ele é keg-only, então `export PATH="$(brew --prefix rustup)/bin:$PATH"`).
 
 ```bash
 pnpm install               # primeira vez
 pnpm dev                   # janela do Tauri sobre o Vite (:5173, /api → :7777) + Fastify, hot reload
 pnpm build                 # instalador desta máquina em desktop/src-tauri/target/release/bundle
-pnpm build:servidor        # só web → gerar-bundled → tipos do server → esbuild → dist/astroflix.cjs (o CI usa)
+pnpm build:servidor        # só web → extension → gerar-bundled → tipos do server → esbuild → dist/astroflix.cjs (o CI usa)
 pnpm build:binario         # executável único (Node SEA, ~110 MB) para esta máquina; precisa do build:servidor
 pnpm run repo              # audita onde o nome do repositório GitHub aparece (o `pnpm repo` puro é um comando do próprio pnpm)
 pnpm run repo dono/repo    # troca o repositório em package.json, README.md e tauri.conf.json
@@ -249,15 +249,17 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   com `leitura.log` e o HTML recebido (`pagina.html`, ou `resposta.txt` num erro), ficando as 30 mais
   novas. Os downloads de cada curso vão para `.astroflix-link.log` na pasta dele ("Ver log" no aviso de
   erro do curso).
-- **Extensão do navegador** (`extensao/`, Chrome MV3, JS puro sem build): a pessoa abre a aula no
+- **Extensão do navegador** (`extension/`, Chrome MV3, workspace com Vite + CRXJS; popup em React em
+  `src/popup/`, `src/background.js` em JS puro, sem minificar): a pessoa abre a aula no
   próprio Chrome, já logada, e manda o vídeo para uma **playlist** (um curso de link vazio, criado em
   Adicionar → "Playlist (pela extensão)" ou pelo + da extensão). `background.js` observa os pedidos de
   vídeo de cada aba (`webRequest.onSendHeaders` com `extraHeaders`: `.m3u8`/`.mpd`/`.mp4`, sem os
   segmentos) e guarda o endereço e os cabeçalhos úteis (Cookie, Authorization, Referer, Origin,
   User-Agent); o popup escolhe a playlist, o título (o h1 da página) e o vídeo, e manda para
-  `POST /api/extensao/playlists/:id/itens`. O item leva os `cabecalhos` para o yt-dlp. A pasta entra no
-  build (`EXTENSAO` em `bundled.ts`, por `gerar-bundled.mjs`) e Configurações → Extensão do navegador
-  a grava em `DATA_DIR/extensao` e abre `chrome://extensions` ("Carregar sem compactação"). **Segurança:**
+  `POST /api/extensao/playlists/:id/itens`. O item leva os `cabecalhos` para o yt-dlp. O `extension/dist` (o
+  `build:servidor` compila a extensão antes) entra no build (`EXTENSAO` em `bundled.ts`, por
+  `gerar-bundled.mjs`, só texto) e Configurações → Extensão do navegador a grava em `DATA_DIR/extensao`
+  (o nome antigo fica: o Chrome guarda o caminho de quem já carregou) e abre `chrome://extensions` ("Carregar sem compactação"). **Segurança:**
   a guarda deixa passar `chrome-extension://` só em `/api/extensao/*` (`ehExtensao`), e essas rotas
   exigem `X-Astroflix-Chave` (`routes/extensao.ts`, gerada em `settings` e mostrada nas Configurações).
   A extensão procura o app de 7777 a 7797. O download relê o manifesto a cada vídeo e grava só o item

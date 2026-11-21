@@ -1,0 +1,26 @@
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 360px; font: 13px/1.4 -apple-system, system-ui, sans-serif; background: #0a0a0a; color: #e5e5e5; }
+main { padding: 14px; }
+h1 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+label { display: block; margin: 10px 0 4px; color: #a3a3a3; font-size: 12px; }
+input, select { width: 100%; padding: 7px 8px; border: 1px solid #404040; border-radius: 6px; background: #171717; color: #fafafa; font: inherit; }
+input:focus, select:focus, button:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
+button { padding: 8px 12px; border: 0; border-radius: 6px; background: #262626; color: #fafafa; font: inherit; cursor: pointer; }
+button:hover { background: #404040; }
+button.principal { background: #2563eb; color: #fff; width: 100%; margin-top: 12px; }
+button.principal:hover { background: #3b82f6; }
+button:disabled { opacity: 0.4; cursor: default; }
+.linha { display: flex; gap: 6px; }
+.linha > input, .linha > select { flex: 1; }
+.linha > button.cheio { flex: 1; }
+.videos { max-height: 140px; overflow: auto; margin-top: 4px; }
+.video { display: flex; gap: 6px; align-items: flex-start; padding: 4px 0; font-size: 11px; color: #a3a3a3; word-break: break-all; }
+.video input { width: auto; margin-top: 2px; }
+.modo { color: #d4d4d4; font-size: 12px; }
+.aviso { margin-top: 10px; color: #a3a3a3; font-size: 12px; }
+.erro { color: #fcd34d; }
+.ok { color: #86efac; }
+a { color: #93c5fd; }
+details { margin-top: 14px; }
+summary { cursor: pointer; color: #d4d4d4; }

@@ -2,6 +2,7 @@ packages:
   - server
   - web
   - desktop
+  - extension
 
 # O esbuild baixa o binário da plataforma no postinstall; sem isto o pnpm o bloqueia.
 allowBuilds:

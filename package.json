@@ -27,9 +27,9 @@
   },
   "scripts": {
     "dev": "pnpm --filter desktop tauri dev --config src-tauri/tauri.dev.conf.json",
-    "dev:servicos": "node scripts/gerar-bundled.mjs && concurrently -k -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
+    "dev:servicos": "pnpm --filter extension build && node scripts/gerar-bundled.mjs && concurrently -k -n server,web -c blue,green \"pnpm --filter server dev\" \"pnpm --filter web dev\"",
     "build": "node scripts/build.mjs",
-    "build:servidor": "pnpm --filter web build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",
+    "build:servidor": "pnpm --filter web build && pnpm --filter extension build && node scripts/gerar-bundled.mjs && pnpm --filter server build && node scripts/empacotar.mjs",
     "build:binario": "node scripts/build-binario.mjs",
     "repo": "node scripts/definir-repo.mjs"
   },

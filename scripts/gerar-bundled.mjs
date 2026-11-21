@@ -106,9 +106,10 @@ function lerSupabasePadrao() {
 }
 const supabase = lerSupabasePadrao();
 
-// A extensão do navegador (extensao/): vai junto para o app gravá-la numa pasta e
-// a pessoa carregar no Chrome ("Instalar a extensão", nas Configurações). Texto puro.
-const pastaExtensao = path.join(raiz, 'extensao');
+// A extensão do navegador, já compilada (extension/dist, pelo Vite + CRXJS): vai
+// junto para o app gravá-la numa pasta e a pessoa carregar no Chrome ("Instalar a
+// extensão", nas Configurações). Só texto: o build dela não gera imagens.
+const pastaExtensao = path.join(raiz, 'extension', 'dist');
 const extensao = fs.existsSync(pastaExtensao)
   ? Object.fromEntries(listar(pastaExtensao).map(({ rel, completo }) => [rel, fs.readFileSync(completo, 'utf8')]))
   : {};
