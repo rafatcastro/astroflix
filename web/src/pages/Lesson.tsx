@@ -233,6 +233,18 @@ export default function Lesson() {
     };
   }, []);
 
+  // O volume também vale para as próximas aulas: cada aula abria no 100%, e quem tinha baixado
+  // o som levava um susto. O <video> novo nasce no 100% e o webview pode avisar um volumechange
+  // antes do loadedmetadata; salvo nessa hora, o 100% passava por cima do volume da pessoa.
+  // Então o volume salvo entra assim que a fonte começa a carregar, e só depois disso uma
+  // mudança de volume é gravada.
+  const volumeAplicado = useRef(false);
+  const aplicarVolume = (v: HTMLVideoElement) => {
+    v.volume = getPref('player.volume', 1);
+    v.muted = getPref('player.mudo', false);
+    volumeAplicado.current = true;
+  };
+
   const onLoaded = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -240,9 +252,7 @@ export default function Lesson() {
     const velocidade = getPref('player.velocidade', 1);
     v.defaultPlaybackRate = velocidade;
     v.playbackRate = velocidade;
-    // O volume também: cada aula abria no 100%, e quem tinha baixado o som levava um susto.
-    v.volume = getPref('player.volume', 1);
-    v.muted = getPref('player.mudo', false);
+    aplicarVolume(v);
     if (lesson && !lesson.completed && lesson.position > 0) v.currentTime = lesson.position;
   };
 
@@ -254,7 +264,7 @@ export default function Lesson() {
 
   const onVolumeChange = () => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !volumeAplicado.current) return;
     setPref('player.volume', v.volume);
     setPref('player.mudo', v.muted);
   };
@@ -899,6 +909,9 @@ export default function Lesson() {
             controls
             autoPlay
             playsInline
+            onLoadStart={() => {
+              if (videoRef.current) aplicarVolume(videoRef.current);
+            }}
             onLoadedMetadata={onLoaded}
             onRateChange={onRateChange}
             onVolumeChange={onVolumeChange}
