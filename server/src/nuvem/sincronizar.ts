@@ -148,6 +148,7 @@ export function criarSincronizador(deps: {
               linha: {
                 curso_id: l.course_id, rel_path: l.rel_path, titulo: l.title, modulo: l.module, order_index: l.order_index,
                 module_order: l.module_order, duracao_sec: l.duration_sec, remote_id: l.remote_id ?? null, excluido: false,
+                mapeada: !!l.mapeada, descricao_rel: l.descricao_rel ?? null,
               },
             }
           : {
@@ -222,6 +223,26 @@ export function criarSincronizador(deps: {
     }
   }
 
+  // O projeto que ainda não rodou o schema.sql da v16 não tem as colunas do
+  // mapeamento em `aulas`: o PostgREST recusa a linha inteira (400, "Could not find
+  // the 'mapeada' column"), e nenhuma aula subiria mais. Sem elas, a aula sobe como
+  // antes; o mapeamento fica só nesta máquina até o schema ser aplicado.
+  let semColunasDoMapa = false;
+  const COLUNAS_DO_MAPA = ['mapeada', 'descricao_rel'];
+  const semMapa = (linhas: Record<string, unknown>[]) =>
+    linhas.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !COLUNAS_DO_MAPA.includes(k))));
+  async function enviar(token: string, item: Item, tabela: string, linhas: Record<string, unknown>[], conflito: string): Promise<void> {
+    if (item !== 'aula') return supabase.upsert(token, tabela, linhas, conflito);
+    if (semColunasDoMapa) return supabase.upsert(token, tabela, semMapa(linhas), conflito);
+    try {
+      await supabase.upsert(token, tabela, linhas, conflito);
+    } catch (e) {
+      if (!(e instanceof FalhaNuvem && e.status === 400 && /mapeada|descricao_rel/.test(e.message))) throw e;
+      semColunasDoMapa = true;
+      await supabase.upsert(token, tabela, semMapa(linhas), conflito);
+    }
+  }
+
   async function subir(token: string): Promise<void> {
     for (const item of ORDEM) {
       for (;;) {
@@ -239,7 +260,7 @@ export function criarSincronizador(deps: {
         }
         const { tabela, conflito } = TABELA_NUVEM[item];
         try {
-          await supabase.upsert(token, tabela, linhas, conflito);
+          await enviar(token, item, tabela, linhas, conflito);
           if (pastas.length) {
             if (item === 'documento') await supabase.upsert(token, 'documentos_por_maquina', pastas, 'documento_id,maquina_id');
             else await supabase.upsert(token, 'pastas_por_maquina', pastas, 'curso_id,maquina_id');
@@ -338,6 +359,16 @@ export function criarSincronizador(deps: {
             randomUUID(), r.curso_id, r.rel_path, r.modulo ?? null, r.titulo, r.order_index, r.module_order, r.duracao_sec ?? null,
             ext.replace('.', '') || 'mp4', PLAYABLE_EXTS.has(ext) ? 1 : 0, ausente, r.remote_id ?? null,
           );
+        }
+        // O mapeamento feito em outra máquina (módulo e ordem já vieram acima). O
+        // título é o que a pessoa deu, e fica: o re-escaneio daqui não o recalcula.
+        // Sem a coluna na nuvem (schema antigo), o mapeamento local fica como está.
+        if (typeof r.mapeada === 'boolean') {
+          if (r.mapeada)
+            db.prepare('UPDATE lessons SET mapeada=1, title=?, descricao_rel=? WHERE course_id=? AND rel_path=?').run(
+              r.titulo, r.descricao_rel ?? null, r.curso_id, r.rel_path,
+            );
+          else db.prepare('UPDATE lessons SET mapeada=0, descricao_rel=? WHERE course_id=? AND rel_path=?').run(r.descricao_rel ?? null, r.curso_id, r.rel_path);
         }
         cursosTocados.add(r.curso_id);
         return;

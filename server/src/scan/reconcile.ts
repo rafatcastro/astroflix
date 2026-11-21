@@ -169,10 +169,18 @@ export function aplicarReconcile(
 ): ReconcileResult {
   const course = db.prepare('SELECT structure, poster_lesson_id FROM courses WHERE id=?').get(courseId) as any;
   const now = new Date().toISOString();
+  // Curso mapeado pela pessoa (MapearCurso.tsx): as aulas dela guardam módulo, ordem
+  // e título; as que ainda não foram mapeadas (as novas do Telegram, por exemplo)
+  // vão para depois de todas, até a pessoa escolher onde ficam.
+  const mapeado = !!db.prepare('SELECT 1 FROM lessons WHERE course_id=? AND mapeada=1 LIMIT 1').get(courseId);
+  const ordem = (derivada: number) => (mapeado ? 50000 + derivada : derivada);
 
   const updateLesson = db.prepare(`
-    UPDATE lessons SET rel_path=@rel_path, module=@module, title=COALESCE(titulo_editado, @title), order_index=@order_index,
-      module_order=@module_order, size_bytes=@size_bytes, mtime=@mtime, container=@container,
+    UPDATE lessons SET rel_path=@rel_path,
+      module=CASE WHEN mapeada=1 THEN module ELSE @module END,
+      title=CASE WHEN mapeada=1 THEN title ELSE COALESCE(titulo_editado, @title) END,
+      order_index=CASE WHEN mapeada=1 THEN order_index ELSE @order_index END,
+      module_order=CASE WHEN mapeada=1 THEN module_order ELSE @module_order END, size_bytes=@size_bytes, mtime=@mtime, container=@container,
       playable=@playable, missing=0, remote_id=COALESCE(@remote_id, remote_id),
       duration_sec=CASE WHEN mtime<>@mtime THEN @duration_sec ELSE COALESCE(@duration_sec, duration_sec) END,
       thumb_path=CASE WHEN mtime<>@mtime THEN NULL ELSE thumb_path END
@@ -183,7 +191,8 @@ export function aplicarReconcile(
     VALUES (@id, @course_id, @rel_path, @module, @title, @order_index, @module_order, @duration_sec, @size_bytes, @mtime, @container, @playable, NULL, 0, @remote_id)
   `);
   const esquecerFalhaDeCapa = db.prepare('DELETE FROM capas_estado WHERE lesson_id=? AND (SELECT mtime FROM lessons WHERE id=?) <> ?');
-  const markMissing = db.prepare('UPDATE lessons SET missing=1, order_index=@order_index WHERE id=@id');
+  // A aula mapeada que sumiu fica no lugar dela (volta para lá se o arquivo voltar).
+  const markMissing = db.prepare('UPDATE lessons SET missing=1, order_index=CASE WHEN mapeada=1 THEN order_index ELSE @order_index END WHERE id=@id');
   // Upsert por (course_id, rel_path): mantém o ID ESTÁVEL de materiais que já
   // existiam. Apagar+reinserir a cada rescan trocava os ids toda vez — e como a
   // página do curso re-escaneia no mount, os links de material quebravam.
@@ -201,7 +210,7 @@ export function aplicarReconcile(
       // Arquivo reenviado (mtime novo): a capa que tinha falhado pode existir agora.
       esquecerFalhaDeCapa.run(m.id, m.id, d.mtime);
       updateLesson.run({
-        id: m.id, rel_path: d.relPath, module: d.module, title: d.title, order_index: d.orderIndex,
+        id: m.id, rel_path: d.relPath, module: d.module, title: d.title, order_index: ordem(d.orderIndex),
         module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime, container: d.container,
         playable: d.playable ? 1 : 0,
         remote_id: extras?.get(d.relPath)?.remoteId ?? null,
@@ -212,7 +221,7 @@ export function aplicarReconcile(
       const d = a.derived;
       insertLesson.run({
         id: randomUUID(), course_id: courseId, rel_path: d.relPath, module: d.module, title: d.title,
-        order_index: d.orderIndex, module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime,
+        order_index: ordem(d.orderIndex), module_order: d.moduleOrder, size_bytes: d.sizeBytes, mtime: d.mtime,
         container: d.container, playable: d.playable ? 1 : 0,
         remote_id: extras?.get(d.relPath)?.remoteId ?? null,
         duration_sec: extras?.get(d.relPath)?.durationSec ?? null,
@@ -238,8 +247,14 @@ export function aplicarReconcile(
       });
     }
     // Curso: estrutura, root, last_scanned, poster
+    // No curso mapeado a estrutura é a dos módulos que a pessoa montou, não a das pastas.
+    const estrutura = mapeado
+      ? db.prepare('SELECT 1 FROM lessons WHERE course_id=? AND module IS NOT NULL LIMIT 1').get(courseId)
+        ? 'modules'
+        : 'flat'
+      : plan.structure;
     db.prepare('UPDATE courses SET structure=@structure, last_scanned_at=@now, root_path=@root WHERE id=@id').run({
-      structure: plan.structure, now, root: rootPath, id: courseId,
+      structure: estrutura, now, root: rootPath, id: courseId,
     });
     const posterOk = course.poster_lesson_id
       ? (db.prepare('SELECT missing FROM lessons WHERE id=?').get(course.poster_lesson_id) as any)

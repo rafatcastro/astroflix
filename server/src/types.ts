@@ -36,6 +36,10 @@ export interface LessonRow {
   remote_id?: string | null;
   /** v15: o título dado pela pessoa ("Renomear"); o re-escaneio o mantém. */
   titulo_editado?: string | null;
+  /** v16: módulo, ordem e título vêm do mapeamento da pessoa, não das pastas. */
+  mapeada?: number;
+  /** v16: o rel_path do arquivo que é a descrição da aula ('' = nenhuma). */
+  descricao_rel?: string | null;
 }
 
 export interface MaterialRow {

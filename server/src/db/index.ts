@@ -91,7 +91,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 15;
+const ULTIMA_VERSAO = 16;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -486,6 +486,33 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
     transaction(db, () => {
       db.exec('ALTER TABLE lessons ADD COLUMN titulo_editado TEXT');
       pragma(db, 'user_version = 15');
+    });
+  }
+  if (version < 16 && ate >= 16) {
+    // O mapeamento do curso (MapearCurso.tsx): a pessoa monta os módulos, arrasta as
+    // aulas, renomeia e liga um arquivo como descrição. `mapeada` = módulo, ordem e
+    // título são dela: o re-escaneio deixa de recalcular os três a partir das pastas
+    // (que nunca mudam no disco). `descricao_rel` é o rel_path do arquivo que é a
+    // descrição da aula ('' = nenhuma, nem a adivinhada pelo nome). `mapa_pendente`
+    // abre o mapeamento na primeira visita ao curso recém-importado.
+    // O gatilho da nuvem passa a ver as duas colunas novas da aula.
+    transaction(db, () => {
+      db.exec(`
+        ALTER TABLE lessons ADD COLUMN mapeada INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE lessons ADD COLUMN descricao_rel TEXT;
+        ALTER TABLE courses ADD COLUMN mapa_pendente INTEGER NOT NULL DEFAULT 0;
+        DROP TRIGGER IF EXISTS nuvem_lessons_upd;
+        CREATE TRIGGER nuvem_lessons_upd
+          AFTER UPDATE OF title, module, order_index, module_order, duration_sec, remote_id, rel_path, mapeada, descricao_rel ON lessons
+          WHEN NOT EXISTS (SELECT 1 FROM nuvem_estado WHERE chave = 'aplicando')
+          BEGIN
+            DELETE FROM nuvem_fila WHERE tabela = 'aula' AND chave = json_object('curso', NEW.course_id, 'rel', NEW.rel_path);
+            INSERT INTO nuvem_fila (tabela, chave) VALUES ('aula', json_object('curso', NEW.course_id, 'rel', NEW.rel_path));
+            DELETE FROM nuvem_fila WHERE tabela = 'aula' AND chave = json_object('curso', OLD.course_id, 'rel', OLD.rel_path);
+            INSERT INTO nuvem_fila (tabela, chave) VALUES ('aula', json_object('curso', OLD.course_id, 'rel', OLD.rel_path));
+          END;
+      `);
+      pragma(db, 'user_version = 16');
     });
   }
 }

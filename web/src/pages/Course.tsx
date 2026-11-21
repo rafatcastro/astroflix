@@ -1,11 +1,13 @@
-import { useCallback, useState, useEffect, type DragEvent, type MouseEvent, type ReactNode } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useCallback, useRef, useState, useEffect, type DragEvent, type MouseEvent, type ReactNode } from 'react';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
 import { formatBytes, formatDuration, percent } from '../lib/format';
 import { getPref, setPref } from '../lib/prefs';
 import { api, materialUrl } from '../api/client';
-import type { LessonDTO, MaterialDTO } from '../api/client';
+import type { LessonDTO, MapaModulo, MaterialDTO } from '../api/client';
+import MapearCurso from '../components/MapearCurso';
+import AulasNovas from '../components/AulasNovas';
 import LessonGrid from '../components/LessonGrid';
 import { montarArvore, type No } from '../lib/arvore';
 import { KIND_LABEL } from '../components/MaterialsSection';
@@ -62,6 +64,32 @@ export default function Course() {
   const [alvoSub, setAlvoSub] = useState<string | null | undefined>(undefined);
   // Botão direito numa aula do Drive/Telegram: Baixar, ou Excluir download se já está na pasta.
   const [menuAula, setMenuAula] = useState<{ l: LessonDTO; x: number; y: number } | null>(null);
+
+  // O mapeamento (MapearCurso): 'auto' quando abre sozinho no curso recém-importado,
+  // 'manual' pelo menu ⋯ (que chega aqui com ?mapear=1, inclusive do cartão).
+  const [mapeando, setMapeando] = useState<null | 'auto' | 'manual'>(null);
+  const [params, setParams] = useSearchParams();
+  const abriuSozinho = useRef(false);
+  // "Depois" no popup das aulas novas: volta na próxima visita ao curso.
+  const [novasDepois, setNovasDepois] = useState(false);
+  useEffect(() => {
+    abriuSozinho.current = false;
+    setNovasDepois(false);
+  }, [id]);
+  useEffect(() => {
+    if (!params.get('mapear')) return;
+    setMapeando('manual');
+    const resto = new URLSearchParams(params);
+    resto.delete('mapear');
+    setParams(resto, { replace: true });
+  }, [params, setParams]);
+  // Recém-importado: abre quando a leitura terminou (a pasta do Drive é lida em
+  // segundo plano), para a pessoa ver todas as aulas de uma vez.
+  useEffect(() => {
+    if (!data?.mapaPendente || data.importacao?.carregando || !data.totalLessons || abriuSozinho.current) return;
+    abriuSozinho.current = true;
+    setMapeando('auto');
+  }, [data?.mapaPendente, data?.importacao?.carregando, data?.totalLessons]);
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
@@ -332,6 +360,29 @@ export default function Course() {
       () => setNotice(l.baixada ? 'Não deu para excluir o download. Tente de novo.' : 'Não deu para começar o download. Tente de novo.'),
     );
   };
+  // Curso já organizado que ganhou aulas no re-escaneio: elas pedem um módulo.
+  const aulasNovas = data.mapeado ? allLessons.filter((l) => !l.mapeada && !l.missing) : [];
+  const modulosDoMapa = [...new Set(allLessons.filter((l) => l.mapeada && l.module).map((l) => l.module as string))];
+  const depoisDeMapear = (movidos: number) => {
+    qc.invalidateQueries({ queryKey: ['course', id] });
+    qc.invalidateQueries({ queryKey: ['courses'] });
+    qc.invalidateQueries({ queryKey: ['armazenamento'] });
+    setNotice(
+      movidos
+        ? `Curso organizado. ${movidos === 1 ? '1 arquivo baixado foi' : `${movidos} arquivos baixados foram`} para as pastas novas.`
+        : 'Curso organizado.',
+    );
+  };
+  const salvarMapa = async (modulos: MapaModulo[]) => {
+    const r = await api.salvarMapa(id, modulos);
+    setMapeando(null);
+    depoisDeMapear(r.movidos);
+  };
+  const pularMapa = () => {
+    setMapeando(null);
+    void api.pularMapa(id).then(() => qc.invalidateQueries({ queryKey: ['course', id] }));
+  };
+
   const chooseSize = (n: number) => {
     setGridSize(n);
     setPref('course.gridSize', n);
@@ -636,6 +687,22 @@ export default function Course() {
             )}
           </div>
         </>
+      )}
+      {mapeando && (
+        <MapearCurso curso={data} primeiraVez={mapeando === 'auto'} onSalvar={salvarMapa} onPular={pularMapa} onFechar={() => setMapeando(null)} />
+      )}
+      {!mapeando && !novasDepois && aulasNovas.length > 0 && !data.importacao?.carregando && (
+        <AulasNovas
+          key={aulasNovas.map((l) => l.id).join(',')}
+          aulas={aulasNovas}
+          modulos={modulosDoMapa}
+          onColocar={async (escolhas) => {
+            const r = await api.mapearAulasNovas(id, escolhas);
+            depoisDeMapear(r.movidos);
+          }}
+          onOrganizarTudo={() => setMapeando('manual')}
+          onDepois={() => setNovasDepois(true)}
+        />
       )}
       {renomeando && (
         <DialogoTexto

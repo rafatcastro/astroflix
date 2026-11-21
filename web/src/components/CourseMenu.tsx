@@ -419,6 +419,12 @@ export default function CourseMenu({
             <button type="button" className={item} onClick={doRescan}>
               {course.source === 'telegram' ? 'Re-escanear (vídeos e fotos)' : 'Re-escanear'}
             </button>
+            {/* Módulos, ordem, nomes e descrições das aulas (MapearCurso, na página do curso). */}
+            {!course.deLink && (
+              <button type="button" className={item} onClick={() => { close(); navigate(`/course/${course.id}?mapear=1`); }}>
+                Organizar módulos e aulas…
+              </button>
+            )}
             <button type="button" className={item} onClick={() => setFlow('rename')}>Renomear…</button>
             <button type="button" className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button type="button" className={item} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>

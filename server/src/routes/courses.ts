@@ -49,6 +49,8 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     }
     const ilegiveis: string[] = [];
     const id = createCourseFromPath(db, target, (c) => ilegiveis.push(...c));
+    // Curso novo de uma pasta: a primeira visita abre o mapeamento (módulos, nomes, descrições).
+    db.prepare('UPDATE courses SET mapa_pendente=1 WHERE id=?').run(id);
     reply.code(201);
     return { id, existing: false, unreadable: ilegiveis.length };
   });
@@ -216,6 +218,10 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
         // armazenamento (a pessoa pode ter tirado de lá).
         // Só no curso remoto: no local a aula sempre está no disco, e não há o que marcar.
         baixada: remoto ? baixadas.has(r.id) : undefined,
+        // O mapeamento da pessoa (routes/mapa.ts): módulo, ordem e título são dela.
+        mapeada: !!r.mapeada,
+        // O arquivo que é a descrição ('' = nenhum; null = o adivinhado pelo nome).
+        descricao: r.descricao_rel ?? null,
       };
       let mod = modules.find((m) => m.name === r.module);
       if (!mod) { mod = { name: r.module, lessons: [] }; modules.push(mod); }
@@ -239,6 +245,9 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
       totalLessons: rows.length, completedLessons, materialsCount: materials.length, modules, materials,
       collectionId: course.collection_id ?? null,
       source: origemPublica(course.source),
+      // Recém-importado: a página abre o mapeamento quando a leitura terminar.
+      mapaPendente: !!course.mapa_pendente,
+      mapeado: rows.some((r) => !!r.mapeada),
       // Pasta do Drive recém-colada: as aulas vão entrando enquanto ela é lida.
       // Curso de link: os vídeos vão sendo baixados e entrando (links/importar.ts).
       importacao: course.source === 'drive' ? importacaoDrive(course.id) : importacaoLink(course.id),

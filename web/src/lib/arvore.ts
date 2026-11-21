@@ -33,7 +33,7 @@ const comparar = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base'
 // iam para "Materiais adicionais", e uma pasta só de PDFs sumia da lista), e a
 // pasta com um vídeo só continua pasta: o nome dela é o do módulo.
 // Os tipos que viram a descrição da aula (o texto embaixo do vídeo).
-const DESCRICAO = /\.(txt|md|markdown|pdf|docx)$/i;
+export const DESCRICAO = /\.(txt|md|markdown|pdf|docx)$/i;
 // "0000000123-Aula 1.mp4" e "0000000124-Aula 1.txt" (Telegram) também são o mesmo nome.
 const baseDe = (relPath: string) => comparavel(nomeDe(relPath).replace(/\.[^.]+$/, '').replace(/^\d{10}-/, ''));
 
@@ -90,8 +90,21 @@ export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[])
   const candidatos = materiais.filter((m) => DESCRICAO.test(m.relPath));
   const descricoes = new Map<string, MaterialDTO>();
   const usados = new Set<string>();
+  // A escolha feita no mapeamento (MapearCurso) vale antes de qualquer palpite pelo
+  // nome; "Nenhuma" ('') também: a aula fica sem descrição.
+  const escolhidas = new Set<string>();
+  const porCaminho = new Map(materiais.map((m) => [m.relPath, m]));
+  for (const l of aulas) {
+    if (typeof l.descricao !== 'string') continue;
+    escolhidas.add(l.id);
+    const m = l.descricao ? porCaminho.get(l.descricao) : undefined;
+    if (m && !usados.has(m.id)) {
+      descricoes.set(l.id, m);
+      usados.add(m.id);
+    }
+  }
   const ligar = (aula: LessonDTO | null | undefined, m: MaterialDTO) => {
-    if (!aula || descricoes.has(aula.id) || usados.has(m.id)) return;
+    if (!aula || descricoes.has(aula.id) || escolhidas.has(aula.id) || usados.has(m.id)) return;
     descricoes.set(aula.id, m);
     usados.add(m.id);
   };
@@ -121,7 +134,36 @@ export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[])
   return descricoes;
 }
 
+// O curso mapeado pela pessoa: os módulos dela, na ordem dela, e não as pastas do
+// disco (que nunca mudam). As aulas fora de módulo vêm antes; os arquivos que não
+// são a descrição de uma aula ficam juntos no fim, em "Arquivos", com as pastas deles.
+function arvoreMapeada(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[]): No[] {
+  const descricoes = new Set([...descricoesDasAulas(aulas, todosOsMateriais).values()].map((m) => m.id));
+  const nos: No[] = [];
+  const porModulo = new Map<string, Pasta>();
+  for (const l of aulas) {
+    const no: No = { tipo: 'aula', aula: l, titulo: l.title };
+    if (!l.module) {
+      nos.push(no);
+      continue;
+    }
+    let pasta = porModulo.get(l.module);
+    if (!pasta) {
+      pasta = { tipo: 'pasta', chave: `modulo:${l.module}`, nome: l.module, filhos: [], aulas: [], materiais: 0 };
+      porModulo.set(l.module, pasta);
+      nos.push(pasta);
+    }
+    pasta.filhos.push(no);
+    pasta.aulas.push(l);
+  }
+  const restantes = todosOsMateriais.filter((m) => !descricoes.has(m.id));
+  if (restantes.length)
+    nos.push({ tipo: 'pasta', chave: 'arquivos-do-curso', nome: 'Arquivos', filhos: montarArvore([], restantes), aulas: [], materiais: restantes.length });
+  return nos;
+}
+
 export function montarArvore(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[] = []): No[] {
+  if (aulas.some((l) => l.mapeada)) return arvoreMapeada(aulas, todosOsMateriais);
   const descricoes = new Set([...descricoesDasAulas(aulas, todosOsMateriais).values()].map((m) => m.id));
   const materiais = todosOsMateriais.filter((m) => !descricoes.has(m.id));
   const pastas = [...aulas.map((l) => pastasDe(l.relPath)), ...materiais.map((m) => pastasDe(m.relPath))];

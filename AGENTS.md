@@ -413,6 +413,20 @@ re-apontar preserva o histórico.
 - `lessons.titulo_editado` (v15): o "Renomear" do botão direito da aula (`PATCH /api/lessons/:id`).
   Muda só o título, nunca o arquivo (o `rel_path` é a identidade na nuvem e no progresso); o
   re-escaneio e a descida da nuvem fazem `COALESCE(titulo_editado, …)`. Vazio volta ao nome do arquivo.
+- **Mapeamento do curso** (v16, `routes/mapa.ts`, `MapearCurso.tsx`): ao importar uma pasta, um link do
+  Drive ou do Telegram (só o curso novo, não o lote nem a playlist), `courses.mapa_pendente` faz a
+  página do curso abrir, quando a leitura termina, a tela em que a pessoa cria módulos, arrasta as
+  aulas (ou marca várias, com Shift, e move), renomeia e liga um arquivo de texto como descrição
+  (`lessons.descricao_rel`; `''` = nenhuma, nem a adivinhada pelo nome). O menu ⋯ ("Organizar
+  módulos e aulas…", `?mapear=1`) reabre. `lessons.mapeada` = módulo, ordem e título são da pessoa:
+  o re-escaneio não os recalcula, e a aula que chega depois (`mapeada=0`, ordem 50000+) abre o popup
+  `AulasNovas.tsx` para escolher o módulo (vai para o fim dele). **A pasta de origem nunca muda**: a
+  página monta os módulos pelo `module` (`arvoreMapeada` em `lib/arvore.ts`, os arquivos restantes
+  em "Arquivos"), e só o "Baixar" vira pastas: `NN - Módulo/NN - Título.ext`, com a descrição ao lado
+  e o mesmo nome (`partesNoCurso` em `armazenamento.ts`). Mudar o mapeamento move o que já foi
+  baixado (`reorganizarBaixados`, em duas passadas, com os downloads do curso pausados). Sobe para a
+  conta em `aulas.mapeada`/`aulas.descricao_rel` (rodar o `schema.sql` de novo); sem as colunas, a
+  aula sobe sem elas e o mapeamento fica só nesta máquina.
 - `cache_aulas` e `capas_estado` (v14) são só desta máquina, sem gatilho da nuvem: o cache
   automático das aulas remotas e o estado das capas que falharam.
 - As aulas são apagadas em cascata.

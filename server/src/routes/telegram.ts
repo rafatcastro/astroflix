@@ -13,8 +13,12 @@ export async function telegramRoutes(
 ): Promise<void> {
   const { db, config, telegram } = opts;
 
-  const criar = async (cliente: ClienteTelegram, grupo: GrupoTelegram, link: string) =>
-    createCourseFromTelegram(db, { cliente, config }, grupo, link);
+  // Curso novo: a primeira visita abre o mapeamento (módulos, nomes, descrições).
+  const criar = async (cliente: ClienteTelegram, grupo: GrupoTelegram, link: string) => {
+    const r = await createCourseFromTelegram(db, { cliente, config }, grupo, link);
+    if (!r.existente) db.prepare('UPDATE courses SET mapa_pendente=1 WHERE id=?').run(r.id);
+    return r;
+  };
 
   // Sem conta: 401 com precisaConectar, e a interface mostra o QR. Convite de um
   // grupo em que a pessoa ainda não está: 409, e a interface pergunta antes de

@@ -4,7 +4,8 @@ import type { Db } from './db';
 import type { AppConfig } from './config';
 
 // A pasta onde ficam as aulas e os materiais baixados do Drive e do Telegram,
-// com os nomes reais: <raiz>/<curso>/<rel_path>. É a cópia que a pessoa pediu
+// com os nomes reais: <raiz>/<curso>/<rel_path> (no curso mapeado, a estrutura
+// que a pessoa montou: <raiz>/<curso>/NN - Módulo/NN - Título.ext). É a cópia que a pessoa pediu
 // ("Baixar"). A outra cópia que o app faz é o cache automático da aula aberta e
 // das próximas (cache-aulas.ts), que tem limite e se limpa sozinho; "Baixar" uma
 // aula que está lá move o arquivo para cá em vez de baixar de novo. A pessoa pode abrir a pasta e levar os arquivos
@@ -124,9 +125,49 @@ export function pastaDoCurso(db: Db, config: AppConfig, courseId: string): strin
  * rel_path e do que já está registrado. Dois itens que viram o mesmo nome
  * (saneamento, maiúsculas num disco que não as distingue) ganham " (2)".
  */
+// "1" → "01"; com 100 ou mais, três dígitos, para o Finder não pôr o 100 antes do 11.
+const numero = (n: number, total: number) => String(n).padStart(total >= 100 ? 3 : 2, '0');
+
+type AulaMapeada = { id: string; course_id: string; module: string | null; title: string; order_index: number; rel_path: string };
+
+/** O caminho da aula mapeada dentro da pasta do curso: "NN - Módulo/NN - Título.ext". */
+function partesDaAulaMapeada(db: Db, aula: AulaMapeada, ext: string): string[] {
+  const modulos = db
+    .prepare('SELECT module FROM lessons WHERE course_id=? AND mapeada=1 AND module IS NOT NULL GROUP BY module ORDER BY MIN(order_index)')
+    .all(aula.course_id) as Array<{ module: string }>;
+  const irmas = db
+    .prepare('SELECT id FROM lessons WHERE course_id=? AND mapeada=1 AND module IS ? ORDER BY order_index')
+    .all(aula.course_id, aula.module) as Array<{ id: string }>;
+  const nome = sanear(`${numero(irmas.findIndex((i) => i.id === aula.id) + 1, irmas.length)} - ${aula.title}${ext}`);
+  if (aula.module === null) return [nome];
+  const i = modulos.findIndex((m) => m.module === aula.module);
+  return [sanear(`${numero(i + 1, modulos.length)} - ${aula.module}`, 120), nome];
+}
+
+/**
+ * Onde o item fica dentro da pasta do curso. Sem mapeamento, o caminho da origem.
+ * No curso mapeado pela pessoa, a aula vai para a pasta do módulo dela com o nome
+ * que ela deu, numerados na ordem que ela arrastou; o arquivo ligado como
+ * descrição vai ao lado da aula, com o mesmo nome (e assim também é achado como
+ * descrição pelo nome, se a pasta for importada como curso local).
+ */
+function partesNoCurso(db: Db, item: ItemBaixavel): string[] {
+  const ext = path.extname(item.relPath);
+  const aula =
+    item.tipo === 'aula'
+      ? (db.prepare('SELECT id, course_id, module, title, order_index, rel_path FROM lessons WHERE id=? AND mapeada=1').get(item.id) as
+          | AulaMapeada
+          | undefined)
+      : (db
+          .prepare('SELECT id, course_id, module, title, order_index, rel_path FROM lessons WHERE course_id=? AND mapeada=1 AND descricao_rel=? LIMIT 1')
+          .get(item.courseId, item.relPath) as AulaMapeada | undefined);
+  if (aula) return partesDaAulaMapeada(db, aula, ext);
+  return item.relPath.split('/').filter(Boolean).map((p) => sanear(p));
+}
+
 export function destinoDe(db: Db, config: AppConfig, item: ItemBaixavel): string {
   const pasta = pastaDoCurso(db, config, item.courseId);
-  const partes = item.relPath.split('/').filter(Boolean).map((p) => sanear(p));
+  const partes = partesNoCurso(db, item);
   const base = path.join(pasta, ...partes);
   // Saneado, não escapa; a conferência fica como a última barreira.
   if (!dentro(base, pasta)) throw new Error('caminho fora da pasta do curso');
@@ -544,27 +585,51 @@ export function reorganizarBaixados(db: Db, config: AppConfig, courseId: string,
     apagarVazias(path.dirname(de), raiz);
   };
 
+  // O destino de cada item; a aula convertida é o .mp4 com o nome do original.
+  const idealDe = (item: ItemBaixavel, convertido: boolean) => {
+    const d = destinoDe(db, config, item);
+    return convertido ? d.slice(0, d.length - path.extname(d).length) + '.mp4' : d;
+  };
   let movidos = 0;
+  // Os já baixados vão em duas passadas: primeiro um nome provisório, depois o
+  // destino. No mapeamento (routes/mapa.ts) pôr uma aula no meio renumera todas as
+  // seguintes, e numa passada só cada uma acharia o lugar ainda ocupado pela vizinha.
+  const provisorios: Array<{ item: ItemBaixavel; antes: string; agora: string; convertido: boolean }> = [];
   for (const [tipo, l] of itens) {
     const item: ItemBaixavel = { tipo, id: l.id, courseId, relPath: l.rel_path, remoteId: l.remote_id ?? '', tamanho: Number(l.size_bytes ?? 0) };
-    let ideal = destinoDe(db, config, item);
     const r = registro.get(tipo, l.id) as { arquivo: string; convertido: number } | undefined;
     if (r) {
-      // Aula convertida: o arquivo é o .mp4 com o nome do original.
-      if (r.convertido) ideal = ideal.slice(0, ideal.length - path.extname(ideal).length) + '.mp4';
-      if (r.arquivo === ideal || !dentro(r.arquivo, raiz) || !fs.existsSync(r.arquivo) || fs.existsSync(ideal)) continue;
+      const ideal = idealDe(item, !!r.convertido);
+      if (r.arquivo === ideal || !dentro(r.arquivo, raiz) || !fs.existsSync(r.arquivo)) continue;
       movidos++;
       if (simular) continue;
-      mover(r.arquivo, ideal);
-      atualizar.run(ideal, tipo, l.id);
+      const agora = `${r.arquivo}.astroflix-movendo`;
+      try {
+        fs.renameSync(r.arquivo, agora);
+      } catch {
+        continue;
+      }
+      atualizar.run(agora, tipo, l.id);
+      provisorios.push({ item, antes: r.arquivo, agora, convertido: !!r.convertido });
     } else {
       // Download que parou no meio, gravado no lugar antigo (na raiz do curso, sem módulo).
       const antigo = path.join(mapeada.pasta, sanear(path.basename(l.rel_path))) + '.part';
-      const novo = `${ideal}.part`;
+      const novo = `${destinoDe(db, config, item)}.part`;
       if (antigo === novo || !fs.existsSync(antigo) || fs.existsSync(novo)) continue;
       movidos++;
       if (simular) continue;
       mover(antigo, novo);
+    }
+  }
+  for (const p of provisorios) {
+    const ideal = idealDe(p.item, p.convertido);
+    // Um arquivo que não é de nenhum item ocupa o lugar: a aula volta para onde estava.
+    const para = fs.existsSync(ideal) ? p.antes : ideal;
+    try {
+      mover(p.agora, para);
+      atualizar.run(para, p.item.tipo, p.item.id);
+    } catch {
+      /* fica com o nome provisório, registrado: continua tocando */
     }
   }
   return movidos;
@@ -639,3 +704,4 @@ export function migrarCacheAntigo(db: Db, config: AppConfig): void {
   db.prepare("DELETE FROM settings WHERE key='exportacoes.pendentes'").run();
   db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING').run(CHAVE_LEGADO, '1');
 }
+

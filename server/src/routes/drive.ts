@@ -41,6 +41,8 @@ export async function driveRoutes(app: FastifyInstance, opts: { db: Db; drive: S
         link,
         (texto as string).trim(),
       );
+      // Curso novo: a primeira visita abre o mapeamento, quando a pasta terminar de ser lida.
+      if (!existente) db.prepare('UPDATE courses SET mapa_pendente=1 WHERE id=?').run(id);
       return reply.code(existente ? 200 : 201).send({ id, existente });
     } catch (e) {
       if (!(e instanceof FalhaDrive)) throw e;

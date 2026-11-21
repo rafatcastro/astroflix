@@ -26,12 +26,21 @@ export interface LessonDTO {
   progressUpdatedAt: string | null;
   /** Curso remoto: está na pasta de armazenamento ("Baixar"), toca sem internet. Curso local: ausente. */
   baixada?: boolean;
+  /** Módulo, ordem e título vêm do mapeamento da pessoa (MapearCurso). */
+  mapeada?: boolean;
+  /** rel_path do arquivo que é a descrição; '' = nenhum; null = o adivinhado pelo nome. */
+  descricao?: string | null;
 }
 export interface LessonFull extends LessonDTO {
   courseId: string; courseTitle: string; courseSource: 'local' | 'drive' | 'telegram';
   prevLessonId: string | null; nextLessonId: string | null;
 }
 export interface ModuleDTO { name: string | null; lessons: LessonDTO[]; }
+/** Um módulo do mapeamento (null = as aulas fora de módulo, antes dos módulos). */
+export interface MapaModulo {
+  nome: string | null;
+  aulas: Array<{ id: string; titulo: string; descricao: string | null }>;
+}
 export type MaterialKind = 'pdf' | 'zip' | 'archive' | 'doc' | 'image' | 'other';
 export interface MaterialDTO { id: string; module: string | null; relPath: string; name: string; kind: MaterialKind; sizeBytes: number; }
 export interface CourseDetail {
@@ -41,6 +50,10 @@ export interface CourseDetail {
   materials: MaterialDTO[];
   collectionId: string | null;
   source: 'local' | 'drive' | 'telegram';
+  /** Recém-importado: a página abre o mapeamento quando a leitura terminar. */
+  mapaPendente?: boolean;
+  /** Alguma aula foi mapeada: as que não foram (novas) pedem um módulo. */
+  mapeado?: boolean;
   // Pasta do Drive recém-colada: lida em segundo plano, as aulas vão entrando.
   /** Curso de link (pasta em DATA_DIR/links): uma playlist que a extensão pode encher. */
   deLink?: boolean;
@@ -616,6 +629,13 @@ export const api = {
   /** Arrastar a aula para outra sub-playlist; null = fora delas. */
   moverAulaParaSubPlaylist: (lessonId: string, modulo: string | null) =>
     jsonFetch<void>(`/api/links/aulas/${lessonId}/mover`, { method: 'POST', body: JSON.stringify({ modulo }) }),
+  /** O mapeamento inteiro do curso: módulos na ordem, com as aulas, os títulos e as descrições. */
+  salvarMapa: (courseId: string, modulos: MapaModulo[]) =>
+    jsonFetch<{ ok: true; movidos: number }>(`/api/courses/${courseId}/mapa`, { method: 'PUT', body: JSON.stringify({ modulos }) }),
+  pularMapa: (courseId: string) => jsonFetch<void>(`/api/courses/${courseId}/mapa/pular`, { method: 'POST' }),
+  /** As aulas novas de um curso mapeado, cada uma para o fim do módulo escolhido (null = fora dos módulos). */
+  mapearAulasNovas: (courseId: string, aulas: Array<{ id: string; modulo: string | null }>) =>
+    jsonFetch<{ ok: true; movidos: number }>(`/api/courses/${courseId}/mapa/aulas`, { method: 'POST', body: JSON.stringify({ aulas }) }),
   renomearAula: (lessonId: string, titulo: string) =>
     jsonFetch<{ id: string; title: string }>(`/api/lessons/${lessonId}`, { method: 'PATCH', body: JSON.stringify({ titulo }) }),
   linksEntrar: (link: string) => jsonFetch<void>('/api/links/entrar', { method: 'POST', body: JSON.stringify({ link }) }),
