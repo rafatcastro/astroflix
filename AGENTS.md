@@ -431,7 +431,7 @@ re-apontar preserva o histórico.
   `/mapa/aulas` respondem 400 `so-telegram` nos outros. O menu ⋯ ("Organizar módulos e aulas…", `?mapear=1`)
   reabre. **"Organizar por texto…"** (menu ⋯, `?mapear=texto`, `ModelarPorTexto.tsx`): a pessoa cola o índice do
   curso ou escreve como quer os módulos, e `POST /api/courses/:id/mapa/texto` pergunta ao **Claude Code** dela
-  (`claude.ts`: `claude -p` com saída estruturada, `--model sonnet`, numa pasta vazia, sem ferramentas, MCP,
+  (`claude.ts`: `claude -p` com saída estruturada, `--model opus`, numa pasta vazia, sem ferramentas, MCP,
   configurações nem plugins, que levavam ~100 mil tokens a cada pedido; o binário é procurado também em
   `~/.local/bin` e `~/.claude/local`, fora do PATH do app aberto pelo Dock). As aulas vão numeradas (1..N), não pelos
   ids; a resposta não é gravada: abre na tela de mapeamento já montada, para conferir e salvar. Sem o Claude Code,

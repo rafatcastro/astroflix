@@ -171,7 +171,7 @@ ${texto}
 AULAS DO CURSO (número. título atual | arquivo | módulo atual), na ordem de postagem:
 ${lista}
 
-Responda com os módulos na ordem em que devem aparecer. Cada módulo tem "nome" e "aulas" (os números das aulas, na ordem em que devem tocar). Para um submódulo, use "Módulo/Submódulo" no nome (até 5 níveis). Use os nomes de módulo do texto da pessoa quando houver. Em cada aula, "titulo" só quando o texto der um nome melhor para ela; senão omita. Cada aula aparece no máximo uma vez. Aulas que o texto não permite situar ficam de fora (não invente módulos para elas).`;
+Responda com os módulos na ordem em que devem aparecer. Cada módulo tem "nome" e "aulas" (os números das aulas, na ordem em que devem tocar). Para um submódulo, use "Módulo/Submódulo" no nome (até 5 níveis). Quando o texto da pessoa nomeia os módulos, copie o nome exatamente como está escrito, com numeração e prefixos (ex.: "Módulo 01 - PROSPECÇÃO DE CLIENTES"), tirando só marcadores soltos do começo da linha como "=", "-" ou "•". Em cada aula, "titulo" só quando o texto der um nome melhor para ela; senão omita. Cada aula aparece no máximo uma vez. Aulas que o texto não permite situar ficam de fora (não invente módulos para elas).`;
     const schema = {
       type: 'object',
       properties: {

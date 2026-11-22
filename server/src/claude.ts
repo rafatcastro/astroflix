@@ -64,7 +64,9 @@ export async function perguntarAoClaude<T>(prompt: string, schema: object, limit
     '--strict-mcp-config',
     '--setting-sources', '',
     '--disable-slash-commands',
-    '--model', 'sonnet',
+    // O mais capaz: organizar centenas de aulas por um índice solto erra menos com
+    // ele, e o custo de um pedido (centavos) não pesa para uma ação manual e rara.
+    '--model', 'opus',
     '--json-schema', JSON.stringify(schema),
   ];
   try {
