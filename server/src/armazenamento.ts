@@ -130,18 +130,45 @@ const numero = (n: number, total: number) => String(n).padStart(total >= 100 ? 3
 
 type AulaMapeada = { id: string; course_id: string; module: string | null; title: string; order_index: number; rel_path: string };
 
-/** O caminho da aula mapeada dentro da pasta do curso: "NN - Módulo/NN - Título.ext". */
+/**
+ * As pastas de um módulo "A/B" no "Baixar": uma por nível, "NN - A/NN - B",
+ * numeradas entre os irmãos (os submódulos do mesmo pai) na ordem em que a pessoa
+ * os pôs, que é a da primeira aula debaixo de cada um. Recebe os módulos das aulas
+ * mapeadas com a menor ordem de cada um; separada do banco para dar para conferir à mão.
+ */
+export function pastasDoModulo(modulo: string, modulos: Array<{ module: string; ordem: number }>): string[] {
+  const alvo = modulo.split('/');
+  const pastas: string[] = [];
+  for (let k = 0; k < alvo.length; k++) {
+    const pai = alvo.slice(0, k).join('/');
+    // Prefixo de comprimento k+1 → a menor ordem de uma aula debaixo dele.
+    const irmaos = new Map<string, number>();
+    for (const m of modulos) {
+      const partes = m.module.split('/');
+      if (partes.length <= k || partes.slice(0, k).join('/') !== pai) continue;
+      const parte = partes[k];
+      irmaos.set(parte, Math.min(irmaos.get(parte) ?? Infinity, m.ordem));
+    }
+    const ordem = [...irmaos.entries()].sort((a, b) => a[1] - b[1]).map(([p]) => p);
+    const i = ordem.indexOf(alvo[k]);
+    pastas.push(sanear(`${numero(i + 1, ordem.length)} - ${alvo[k]}`, 120));
+  }
+  return pastas;
+}
+
+/** O caminho da aula mapeada dentro da pasta do curso: "NN - Módulo/NN - Submódulo/NN - Título.ext". */
 function partesDaAulaMapeada(db: Db, aula: AulaMapeada, ext: string): string[] {
-  const modulos = db
-    .prepare('SELECT module FROM lessons WHERE course_id=? AND mapeada=1 AND module IS NOT NULL GROUP BY module ORDER BY MIN(order_index)')
-    .all(aula.course_id) as Array<{ module: string }>;
+  // As aulas numeram entre as que têm exatamente o mesmo módulo (as de um
+  // submódulo ficam na pasta dele, não contam na do pai).
   const irmas = db
     .prepare('SELECT id FROM lessons WHERE course_id=? AND mapeada=1 AND module IS ? ORDER BY order_index')
     .all(aula.course_id, aula.module) as Array<{ id: string }>;
   const nome = sanear(`${numero(irmas.findIndex((i) => i.id === aula.id) + 1, irmas.length)} - ${aula.title}${ext}`);
   if (aula.module === null) return [nome];
-  const i = modulos.findIndex((m) => m.module === aula.module);
-  return [sanear(`${numero(i + 1, modulos.length)} - ${aula.module}`, 120), nome];
+  const modulos = db
+    .prepare('SELECT module, MIN(order_index) AS ordem FROM lessons WHERE course_id=? AND mapeada=1 AND module IS NOT NULL GROUP BY module')
+    .all(aula.course_id) as Array<{ module: string; ordem: number }>;
+  return [...pastasDoModulo(aula.module, modulos), nome];
 }
 
 /**

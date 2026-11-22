@@ -2,9 +2,9 @@ import { useState } from 'react';
 import type { LessonDTO } from '../api/client';
 
 // O curso já foi organizado (MapearCurso) e o re-escaneio trouxe aulas que não
-// estavam lá (o grupo do Telegram ganhou mensagens, a pasta ganhou vídeos): cada
+// estavam lá (o grupo do Telegram ganhou mensagens): cada
 // uma pergunta em que módulo entra, no fim dele. Até a pessoa escolher, elas ficam
-// depois de todas, com o módulo que veio das pastas.
+// depois de todas, com o módulo que veio do tópico.
 export default function AulasNovas({
   aulas,
   modulos,
@@ -13,7 +13,7 @@ export default function AulasNovas({
   onDepois,
 }: {
   aulas: LessonDTO[];
-  /** Os módulos do mapeamento, na ordem. */
+  /** Os módulos do mapeamento, na ordem, como caminho ("A/B" é o submódulo B de A). */
   modulos: string[];
   onColocar: (escolhas: Array<{ id: string; modulo: string | null }>) => Promise<void>;
   onOrganizarTudo: () => void;
@@ -41,7 +41,7 @@ export default function AulasNovas({
       <option value="">Fora dos módulos</option>
       {modulos.map((m) => (
         <option key={m} value={m}>
-          {m}
+          {m.split('/').join(' › ')}
         </option>
       ))}
     </>

@@ -3,6 +3,7 @@ import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import type { ClienteTelegram, GrupoTelegram } from '../telegram/cliente';
 import { montarCurso, pastasDosTopicos, type CursoTelegram } from '../telegram/mensagens';
+import { escolherGuia, type GuiaModulo } from '../telegram/guia';
 import { FalhaTelegram, type PeerTelegram, type TopicoTelegram } from '../telegram/tipos';
 import { gravarCapaAtomico, lessonThumbPath } from '../media/thumbs';
 import { podeTentarCapa, registrarFalhaDeCapa } from '../media/fila-capas';
@@ -25,22 +26,74 @@ const LOTE_CAPAS = 100;
 // Num grupo com tópicos, os módulos seguem a ordem em que o Telegram mostra os
 // tópicos (fixados primeiro, depois a atividade mais recente), e não a
 // alfabética do deriveCourse; cada re-escaneio a atualiza.
-function derivar(curso: CursoTelegram, topicos: TopicoTelegram[] = []): DerivedCourse {
+// Com o "Menu" de hashtags do canal (guia), os módulos são os dele e passam na
+// frente dos tópicos: o menu é o índice que o dono do curso escreveu. Exportado
+// só para poder ser conferido isolado.
+export function derivar(curso: CursoTelegram, topicos: TopicoTelegram[] = [], guia: GuiaModulo[] | null = null): DerivedCourse {
   const derived = deriveCourse(curso.videos);
   const titulos = new Map(curso.videos.map((v) => [v.relPath, v.titulo]));
   for (const l of derived.lessons) l.title = titulos.get(l.relPath) ?? l.title;
+  if (guia?.length) return aplicarGuia(derived, curso, guia);
   if (topicos.length && derived.structure === 'modules') {
     const ordem = new Map([...pastasDosTopicos(topicos).values()].map((nome, i) => [nome, i]));
     const posicao = (m: string | null) => (m === null ? -1 : (ordem.get(m) ?? ordem.size));
     // sort estável: dentro do módulo, fica a ordem de postagem que o deriveCourse deu.
     derived.lessons.sort((a, b) => posicao(a.module) - posicao(b.module));
-    const modulos = [...new Set(derived.lessons.map((l) => l.module))];
-    derived.lessons.forEach((l, i) => {
-      l.orderIndex = i;
-      l.moduleOrder = modulos.indexOf(l.module);
-    });
+    renumerar(derived);
   }
   return derived;
+}
+
+function renumerar(derived: DerivedCourse): void {
+  const modulos = [...new Set(derived.lessons.map((l) => l.module))];
+  derived.lessons.forEach((l, i) => {
+    l.orderIndex = i;
+    l.moduleOrder = modulos.indexOf(l.module);
+  });
+}
+
+// A aula vai para o primeiro módulo do guia que tem uma das hashtags dela e,
+// dentro dele, para o lugar da hashtag no menu (o dono pode listar fora da ordem
+// de postagem). O que o menu não cita fica antes, sem módulo, na ordem de
+// postagem: a tela de mapeamento mostra em "Fora dos módulos" para a pessoa decidir.
+function aplicarGuia(derived: DerivedCourse, curso: CursoTelegram, guia: GuiaModulo[]): DerivedCourse {
+  // Com tópicos, o deriveCourse ordenou por pasta; a postagem é a ordem do montarCurso.
+  const postagem = new Map(curso.videos.map((v, i) => [v.relPath, i]));
+  const hashtags = new Map(curso.videos.map((v) => [v.relPath, v.hashtags]));
+  const lugar = new Map<string, { modulo: number; tag: number }>();
+  for (const l of derived.lessons) {
+    const tags = hashtags.get(l.relPath) ?? [];
+    const modulo = guia.findIndex((g) => g.tags.some((t) => tags.includes(t)));
+    if (modulo < 0) continue;
+    const tag = Math.min(...tags.map((t) => guia[modulo].tags.indexOf(t)).filter((i) => i >= 0));
+    lugar.set(l.relPath, { modulo, tag });
+  }
+  for (const l of derived.lessons) {
+    const p = lugar.get(l.relPath);
+    l.module = p ? guia[p.modulo].modulo : null;
+  }
+  const chave = (relPath: string) => lugar.get(relPath) ?? { modulo: -1, tag: 0 };
+  derived.lessons.sort((a, b) => {
+    const x = chave(a.relPath);
+    const y = chave(b.relPath);
+    return x.modulo - y.modulo || x.tag - y.tag || (postagem.get(a.relPath) ?? 0) - (postagem.get(b.relPath) ?? 0);
+  });
+  derived.structure = 'modules';
+  renumerar(derived);
+  return derived;
+}
+
+// O guia é enfeite: cliente sem `textos` (os falsos) ou canal sem menu dá null,
+// e o curso segue com os tópicos ou sem módulos. Qualquer erro também (FLOOD_WAIT
+// ao ler as fixadas, texto que o leitor do menu não esperava): as mensagens já
+// vieram, e perder o curso inteiro por causa do menu seria pior que ficar sem ele.
+async function guiaDo(deps: DepsTelegram, peer: PeerTelegram, curso: CursoTelegram): Promise<GuiaModulo[] | null> {
+  try {
+    return escolherGuia((await deps.cliente.textos?.(peer)) ?? [], new Set(curso.videos.flatMap((v) => v.hashtags)));
+  } catch (err) {
+    console.error('Não deu para ler o menu de hashtags do canal:', err);
+    return null;
+  }
 }
 
 function extrasDe(curso: CursoTelegram): Map<string, ExtraRemoto> {
@@ -79,11 +132,12 @@ export async function createCourseFromTelegram(
   const topicos = await deps.cliente.topicos(grupo.peer);
   const curso = montarCurso(await deps.cliente.mensagens(grupo.peer), topicos);
   if (!curso.videos.length) throw new FalhaTelegram('sem-videos');
+  const guia = await guiaDo(deps, grupo.peer, curso);
 
   const id = inserirCursoDerivado(
     db,
     { title: grupo.titulo || 'Curso do Telegram', rootPath: linkOriginal, source: 'telegram', telegramPeer: JSON.stringify(grupo.peer) },
-    derivar(curso, topicos),
+    derivar(curso, topicos, guia),
     curso.materials,
     extrasDe(curso),
   );
@@ -103,7 +157,7 @@ export async function reconcileTelegramCourse(db: Db, deps: DepsTelegram, course
 
   const topicos = await deps.cliente.topicos(peer);
   const curso = montarCurso(await deps.cliente.mensagens(peer), topicos);
-  const derived = derivar(curso, topicos);
+  const derived = derivar(curso, topicos, await guiaDo(deps, peer, curso));
   const existing = db
     .prepare('SELECT id, rel_path, mtime, order_index FROM lessons WHERE course_id=?')
     .all(courseId) as unknown as ExistingLesson[];

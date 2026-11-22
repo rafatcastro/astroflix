@@ -50,6 +50,12 @@ export interface ClienteTelegram {
   topicos(peer: PeerTelegram): Promise<TopicoTelegram[]>;
   /** O histórico inteiro do grupo, em qualquer ordem (montarCurso ordena). */
   mensagens(peer: PeerTelegram): Promise<MensagemTelegram[]>;
+  /**
+   * As mensagens só de texto que podem ser o "Menu" do canal (as fixadas e as 50
+   * primeiras; num tópico, só as fixadas). Opcional (os clientes falsos não têm):
+   * sem ele, o curso sai sem o guia de módulos.
+   */
+  textos?(peer: PeerTelegram): Promise<MensagemTelegram[]>;
   /** Blocos de BLOCO bytes a partir de `offset` (múltiplo de BLOCO), até o fim do arquivo ou o abort. */
   baixar(peer: PeerTelegram, msgId: number, offset: number, signal: AbortSignal): AsyncIterable<Buffer>;
   /**

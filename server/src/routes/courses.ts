@@ -49,8 +49,6 @@ export async function coursesRoutes(app: FastifyInstance, opts: { db: Db; config
     }
     const ilegiveis: string[] = [];
     const id = createCourseFromPath(db, target, (c) => ilegiveis.push(...c));
-    // Curso novo de uma pasta: a primeira visita abre o mapeamento (módulos, nomes, descrições).
-    db.prepare('UPDATE courses SET mapa_pendente=1 WHERE id=?').run(id);
     reply.code(201);
     return { id, existing: false, unreadable: ilegiveis.length };
   });

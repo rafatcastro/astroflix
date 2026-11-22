@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { useCourse } from '../api/hooks';
-import { api, materialUrl } from '../api/client';
+import { api, materialUrl, type MaterialDTO } from '../api/client';
 import { cliqueFora } from '../lib/desktop';
 import { KIND_LABEL } from './MaterialsSection';
 import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from './VisualizadorArquivo';
@@ -26,7 +26,7 @@ export default function PlaylistSidebar({
   const { data } = useCourse(courseId);
   const atualRef = useRef<HTMLButtonElement>(null);
   const todas = data ? data.modules.flatMap((m) => m.lessons) : [];
-  const arvore = montarArvore(todas, data?.materials ?? []);
+  const arvore = montarArvore(todas, data?.materials ?? [], data?.source);
   const [visualizado, setVisualizado] = useState<Visualizado>(null);
   const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const caminhoAtual = caminhoDaAula(arvore, currentLessonId).join('\n');
@@ -53,37 +53,39 @@ export default function PlaylistSidebar({
   const alternar = (chave: string) =>
     setAbertos((a) => (a.includes(chave) ? a.filter((c) => c !== chave) : [...a, chave]));
 
+  // O arquivo fica na pasta dele, como na página do curso: o que o app sabe
+  // mostrar abre por cima do vídeo; o resto é baixado.
+  const linhaDoMaterial = (m: MaterialDTO, profundidade: number) => {
+    const abre = !!tipoDeVisualizacao(m.name);
+    const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
+    return (
+      <a
+        key={m.id}
+        href={materialUrl(m.id, true)}
+        download={m.name}
+        onClick={(e) => {
+          if (abre) {
+            e.preventDefault();
+            setVisualizado({ id: m.id, name: m.name });
+          } else cliqueFora(e, materialUrl(m.id, true));
+        }}
+        style={recuo}
+        className="flex w-full items-center gap-2 py-2 pr-3 text-left text-sm hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
+      >
+        <span className="w-5 shrink-0" />
+        <span className="grid aspect-video w-24 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
+          {KIND_LABEL[m.kind]}
+        </span>
+        <span className="line-clamp-2 min-w-0 flex-1 text-neutral-200">{m.name}</span>
+      </a>
+    );
+  };
+
   const nivel = (nos: No[], profundidade: number) =>
     nos.map((no) => {
       // Cada nível recua um pouco: com a árvore toda aberta, dá para ver de que pasta é cada aula.
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
-      // O arquivo fica na pasta dele, como na página do curso: o que o app sabe
-      // mostrar abre por cima do vídeo; o resto é baixado.
-      if (no.tipo === 'material') {
-        const m = no.material;
-        const abre = !!tipoDeVisualizacao(m.name);
-        return (
-          <a
-            key={m.id}
-            href={materialUrl(m.id, true)}
-            download={m.name}
-            onClick={(e) => {
-              if (abre) {
-                e.preventDefault();
-                setVisualizado({ id: m.id, name: m.name });
-              } else cliqueFora(e, materialUrl(m.id, true));
-            }}
-            style={recuo}
-            className="flex w-full items-center gap-2 py-2 pr-3 text-left text-sm hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
-          >
-            <span className="w-5 shrink-0" />
-            <span className="grid aspect-video w-24 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
-              {KIND_LABEL[m.kind]}
-            </span>
-            <span className="line-clamp-2 min-w-0 flex-1 text-neutral-200">{m.name}</span>
-          </a>
-        );
-      }
+      if (no.tipo === 'material') return linhaDoMaterial(no.material, profundidade);
       if (no.tipo === 'pasta') {
         const aberto = abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
@@ -117,32 +119,35 @@ export default function PlaylistSidebar({
       const atual = l.id === currentLessonId;
       const estado = atual ? '▶' : l.completed ? '✓' : l.position > 0 ? '◐' : '';
       return (
-        <button
-          key={l.id}
-          ref={atual ? atualRef : undefined}
-          type="button"
-          onClick={() => onJump(l.id)}
-          aria-current={atual ? 'true' : undefined}
-          style={recuo}
-          className={`flex w-full items-center gap-2 py-2 pr-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
-            atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
-          }`}
-        >
-          <span className={`w-5 shrink-0 text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
-            {estado || posicao.get(l.id)}
-          </span>
-          <span className="relative shrink-0">
-            <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-24 rounded bg-neutral-800 object-cover" loading="lazy" />
-            {l.durationSec != null && (
-              <span className="escuro absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
-                {formatDuration(l.durationSec)}
-              </span>
-            )}
-          </span>
-          <span className={`line-clamp-2 min-w-0 flex-1 ${l.completed && !atual ? 'text-neutral-400' : 'text-neutral-100'}`}>
-            {no.titulo}
-          </span>
-        </button>
+        <Fragment key={l.id}>
+          <button
+            ref={atual ? atualRef : undefined}
+            type="button"
+            onClick={() => onJump(l.id)}
+            aria-current={atual ? 'true' : undefined}
+            style={recuo}
+            className={`flex w-full items-center gap-2 py-2 pr-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
+              atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
+            }`}
+          >
+            <span className={`w-5 shrink-0 text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
+              {estado || posicao.get(l.id)}
+            </span>
+            <span className="relative shrink-0">
+              <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-24 rounded bg-neutral-800 object-cover" loading="lazy" />
+              {l.durationSec != null && (
+                <span className="escuro absolute bottom-0.5 right-0.5 rounded bg-black/80 px-1 text-[10px] text-neutral-200">
+                  {formatDuration(l.durationSec)}
+                </span>
+              )}
+            </span>
+            <span className={`line-clamp-2 min-w-0 flex-1 ${l.completed && !atual ? 'text-neutral-400' : 'text-neutral-100'}`}>
+              {no.titulo}
+            </span>
+          </button>
+          {/* Os anexos da aula, logo abaixo dela, um nível para dentro. */}
+          {no.anexos.map((m) => linhaDoMaterial(m, profundidade + 1))}
+        </Fragment>
       );
     });
 

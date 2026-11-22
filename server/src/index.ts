@@ -11,6 +11,7 @@ import { mensagemDeBoot } from './banner';
 import { hasFfmpeg } from './media/ffmpeg';
 import { linhaDaUrl, linhaDeDownload, pathComExtras } from './desktop';
 import { corrigirCaminhos, moverPastaDeDados } from './pasta-de-dados';
+import { pastaDeArmazenamento, reorganizarBaixados } from './armazenamento';
 
 // Antes do loadConfig: se não deu para mover a pasta antiga, ele tem de apontar para ela.
 const mudanca = moverPastaDeDados();
@@ -32,6 +33,42 @@ for (const dir of [config.dataDir, config.thumbsDir, config.convertedDir, config
 const db = openDb(config.dbPath);
 let portaReal: number | null = null;
 if (mudanca?.movida) corrigirCaminhos(db, mudanca.antiga, config.dataDir);
+// A v17 devolveu às pastas os cursos do Drive que estavam mapeados; o que já foi
+// baixado deles ainda está em `NN - Módulo/NN - Título.ext` e volta à estrutura das
+// pastas aqui (a migração não tem a config). Antes do buildApp, que retoma os
+// downloads: nada está escrevendo nessas pastas ainda.
+const paraReorganizar = db.prepare("SELECT value FROM settings WHERE key='mapa.reorganizar'").get() as { value: string } | undefined;
+if (paraReorganizar) {
+  let ids: string[] = [];
+  try {
+    ids = JSON.parse(paraReorganizar.value) as string[];
+  } catch {
+    // Chave estragada: não há o que reorganizar com ela.
+  }
+  // Só sai da lista o curso cuja reorganização aconteceu. A pasta do curso no
+  // armazenamento fora do ar (disco externo desligado) fazia o reorganizarBaixados
+  // voltar sem mexer em nada, e a chave apagada deixava esses downloads para sempre
+  // no caminho do mapeamento antigo: o id fica para a próxima abertura. Curso sem
+  // pasta de download (nunca baixou) ou já excluído não tem o que esperar.
+  const raiz = pastaDeArmazenamento(db, config);
+  const pastaDe = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?');
+  const faltam: string[] = [];
+  for (const id of ids) {
+    const pasta = (pastaDe.get(id, raiz) as { pasta: string } | undefined)?.pasta;
+    if (pasta && !fs.existsSync(pasta)) {
+      faltam.push(id);
+      continue;
+    }
+    try {
+      reorganizarBaixados(db, config, id);
+    } catch (err) {
+      console.error(`Não deu para reorganizar os downloads do curso ${id}:`, err);
+      faltam.push(id);
+    }
+  }
+  if (faltam.length > 0) db.prepare("UPDATE settings SET value=? WHERE key='mapa.reorganizar'").run(JSON.stringify(faltam));
+  else db.prepare("DELETE FROM settings WHERE key='mapa.reorganizar'").run();
+}
 const app = buildApp(config, db, {
   retomarDownloads: true,
   exigirConta: true,

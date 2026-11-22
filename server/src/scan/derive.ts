@@ -70,11 +70,7 @@ export function deriveCourse(videoFiles: ScannedFile[]): DerivedCourse {
     for (const file of inModule) {
       const segs = segments(file.relPath);
       const filename = segs[segs.length - 1];
-      // aninhamento mais profundo é dobrado no título
-      const deeper = segs.slice(1, -1);
-      const title = deeper.length
-        ? `${deeper.join(' / ')} — ${cleanTitle(filename)}`
-        : cleanTitle(filename);
+      const title = cleanTitle(filename);
       const ext = path.extname(filename).toLowerCase();
 
       lessons.push({

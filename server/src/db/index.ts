@@ -2,6 +2,7 @@ import { createRequire } from 'node:module';
 import type { DatabaseSync as TipoDoBanco } from 'node:sqlite';
 import { SCHEMA_V1 } from './schema';
 import { compararCaminhos, compararNomes } from '../scan/natural-sort';
+import { deriveCourse } from '../scan/derive';
 
 // node:sqlite entra por require(), e não por import estático, para o aviso de
 // "feature experimental" poder ser silenciado (ver quiet.ts).
@@ -91,7 +92,7 @@ export function transaction(db: Db, fn: () => void): void {
 // Runner de migrações guardado por PRAGMA user_version. Para evoluir o schema,
 // acrescente um bloco `if (version < N)` novo — nunca edite o SCHEMA_V1 no lugar,
 // senão os bancos já existentes ficam para trás.
-const ULTIMA_VERSAO = 16;
+const ULTIMA_VERSAO = 17;
 
 // `ate` existe para os testes montarem um banco parado numa versão antiga de
 // verdade; o app sempre migra até a última.
@@ -513,6 +514,57 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
           END;
       `);
       pragma(db, 'user_version = 16');
+    });
+  }
+  if (version < 17 && ate >= 17) {
+    // O mapeamento passou a ser só do Telegram: num curso local ou do Drive as pastas
+    // já são a organização, e o mapeamento feito neles deixava a página sem a árvore
+    // das pastas (e os títulos com as pastas coladas, "Módulo — Aula"). Devolve esses
+    // cursos ao que o deriveCourse tira dos rel_path. As aulas que chegaram depois do
+    // mapeamento (ordem 50000+) também voltam à ordem natural, porque o derive roda
+    // sobre todas as aulas do curso. `titulo_editado` e `descricao_rel` são escolhas
+    // da pessoa e ficam. Os gatilhos da nuvem ficam ligados: a mudança tem de subir,
+    // senão a descida devolveria o mapeamento antigo às outras máquinas.
+    transaction(db, () => {
+      type Aula = { rel_path: string; size_bytes: number; mtime: number };
+      const cursos = db.prepare("SELECT id, source FROM courses WHERE source IN ('local','drive')").all() as Array<{ id: string; source: string }>;
+      const aulasDo = db.prepare('SELECT rel_path, size_bytes, mtime FROM lessons WHERE course_id=?');
+      const temMapeada = db.prepare('SELECT 1 FROM lessons WHERE course_id=? AND mapeada=1 LIMIT 1');
+      const gravarAula = db.prepare('UPDATE lessons SET module=?, module_order=?, order_index=?, mapeada=0 WHERE course_id=? AND rel_path=?');
+      const gravarEstrutura = db.prepare('UPDATE courses SET structure=? WHERE id=?');
+      const semTitulo = db.prepare('SELECT rel_path, title FROM lessons WHERE course_id=? AND titulo_editado IS NULL');
+      const gravarTitulo = db.prepare('UPDATE lessons SET title=? WHERE course_id=? AND rel_path=?');
+      const reorganizar: string[] = [];
+      for (const curso of cursos) {
+        if (temMapeada.get(curso.id)) {
+          const aulas = aulasDo.all(curso.id) as Aula[];
+          const derivado = deriveCourse(aulas.map((a) => ({ relPath: a.rel_path, sizeBytes: a.size_bytes, mtime: a.mtime })));
+          for (const l of derivado.lessons) gravarAula.run(l.module, l.moduleOrder, l.orderIndex, curso.id, l.relPath);
+          gravarEstrutura.run(derivado.structure, curso.id);
+          // No Drive o "Baixar" segue o mapeamento (NN - Módulo/NN - Título.ext): os
+          // arquivos voltam às pastas no index.ts, que tem a config e roda antes de os
+          // downloads retomarem.
+          if (curso.source === 'drive') reorganizar.push(curso.id);
+        }
+        // Em todos, não só nos mapeados: o derive antigo colava as pastas no título
+        // ("Sub / Pasta — Aula"). Só esse prefixo sai e o resto fica como está, sem
+        // recalcular pelo nome do arquivo: `titulo_editado` não vai para a nuvem, então
+        // um título renomeado em outra máquina (ou no mapeamento) chega aqui só em
+        // `title` e seria apagado. A aula sem o prefixo não é tocada (nem sobe à nuvem).
+        for (const a of semTitulo.all(curso.id) as Array<{ rel_path: string; title: string }>) {
+          const segs = a.rel_path.split('/').filter(Boolean);
+          if (segs.length <= 2) continue;
+          const prefixo = `${segs.slice(1, -1).join(' / ')} — `;
+          if (!a.title.startsWith(prefixo)) continue;
+          const titulo = a.title.slice(prefixo.length);
+          if (titulo) gravarTitulo.run(titulo, curso.id, a.rel_path);
+        }
+      }
+      db.exec("UPDATE courses SET mapa_pendente=0 WHERE source IN ('local','drive')");
+      if (reorganizar.length > 0) {
+        db.prepare("INSERT INTO settings (key, value) VALUES ('mapa.reorganizar', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(reorganizar));
+      }
+      pragma(db, 'user_version = 17');
     });
   }
 }

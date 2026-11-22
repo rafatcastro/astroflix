@@ -76,20 +76,23 @@ export default function Course() {
     abriuSozinho.current = false;
     setNovasDepois(false);
   }, [id]);
+  // Só o Telegram tem mapeamento (o local e o Drive seguem as pastas): fora dele,
+  // um ?mapear=1 antigo e a pendência de quando a pasta também abria a tela são ignorados.
+  const doTelegram = data?.source === 'telegram';
   useEffect(() => {
-    if (!params.get('mapear')) return;
-    setMapeando('manual');
+    if (!params.get('mapear') || !data) return;
+    if (doTelegram) setMapeando('manual');
     const resto = new URLSearchParams(params);
     resto.delete('mapear');
     setParams(resto, { replace: true });
-  }, [params, setParams]);
-  // Recém-importado: abre quando a leitura terminou (a pasta do Drive é lida em
-  // segundo plano), para a pessoa ver todas as aulas de uma vez.
+  }, [params, setParams, data, doTelegram]);
+  // Recém-importado: abre quando a leitura terminou (o canal é lido em segundo
+  // plano), para a pessoa ver todas as aulas de uma vez.
   useEffect(() => {
-    if (!data?.mapaPendente || data.importacao?.carregando || !data.totalLessons || abriuSozinho.current) return;
+    if (!doTelegram || !data?.mapaPendente || data.importacao?.carregando || !data.totalLessons || abriuSozinho.current) return;
     abriuSozinho.current = true;
     setMapeando('auto');
-  }, [data?.mapaPendente, data?.importacao?.carregando, data?.totalLessons]);
+  }, [doTelegram, data?.mapaPendente, data?.importacao?.carregando, data?.totalLessons]);
 
   const source = data?.source;
   // A estante também mostra a contagem de aulas: atualiza quando a leitura termina.
@@ -194,7 +197,7 @@ export default function Course() {
       );
     },
   });
-  const arvore = montarArvore(allLessons, data.materials);
+  const arvore = montarArvore(allLessons, data.materials, data.source);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
       key={l.id}
@@ -251,13 +254,13 @@ export default function Course() {
       setVisualizado({ id: m.id, name: m.name });
     } else cliqueFora(e, materialUrl(m.id, true));
   };
-  const linhaDoArquivo = (m: MaterialDTO) => (
+  const linhaDoArquivo = (m: MaterialDTO, anexo = false) => (
     <a
       key={m.id}
       href={materialUrl(m.id, true)}
       download={m.name}
       onClick={(e) => abrirArquivo(m, e)}
-      className="flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+      className={`flex items-center gap-3 rounded-lg bg-neutral-900 px-3 py-2 hover:bg-neutral-800/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600${anexo ? ' ml-6' : ''}`}
     >
       <span className="grid aspect-video w-16 shrink-0 place-items-center rounded bg-neutral-800 text-[10px] font-semibold tracking-wide text-neutral-400">
         {KIND_LABEL[m.kind]}
@@ -284,7 +287,7 @@ export default function Course() {
         view === 'grid' ? (
           <LessonGrid
             key={chave}
-            itens={lote.map((s) => (s.tipo === 'aula' ? s.aula : s.material))}
+            itens={lote.flatMap((s) => (s.tipo === 'aula' ? [s.aula, ...s.anexos] : [s.material]))}
             titulos={new Map(lote.flatMap((s) => (s.tipo === 'aula' ? [[s.aula.id, s.titulo] as const] : [])))}
             size={gridSize}
             onToggleComplete={onToggle}
@@ -294,7 +297,20 @@ export default function Course() {
           />
         ) : (
           <div key={chave} className="grid grid-cols-1 gap-x-4 gap-y-1.5 lg:grid-cols-2">
-            {lote.map((s) => (s.tipo === 'aula' ? linhaDaAula(s.aula, s.titulo) : linhaDoArquivo(s.material)))}
+            {lote.map((s) =>
+              s.tipo === 'material' ? (
+                linhaDoArquivo(s.material)
+              ) : s.anexos.length ? (
+                // Os anexos ficam logo abaixo da aula, na mesma célula: na grade de duas
+                // colunas, o item seguinte iria para o lado dela.
+                <div key={s.aula.id} className="space-y-1.5">
+                  {linhaDaAula(s.aula, s.titulo)}
+                  {s.anexos.map((m) => linhaDoArquivo(m, true))}
+                </div>
+              ) : (
+                linhaDaAula(s.aula, s.titulo)
+              ),
+            )}
           </div>
         ),
       );
@@ -361,8 +377,16 @@ export default function Course() {
     );
   };
   // Curso já organizado que ganhou aulas no re-escaneio: elas pedem um módulo.
-  const aulasNovas = data.mapeado ? allLessons.filter((l) => !l.mapeada && !l.missing) : [];
-  const modulosDoMapa = [...new Set(allLessons.filter((l) => l.mapeada && l.module).map((l) => l.module as string))];
+  const aulasNovas = data.mapeado && data.source === 'telegram' ? allLessons.filter((l) => !l.mapeada && !l.missing) : [];
+  // Os caminhos dos módulos, com os pais que só têm submódulos (sem aula própria)
+  // antes dos filhos, para também dar para escolhê-los.
+  const modulosDoMapa = [
+    ...new Set(
+      allLessons
+        .filter((l) => l.mapeada && l.module)
+        .flatMap((l) => (l.module as string).split('/').map((_, i, partes) => partes.slice(0, i + 1).join('/'))),
+    ),
+  ];
   const depoisDeMapear = (movidos: number) => {
     qc.invalidateQueries({ queryKey: ['course', id] });
     qc.invalidateQueries({ queryKey: ['courses'] });
@@ -688,7 +712,7 @@ export default function Course() {
           </div>
         </>
       )}
-      {mapeando && (
+      {mapeando && data.source === 'telegram' && (
         <MapearCurso curso={data} primeiraVez={mapeando === 'auto'} onSalvar={salvarMapa} onPular={pularMapa} onFechar={() => setMapeando(null)} />
       )}
       {!mapeando && !novasDepois && aulasNovas.length > 0 && !data.importacao?.carregando && (

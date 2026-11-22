@@ -3,12 +3,12 @@ import type { CourseDetail, MapaModulo, MaterialDTO } from '../api/client';
 import { DESCRICAO, descricoesDasAulas } from '../lib/arvore';
 import TextField from './TextField';
 
-// O mapeamento do curso: abre sozinho depois de importar (Drive, Telegram ou uma
-// pasta) e pelo menu ⋯ ("Organizar módulos e aulas"). A pessoa divide as aulas em
-// módulos, arrasta (ou marca várias e move de uma vez), renomeia e liga um arquivo
-// como a descrição da aula, que então sai da lista do curso. Nada disso mexe na
-// pasta de origem: fica no app, e o "Baixar" segue a mesma estrutura
-// (routes/mapa.ts).
+// O mapeamento do curso do Telegram: abre sozinho depois de importar e pelo menu ⋯
+// ("Organizar módulos e aulas"). O canal não tem pastas, então é aqui que o curso
+// ganha estrutura: a pessoa divide as aulas em módulos e submódulos, arrasta (ou
+// marca várias e move de uma vez), renomeia e liga um arquivo como a descrição da
+// aula, que então sai da lista do curso. Fica no app, e o "Baixar" segue a mesma
+// estrutura, uma pasta por nível (routes/mapa.ts).
 
 interface Aula {
   id: string;
@@ -20,23 +20,105 @@ interface Aula {
 }
 interface Grupo {
   chave: string;
-  /** null = fora dos módulos (vem antes de todos). */
+  /**
+   * O caminho do módulo, "A/B" para o submódulo B de A (é o que vai para o
+   * servidor). null = fora dos módulos (vem antes de todos).
+   */
   nome: string | null;
+  /** O nome deste nível, o que a pessoa edita. */
+  parte: string;
+  /**
+   * A chave do módulo pai (null = primeiro nível). O caminho é refeito a partir
+   * dela: só pelo texto, renomear um módulo para o nome de um irmão juntaria os
+   * submódulos dos dois no meio da digitação.
+   */
+  pai: string | null;
   aulas: Aula[];
 }
+
+// Cinco níveis, como o servidor aceita (nomeDoModulo em routes/mapa.ts).
+const MAX_NIVEIS = 5;
+// O recuo de cada nível, por extenso para o Tailwind achar as classes.
+const RECUO = ['', 'pl-[1rem]', 'pl-[2rem]', 'pl-[3rem]', 'pl-[4rem]'];
 
 let proximaChave = 0;
 const novaChave = () => `g${++proximaChave}`;
 
+/** Refaz os caminhos pelos pais (o pai sempre vem antes na lista). */
+function comCaminhos(gs: Grupo[]): Grupo[] {
+  const caminho = new Map<string, string>();
+  return gs.map((g) => {
+    if (g.nome === null) return g;
+    const nome = g.pai !== null && caminho.has(g.pai) ? `${caminho.get(g.pai)}/${g.parte}` : g.parte;
+    caminho.set(g.chave, nome);
+    return g.nome === nome ? g : { ...g, nome };
+  });
+}
+
+/**
+ * A ordem de exibição: o "fora dos módulos" em cima e cada módulo seguido dos
+ * seus submódulos, os irmãos na ordem em que estão na lista.
+ */
+function emOrdem(gs: Grupo[]): Grupo[] {
+  const fora = gs.filter((g) => g.nome === null);
+  const modulos = gs.filter((g) => g.nome !== null);
+  const saida: Grupo[] = [...fora];
+  const visitar = (pai: string | null) => {
+    for (const g of modulos) {
+      if (g.pai !== pai) continue;
+      saida.push(g);
+      visitar(g.chave);
+    }
+  };
+  visitar(null);
+  return comCaminhos(saida);
+}
+
+/** As chaves de todos os módulos debaixo deste, em qualquer nível. */
+function descendentes(gs: Grupo[], chave: string): Set<string> {
+  const achados = new Set<string>();
+  for (const g of gs) if (g.pai !== null && (g.pai === chave || achados.has(g.pai))) achados.add(g.chave);
+  return achados;
+}
+
+/** Quantos níveis o módulo tem (1 = primeiro nível). */
+function nivelDe(gs: Grupo[], g: Grupo): number {
+  let n = 1;
+  for (let p = g.pai; p !== null; n++) p = gs.find((x) => x.chave === p)?.pai ?? null;
+  return n;
+}
+
+const comoCaminho = (nome: string) => nome.split('/').join(' › ');
+// A barra separa os níveis: dentro de um nome, vira hífen (também no servidor).
+const semBarra = (t: string) => t.replace(/\//g, '-');
+
 function gruposIniciais(curso: CourseDetail): Grupo[] {
   const aulas = curso.modules.flatMap((m) => m.lessons);
   const adivinhadas = descricoesDasAulas(aulas, curso.materials);
-  const grupos: Grupo[] = [{ chave: novaChave(), nome: null, aulas: [] }];
+  const grupos: Grupo[] = [{ chave: novaChave(), nome: null, parte: '', pai: null, aulas: [] }];
+  const porCaminho = new Map<string, Grupo>();
+  // O módulo e cada pai dele, mesmo que o pai não tenha aula própria.
+  const grupoDe = (caminho: string): Grupo => {
+    const existente = porCaminho.get(caminho);
+    if (existente) return existente;
+    const partes = caminho.split('/');
+    const pai = partes.length > 1 ? grupoDe(partes.slice(0, -1).join('/')) : null;
+    const g: Grupo = { chave: novaChave(), nome: caminho, parte: partes[partes.length - 1], pai: pai?.chave ?? null, aulas: [] };
+    porCaminho.set(caminho, g);
+    grupos.push(g);
+    return g;
+  };
   for (const l of aulas) {
-    // Sem mapeamento ainda, o módulo é a pasta (o que o scan derivou).
-    const nome = l.module ?? null;
-    let g = grupos.find((x) => x.nome === nome);
-    if (!g) grupos.push((g = { chave: novaChave(), nome, aulas: [] }));
+    // Sem mapeamento ainda, o módulo é o tópico (o que o scan derivou).
+    const caminho = l.module
+      ? l.module
+          .split('/')
+          .map((p) => p.trim())
+          .filter(Boolean)
+          .slice(0, MAX_NIVEIS)
+          .join('/')
+      : '';
+    const g = caminho ? grupoDe(caminho) : grupos[0];
     g.aulas.push({
       id: l.id,
       titulo: l.title,
@@ -45,7 +127,7 @@ function gruposIniciais(curso: CourseDetail): Grupo[] {
       missing: l.missing,
     });
   }
-  return grupos;
+  return emOrdem(grupos);
 }
 
 const botao =
@@ -79,6 +161,15 @@ export default function MapearCurso({
   const [erro, setErro] = useState<string | null>(null);
   const [mexeu, setMexeu] = useState(false);
   const campoNovo = useRef<HTMLInputElement>(null);
+  // O submódulo recém-criado: o nome dele ganha o foco, para já digitar.
+  const [focar, setFocar] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focar) return;
+    const campo = document.getElementById(`modulo-${focar}`) as HTMLInputElement | null;
+    campo?.focus();
+    campo?.select();
+    setFocar(null);
+  }, [focar]);
 
   // Os arquivos que podem ser a descrição (os que o app mostra como texto embaixo do vídeo).
   const arquivosDeDescricao = useMemo(
@@ -128,12 +219,12 @@ export default function MapearCurso({
     mudar((gs) => gs.map((g) => ({ ...g, aulas: g.aulas.map((a) => (a.id === id ? { ...a, ...patch } : a)) })));
 
   const criarModulo = () => {
-    const nome = novoModulo.replace(/\s+/g, ' ').trim();
+    const nome = semBarra(novoModulo).replace(/\s+/g, ' ').trim();
     if (!nome) return campoNovo.current?.focus();
     if (grupos.some((g) => g.nome?.toLowerCase() === nome.toLowerCase())) return setErro(`Já existe um módulo "${nome}".`);
     setErro(null);
     const chave = novaChave();
-    mudar((gs) => [...gs, { chave, nome, aulas: [] }]);
+    mudar((gs) => [...gs, { chave, nome, parte: nome, pai: null, aulas: [] }]);
     setNovoModulo('');
     // Com aulas marcadas, o módulo novo já nasce com elas.
     if (marcadas.size) {
@@ -143,22 +234,54 @@ export default function MapearCurso({
     }
   };
 
-  const renomearModulo = (chave: string, nome: string) => mudar((gs) => gs.map((g) => (g.chave === chave ? { ...g, nome } : g)));
+  // "+ Submódulo": entra depois do último que já está debaixo do pai, com um nome
+  // que não repete o de um irmão.
+  const criarSubmodulo = (paiChave: string) => {
+    const chave = novaChave();
+    mudar((gs) => {
+      const irmaos = gs.filter((g) => g.pai === paiChave).map((g) => g.parte.trim().toLowerCase());
+      let parte = 'Novo submódulo';
+      for (let n = 2; irmaos.includes(parte.toLowerCase()); n++) parte = `Novo submódulo ${n}`;
+      const debaixo = descendentes(gs, paiChave);
+      let fim = gs.findIndex((g) => g.chave === paiChave);
+      gs.forEach((g, i) => {
+        if (debaixo.has(g.chave)) fim = Math.max(fim, i);
+      });
+      const novo = [...gs];
+      novo.splice(fim + 1, 0, { chave, nome: '', parte, pai: paiChave, aulas: [] });
+      return comCaminhos(novo);
+    });
+    setFocar(chave);
+  };
+  // O nome é só deste nível; os submódulos mudam de caminho junto (comCaminhos).
+  const renomearModulo = (chave: string, parte: string) =>
+    mudar((gs) => comCaminhos(gs.map((g) => (g.chave === chave ? { ...g, parte: semBarra(parte) } : g))));
+  // As aulas vão para o pai (ou para fora dos módulos, no primeiro nível) e os
+  // submódulos sobem um nível, no mesmo lugar.
   const removerModulo = (chave: string) =>
     mudar((gs) => {
       const g = gs.find((x) => x.chave === chave);
       if (!g) return gs;
-      return gs.filter((x) => x.chave !== chave).map((x) => (x.nome === null ? { ...x, aulas: [...x.aulas, ...g.aulas] } : x));
+      const destino = g.pai ?? gs.find((x) => x.nome === null)?.chave;
+      return comCaminhos(
+        gs
+          .filter((x) => x.chave !== chave)
+          .map((x) => (x.chave === destino ? { ...x, aulas: [...x.aulas, ...g.aulas] } : x))
+          .map((x) => (x.pai === chave ? { ...x, pai: g.pai } : x)),
+      );
     });
+  // Troca de lugar com o irmão de cima ou de baixo, levando os submódulos.
+  const irmaoAo = (gs: Grupo[], g: Grupo, delta: -1 | 1) => {
+    const irmaos = gs.filter((x) => x.nome !== null && x.pai === g.pai);
+    return irmaos[irmaos.findIndex((x) => x.chave === g.chave) + delta];
+  };
   const moverModulo = (chave: string, delta: -1 | 1) =>
     mudar((gs) => {
-      const i = gs.findIndex((g) => g.chave === chave);
-      const j = i + delta;
-      // O grupo "fora dos módulos" fica sempre em cima.
-      if (i < 1 || j < 1 || j >= gs.length) return gs;
-      const novo = [...gs];
-      [novo[i], novo[j]] = [novo[j], novo[i]];
-      return novo;
+      const g = gs.find((x) => x.chave === chave);
+      const outro = g && irmaoAo(gs, g, delta);
+      if (!g || !outro) return gs;
+      const novo = gs.map((x) => (x.chave === g.chave ? outro : x.chave === outro.chave ? g : x));
+      return emOrdem(novo);
     });
 
   // Clique marca uma; com Shift, do último marcado até esta, na ordem da lista.
@@ -205,19 +328,27 @@ export default function MapearCurso({
     },
   });
 
+  // O caminho como vai para o servidor: cada nível sem os espaços das pontas.
+  const caminhoLimpo = (nome: string) =>
+    nome
+      .split('/')
+      .map((p) => p.replace(/\s+/g, ' ').trim())
+      .join('/');
   const salvar = async () => {
-    const nomes = modulos.map((g) => (g.nome ?? '').trim());
-    if (nomes.some((n) => !n)) return setErro('Dê um nome a todos os módulos.');
-    if (new Set(nomes.map((n) => n.toLowerCase())).size !== nomes.length) return setErro('Dois módulos têm o mesmo nome.');
+    if (modulos.some((g) => !g.parte.trim())) return setErro('Dê um nome a todos os módulos.');
+    // Mesmo nome só conflita no mesmo pai: "A/Exercícios" e "B/Exercícios" são outros.
+    const nomes = modulos.map((g) => caminhoLimpo(g.nome ?? '').toLowerCase());
+    if (new Set(nomes).size !== nomes.length) return setErro('Dois módulos no mesmo lugar têm o mesmo nome.');
     setErro(null);
     setSalvando(true);
     try {
-      // Módulo vazio não é salvo: sem aula, não teria pasta nem lugar na lista.
+      // Só vão os módulos com aula própria: um vazio não teria pasta nem lugar na
+      // lista, e o pai que só tem submódulos existe pelo caminho deles.
       await onSalvar(
         grupos
           .filter((g) => g.aulas.length)
           .map((g) => ({
-            nome: g.nome === null ? null : g.nome.trim(),
+            nome: g.nome === null ? null : caminhoLimpo(g.nome),
             aulas: g.aulas.map((a) => ({ id: a.id, titulo: a.titulo, descricao: a.descricao })),
           })),
       );
@@ -226,6 +357,17 @@ export default function MapearCurso({
       setSalvando(false);
     }
   };
+
+  // "1", "1.2", "1.2.1": a posição de cada módulo entre os irmãos, com a do pai.
+  const numeroDoModulo = new Map<string, string>();
+  {
+    const contagem = new Map<string | null, number>();
+    for (const g of modulos) {
+      const n = (contagem.get(g.pai) ?? 0) + 1;
+      contagem.set(g.pai, n);
+      numeroDoModulo.set(g.chave, g.pai !== null ? `${numeroDoModulo.get(g.pai)}.${n}` : String(n));
+    }
+  }
 
   let numero = 0;
   const linha = (g: Grupo, a: Aula) => {
@@ -293,7 +435,7 @@ export default function MapearCurso({
         >
           {grupos.map((x) => (
             <option key={x.chave} value={x.chave}>
-              {x.nome === null ? 'Fora dos módulos' : x.nome || '(sem nome)'}
+              {x.nome === null ? 'Fora dos módulos' : x.parte.trim() ? comoCaminho(x.nome) : '(sem nome)'}
             </option>
           ))}
         </select>
@@ -310,8 +452,8 @@ export default function MapearCurso({
               Organizar o curso
             </h1>
             <p className="truncate text-sm text-neutral-400">
-              {curso.title} · divida em módulos, arraste, renomeie e escolha a descrição de cada aula. A pasta de origem não muda
-              {curso.source === 'local' ? '' : '; o "Baixar" segue esta estrutura'}.
+              {curso.title} · divida em módulos e submódulos, arraste, renomeie e escolha a descrição de cada aula. O &quot;Baixar&quot;
+              segue esta estrutura.
             </p>
           </div>
           <button type="button" className={botao} disabled={salvando} onClick={() => (mexeu && !confirm('Sair sem salvar o que você organizou?') ? null : fechar())}>
@@ -358,7 +500,7 @@ export default function MapearCurso({
                 <option value="">Mover para…</option>
                 {grupos.map((x) => (
                   <option key={x.chave} value={x.chave}>
-                    {x.nome === null ? 'Fora dos módulos' : x.nome || '(sem nome)'}
+                    {x.nome === null ? 'Fora dos módulos' : x.parte.trim() ? comoCaminho(x.nome) : '(sem nome)'}
                   </option>
                 ))}
               </select>
@@ -377,7 +519,7 @@ export default function MapearCurso({
 
       <main className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
         <div className="mx-auto max-w-5xl space-y-5">
-          {grupos.map((g, i) => {
+          {grupos.map((g) => {
             if (g.nome === null && !g.aulas.length && modulos.length) {
               // Sem aulas fora dos módulos: só o lugar para soltar, discreto.
               return (
@@ -393,30 +535,50 @@ export default function MapearCurso({
               );
             }
             const vazio = !g.aulas.length;
+            const nivel = g.nome === null ? 0 : nivelDe(grupos, g);
+            const temFilho = g.nome !== null && grupos.some((x) => x.pai === g.chave);
             return (
-              <section key={g.chave} aria-label={g.nome ?? 'Fora dos módulos'}>
+              <section key={g.chave} aria-label={g.nome === null ? 'Fora dos módulos' : comoCaminho(g.nome)} className={RECUO[Math.max(0, nivel - 1)]}>
                 <div {...soltarAqui(g.chave, null)} className="mb-1.5 flex items-center gap-2">
                   {g.nome === null ? (
                     <h2 className="flex-1 px-1 text-sm font-semibold text-neutral-400">{modulos.length ? 'Fora dos módulos' : 'Aulas'}</h2>
                   ) : (
                     <>
-                      <span className="w-6 shrink-0 text-right text-xs tabular-nums text-neutral-500">{i}</span>
+                      <span className="w-8 shrink-0 text-right text-xs tabular-nums text-neutral-500">{numeroDoModulo.get(g.chave)}</span>
                       <input
-                        value={g.nome}
+                        id={`modulo-${g.chave}`}
+                        value={g.parte}
                         onChange={(e) => renomearModulo(g.chave, e.target.value)}
-                        aria-label="Nome do módulo"
+                        aria-label={nivel > 1 ? 'Nome do submódulo' : 'Nome do módulo'}
                         className="h-9 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 text-sm font-semibold text-neutral-100 outline-none hover:border-neutral-700 focus:border-neutral-700 focus:bg-neutral-800 focus:ring-2 focus:ring-blue-600"
                       />
                       <span className="shrink-0 text-xs text-neutral-500">
                         {g.aulas.length} aula{g.aulas.length === 1 ? '' : 's'}
                       </span>
-                      <button type="button" className={botaoPequeno} disabled={i <= 1} onClick={() => moverModulo(g.chave, -1)} aria-label="Subir o módulo" title="Subir">
+                      {nivel < MAX_NIVEIS && (
+                        <button
+                          type="button"
+                          className={botaoPequeno}
+                          onClick={() => criarSubmodulo(g.chave)}
+                          title="Criar um submódulo dentro deste"
+                        >
+                          + Submódulo
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className={botaoPequeno}
+                        disabled={!irmaoAo(grupos, g, -1)}
+                        onClick={() => moverModulo(g.chave, -1)}
+                        aria-label="Subir o módulo"
+                        title="Subir"
+                      >
                         ↑
                       </button>
                       <button
                         type="button"
                         className={botaoPequeno}
-                        disabled={i >= grupos.length - 1}
+                        disabled={!irmaoAo(grupos, g, 1)}
                         onClick={() => moverModulo(g.chave, 1)}
                         aria-label="Descer o módulo"
                         title="Descer"
@@ -427,8 +589,12 @@ export default function MapearCurso({
                         type="button"
                         className={botaoPequeno}
                         onClick={() => removerModulo(g.chave)}
-                        aria-label={`Desfazer o módulo ${g.nome}`}
-                        title="Desfazer o módulo (as aulas vão para fora dos módulos)"
+                        aria-label={`Desfazer o módulo ${comoCaminho(g.nome)}`}
+                        title={
+                          nivel > 1
+                            ? `Desfazer o módulo (as aulas${temFilho ? ' e os submódulos' : ''} vão para o módulo de cima)`
+                            : `Desfazer o módulo (as aulas vão para fora dos módulos${temFilho ? ' e os submódulos sobem um nível' : ''})`
+                        }
                       >
                         ✕
                       </button>

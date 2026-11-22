@@ -419,8 +419,9 @@ export default function CourseMenu({
             <button type="button" className={item} onClick={doRescan}>
               {course.source === 'telegram' ? 'Re-escanear (vídeos e fotos)' : 'Re-escanear'}
             </button>
-            {/* Módulos, ordem, nomes e descrições das aulas (MapearCurso, na página do curso). */}
-            {!course.deLink && (
+            {/* Módulos, ordem, nomes e descrições das aulas (MapearCurso, na página do curso).
+                Só no Telegram: o canal não tem pastas; o local e o Drive seguem as deles. */}
+            {course.source === 'telegram' && (
               <button type="button" className={item} onClick={() => { close(); navigate(`/course/${course.id}?mapear=1`); }}>
                 Organizar módulos e aulas…
               </button>

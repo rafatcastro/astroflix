@@ -207,7 +207,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   `rel_path` começa pelo id da mensagem com 10 dígitos, que dá a ordem de postagem e não muda; num grupo com
   tópicos, cada tópico vira um módulo e uma subpasta ao baixar, `<tópico>/<id>-<nome>`, na ordem em que o
   Telegram mostra os tópicos, atualizada a cada re-escaneio; o religamento pelo nome do arquivo
-  mantém o progresso de quem tinha o curso sem módulos),
+  mantém o progresso de quem tinha o curso sem módulos). O **guia de hashtags** (`guia.ts`;
+  `ClienteTelegram.textos` lê só o texto das mensagens fixadas e das 50 mais antigas, onde canais
+  costumam pôr o menu de módulos) define o módulo das aulas ainda não mapeadas no scan (`derivar`) e
+  vale mais que os tópicos: só conta uma mensagem com 3 ou mais tags que batem com as legendas dos
+  vídeos (empate = a mais nova). O título da aula sai sem as hashtags que começam com letra
+  (`#D004` é endereço no menu; o `#12` de "Aula #12" fica); legenda só de hashtags usa o nome do arquivo.
   `blocos` alinha o `Range` em blocos de 512 KB, `status` traduz os erros RPC, `stream` repassa
   o vídeo e `baixar` entra na mesma fila de download do Drive (`fonteDoTelegram`; retomar volta ao
   último bloco inteiro). Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
@@ -413,17 +418,22 @@ re-apontar preserva o histórico.
 - `lessons.titulo_editado` (v15): o "Renomear" do botão direito da aula (`PATCH /api/lessons/:id`).
   Muda só o título, nunca o arquivo (o `rel_path` é a identidade na nuvem e no progresso); o
   re-escaneio e a descida da nuvem fazem `COALESCE(titulo_editado, …)`. Vazio volta ao nome do arquivo.
-- **Mapeamento do curso** (v16, `routes/mapa.ts`, `MapearCurso.tsx`): ao importar uma pasta, um link do
-  Drive ou do Telegram (só o curso novo, não o lote nem a playlist), `courses.mapa_pendente` faz a
-  página do curso abrir, quando a leitura termina, a tela em que a pessoa cria módulos, arrasta as
-  aulas (ou marca várias, com Shift, e move), renomeia e liga um arquivo de texto como descrição
-  (`lessons.descricao_rel`; `''` = nenhuma, nem a adivinhada pelo nome). O menu ⋯ ("Organizar
-  módulos e aulas…", `?mapear=1`) reabre. `lessons.mapeada` = módulo, ordem e título são da pessoa:
-  o re-escaneio não os recalcula, e a aula que chega depois (`mapeada=0`, ordem 50000+) abre o popup
-  `AulasNovas.tsx` para escolher o módulo (vai para o fim dele). **A pasta de origem nunca muda**: a
-  página monta os módulos pelo `module` (`arvoreMapeada` em `lib/arvore.ts`, os arquivos restantes
-  em "Arquivos"), e só o "Baixar" vira pastas: `NN - Módulo/NN - Título.ext`, com a descrição ao lado
-  e o mesmo nome (`partesNoCurso` em `armazenamento.ts`). Mudar o mapeamento move o que já foi
+- **Árvore dos módulos e mapeamento** (v16/v17, `routes/mapa.ts`, `MapearCurso.tsx`): curso local e do
+  Drive **não têm mapeamento**: a página monta a árvore das pastas a partir do `rel_path`, em qualquer
+  profundidade (`arvore.ts`; só a pasta que embrulha tudo sai, um nível), porque o mapeamento antigo
+  desfigurava quem já tinha uma organização boa em pastas. A v17 desfez os mapeados desses cursos
+  (recalculou módulo e ordem pelo `deriveCourse`, tirou as pastas dos títulos não editados) e, no boot,
+  reorganiza os baixados do Drive para o caminho de origem (`settings` `mapa.reorganizar`, `index.ts`).
+  **Só o Telegram mapeia**, e só no import do curso novo (não o lote nem a playlist): `courses.mapa_pendente`
+  faz a página abrir, quando a leitura termina, a tela em que a pessoa cria módulos e **submódulos**
+  ("+ Submódulo"), arrasta as aulas (ou marca várias, com Shift, e move), renomeia e liga um arquivo de texto
+  como descrição (`lessons.descricao_rel`; `''` = nenhuma, nem a adivinhada pelo nome). As rotas `/mapa` e
+  `/mapa/aulas` respondem 400 `so-telegram` nos outros. O menu ⋯ ("Organizar módulos e aulas…", `?mapear=1`)
+  reabre. O `module` é o **caminho** `"A/B"` (até 5 níveis). `lessons.mapeada` = módulo, ordem e título são da
+  pessoa: o re-escaneio não os recalcula, e a aula que chega depois (`mapeada=0`, ordem 50000+) abre o popup
+  `AulasNovas.tsx` para escolher o módulo (vai para o fim dele). **A pasta de origem nunca muda**: só o
+  "Baixar" vira pastas, uma por nível: `NN - A/NN - B/NN - Título.ext` (`pastasDoModulo` e `partesNoCurso`
+  em `armazenamento.ts`), com a descrição ao lado e o mesmo nome. Mudar o mapeamento move o que já foi
   baixado (`reorganizarBaixados`, em duas passadas, com os downloads do curso pausados). Sobe para a
   conta em `aulas.mapeada`/`aulas.descricao_rel` (rodar o `schema.sql` de novo); sem as colunas, a
   aula sobe sem elas e o mapeamento fica só nesta máquina.
@@ -448,10 +458,14 @@ React 18 + Vite 6 + TanStack Query 5 + React Router 7 + Tailwind 3.
   `.docx` (`mammoth`) e planilhas/CSV (SheetJS, do tarball do cdn.sheetjs.com: o do npm parou na
   0.18). Tudo por import dinâmico e o HTML gerado passa pelo DOMPurify. O resto (zip, pptx, doc
   antigo) é baixado.
-  O arquivo de texto (txt, md, pdf, docx) com o mesmo nome de um vídeo, ao lado dele, numa pasta
-  como `materiais/` ou, se o nome for único, em qualquer lugar do curso, é a **descrição da aula** (o nome pode ter um "Descrição" a mais; sem bater o nome, vale o mesmo "Aula N" na pasta, só para txt/md):
-  sai da lista e aparece embaixo dos botões do player (`descricoesDasAulas` em `lib/arvore.ts`,
-  `DescricaoDaAula.tsx`).
+  **Arquivos ligados à aula** (`ligacoesDasAulas` em `lib/arvore.ts`): um documento (txt, md, pdf, doc,
+  docx) é da aula se tem o mesmo nome do vídeo (pode ter um "Descrição" a mais) ou o mesmo "Aula N".
+  Procura-se na pasta do vídeo, nela sem o segmento de materiais (`/^(materia(l|is)|apoio|anexos?)\b/i`,
+  sem o número inicial), 1 a 2 níveis acima e, se o nome for único, no curso todo. Como descrição vale
+  txt/md, depois docx, depois pdf (aparece embaixo dos botões do player, `DescricaoDaAula.tsx`); os
+  demais ligados são anexos logo abaixo da aula. Quem foi ligado sai da lista de arquivos. Ordem numa
+  pasta: pastas com aula e aulas juntas, na ordem do servidor (a do "Próxima" no player), depois os
+  arquivos soltos e por fim as pastas só de arquivos (esses dois em ordem natural do nome).
 - `lib/pdf.ts`: carrega o pdf.js (`pdfjs-dist`, build legacy, por import dinâmico) só quando
   alguém abre um PDF ou falta uma capa, e gera as capas uma de cada vez.
 - `api/client.ts`: o único cliente HTTP tipado (`api.*`) e todas as interfaces de DTO, espelhando o

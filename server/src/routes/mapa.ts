@@ -6,13 +6,11 @@ import { cleanTitle } from '../scan/derive';
 import { reorganizarBaixados } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
 
-// O mapeamento do curso (MapearCurso.tsx): a pessoa divide as aulas em módulos,
-// arrasta, renomeia e liga um arquivo como descrição. Tudo fica no banco, por
-// cima do que o scan derivou das pastas: o app nunca mexe na pasta da pessoa
-// (as pastas de um curso local são só-leitura). A aula mapeada guarda módulo,
-// ordem e título (reconcile.ts não os recalcula), e só o "Baixar" de um curso do
-// Drive ou do Telegram vira pastas de verdade, com a mesma estrutura
-// (armazenamento.ts, partesNoCurso).
+// O mapeamento do curso do Telegram (MapearCurso.tsx): a pessoa divide as aulas
+// em módulos e submódulos, arrasta, renomeia e liga um arquivo como descrição. O
+// canal não tem pastas, então a estrutura só existe no banco: a aula mapeada guarda
+// módulo (o caminho "A/B"), ordem e título (reconcile.ts não os recalcula), e só o
+// "Baixar" vira pastas de verdade, uma por nível (armazenamento.ts, partesNoCurso).
 
 interface AulaPedida {
   id: string;
@@ -27,11 +25,24 @@ interface ModuloPedido {
   aulas: AulaPedida[];
 }
 
+// Só o Telegram tem mapeamento: num curso local ou do Drive a árvore é a das
+// pastas, e mexer nela por cima estragava a ordem que a pasta já dava. Cinco
+// níveis bastam para um canal e mantêm o caminho do "Baixar" curto (Windows).
+const MAX_NIVEIS = 5;
+
+/**
+ * O módulo é um caminho "A/B" (submódulos). Cada parte vira nome de pasta no
+ * "Baixar", então é saneada à parte (a barra invertida dentro de um nome vira
+ * "-", a "/" já separou os níveis); partes vazias somem e o fundo para em 5 níveis.
+ */
 const nomeDoModulo = (n: unknown): string | null => {
   if (typeof n !== 'string') return null;
-  // Vira nome de pasta no "Baixar": sem barra, que abriria outra pasta.
-  const limpo = n.replace(/[/\\]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
-  return limpo || null;
+  const partes = n
+    .split('/')
+    .map((p) => p.replace(/\\/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120).trim())
+    .filter(Boolean)
+    .slice(0, MAX_NIVEIS);
+  return partes.length ? partes.join('/') : null;
 };
 
 /**
@@ -80,11 +91,13 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
   };
 
   const existe = (id: string) => !!db.prepare('SELECT 1 FROM courses WHERE id=?').get(id);
+  const doTelegram = (id: string) => !!db.prepare("SELECT 1 FROM courses WHERE id=? AND source='telegram'").get(id);
 
   // O mapeamento inteiro, como a tela mostra.
   app.put('/api/courses/:id/mapa', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     if (!existe(id)) return reply.code(404).send({ error: 'not_found' });
+    if (!doTelegram(id)) return reply.code(400).send({ error: 'so-telegram' });
     const corpo = req.body as { modulos?: unknown } | undefined;
     if (!Array.isArray(corpo?.modulos)) return reply.code(400).send({ error: 'modulos-invalidos' });
     const modulos = (corpo.modulos as ModuloPedido[]).filter((m) => m && Array.isArray(m.aulas));
@@ -122,6 +135,8 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
   });
 
   // "Agora não" na tela que abre depois de importar: o curso fica como as pastas dele.
+  // Aceita qualquer curso: limpa a pendência que ficou de quando a pasta e o Drive
+  // também abriam o mapeamento.
   app.post('/api/courses/:id/mapa/pular', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     if (!existe(id)) return reply.code(404).send({ error: 'not_found' });
@@ -135,6 +150,7 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
   app.post('/api/courses/:id/mapa/aulas', async (req, reply) => {
     const id = (req.params as { id: string }).id;
     if (!existe(id)) return reply.code(404).send({ error: 'not_found' });
+    if (!doTelegram(id)) return reply.code(400).send({ error: 'so-telegram' });
     const pedidas = (req.body as { aulas?: unknown } | undefined)?.aulas;
     if (!Array.isArray(pedidas)) return reply.code(400).send({ error: 'aulas-invalidas' });
 
@@ -144,7 +160,16 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
     const grupos: Array<{ nome: string | null; ids: string[] }> = [];
     const grupoDe = (nome: string | null) => {
       let g = grupos.find((x) => x.nome === nome);
-      if (!g) grupos.push((g = { nome, ids: [] }));
+      if (!g) {
+        g = { nome, ids: [] };
+        // Um módulo "A" que só tem submódulos não tem grupo: no fim do curso, a aula
+        // ficaria longe do "A" na árvore e no "Próxima". Entra logo depois da última
+        // aula dele ("A/…"), que é onde a árvore a mostra.
+        let depois = -1;
+        if (nome !== null) grupos.forEach((x, i) => { if (x.nome !== null && x.nome.startsWith(`${nome}/`)) depois = i; });
+        if (depois >= 0) grupos.splice(depois + 1, 0, g);
+        else grupos.push(g);
+      }
       return g;
     };
     for (const l of mapeadas) grupoDe(l.module).ids.push(l.id);

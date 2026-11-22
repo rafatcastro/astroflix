@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { VIDEO_EXTS, cleanTitle, type ScannedFile } from '../scan/derive';
 import { materialKind, type MaterialKind } from '../scan/walk';
+import { hashtagsDe } from './guia';
 import type { MensagemTelegram, TopicoTelegram } from './tipos';
 
 export interface ArquivoTelegram extends ScannedFile {
@@ -9,6 +10,8 @@ export interface ArquivoTelegram extends ScannedFile {
   titulo: string;
   durationSec: number | null;
   temMiniatura: boolean;
+  /** As hashtags da legenda inteira (minúsculas, sem "#"): ligam a aula ao menu do canal. */
+  hashtags: string[];
 }
 
 export interface CursoTelegram {
@@ -85,12 +88,16 @@ export function montarCurso(mensagens: MensagemTelegram[], topicos: TopicoTelegr
     // Foto entra na lista junto com os vídeos, na ordem de postagem: em canal de
     // conteúdo, ela é parte do que se vê, não material de apoio.
     if (midia.tipo === 'foto' || midia.tipo === 'video' || ehVideo(nome, midia.mime)) {
-      const legenda = m.legenda.split('\n')[0]?.trim() ?? '';
+      const primeira = m.legenda.split('\n')[0] ?? '';
+      // A hashtag é o endereço da aula no menu do canal, não o nome dela. Só a que
+      // começa com letra (#D004): "Aula #12 - Intro" usa o # para o número da aula.
+      const legenda = primeira.replace(/#\p{L}[\p{L}\p{N}_]*/gu, ' ').replace(/\s+/g, ' ').trim();
       const padrao = midia.tipo === 'foto' ? `Foto de ${dataCurta(m.data)}` : `Vídeo de ${dataCurta(m.data)}`;
-      const titulo = legenda || (midia.nome ? cleanTitle(limpar(midia.nome)) : '') || padrao;
-      videos.push({ ...base, titulo: titulo.slice(0, 200) });
+      const titulo = legenda || (midia.nome ? cleanTitle(limpar(midia.nome)) : '')
+        || primeira.match(/#[\p{L}\p{N}_]+/u)?.[0] || padrao;
+      videos.push({ ...base, titulo: titulo.slice(0, 200), hashtags: hashtagsDe(m.legenda) });
     } else {
-      materials.push({ ...base, titulo: nome, kind: materialKind(path.extname(nome)) });
+      materials.push({ ...base, titulo: nome, hashtags: hashtagsDe(m.legenda), kind: materialKind(path.extname(nome)) });
     }
   }
   return { videos, materials };

@@ -338,8 +338,17 @@ export function criarSincronizador(deps: {
           db.prepare('DELETE FROM lessons WHERE course_id=? AND rel_path=?').run(r.curso_id, r.rel_path);
           return;
         }
+        // Só o Telegram mapeia (v17). Num curso local ou do Drive, a aula que chega
+        // mapeada veio de uma máquina com a versão antiga: o módulo e a ordem dela são
+        // os do mapeamento desfeito, e aplicá-los devolveria o curso ao mapeamento.
+        const mapaDeFora = curso.source !== 'telegram' && r.mapeada === true;
         const existe = db.prepare('SELECT id FROM lessons WHERE course_id=? AND rel_path=?').get(r.curso_id, r.rel_path);
-        if (existe) {
+        if (existe && mapaDeFora) {
+          db.prepare(
+            `UPDATE lessons SET title=COALESCE(titulo_editado, ?), duration_sec=COALESCE(?, duration_sec), remote_id=COALESCE(?, remote_id)
+             WHERE course_id=? AND rel_path=?`,
+          ).run(r.titulo, r.duracao_sec ?? null, r.remote_id ?? null, r.curso_id, r.rel_path);
+        } else if (existe) {
           db.prepare(
             `UPDATE lessons SET title=COALESCE(titulo_editado, ?), module=?, order_index=?, module_order=?, duration_sec=COALESCE(?, duration_sec),
                remote_id=COALESCE(?, remote_id)
@@ -363,8 +372,10 @@ export function criarSincronizador(deps: {
         // O mapeamento feito em outra máquina (módulo e ordem já vieram acima). O
         // título é o que a pessoa deu, e fica: o re-escaneio daqui não o recalcula.
         // Sem a coluna na nuvem (schema antigo), o mapeamento local fica como está.
+        // A aula nova de um curso local ou do Drive entra com o módulo que veio (não
+        // há outro ainda), mas sem `mapeada`: o próximo re-escaneio a devolve às pastas.
         if (typeof r.mapeada === 'boolean') {
-          if (r.mapeada)
+          if (r.mapeada && !mapaDeFora)
             db.prepare('UPDATE lessons SET mapeada=1, title=?, descricao_rel=? WHERE course_id=? AND rel_path=?').run(
               r.titulo, r.descricao_rel ?? null, r.curso_id, r.rel_path,
             );

@@ -449,6 +449,35 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         return [...porId.values()];
       }),
 
+    textos: (peer) =>
+      chamar(async () => {
+        // O menu costuma estar fixado ou entre as primeiras mensagens do canal (o dono
+        // escreve o índice antes de postar as aulas). Ler o histórico inteiro atrás de
+        // texto levaria minutos num grupo de conversa, e o guia é só enfeite.
+        const porId = new Map<number, MensagemTelegram>();
+        const juntar = (m: unknown) => {
+          if (!(m instanceof Api.Message) || porId.has(m.id)) return;
+          // Prévia de link não é mídia: o menu costuma ter um "Clique aqui" com endereço.
+          if (m.media && !(m.media instanceof Api.MessageMediaWebPage)) return;
+          if (!m.message?.trim()) return;
+          porId.set(m.id, { id: m.id, data: m.date, legenda: m.message, midia: null });
+        };
+        try {
+          const fixadas = new Api.InputMessagesFilterPinned();
+          const lista = peer.topico ? buscar(peer, fixadas) : client.iterMessages(inputPeer(Api, peer), { limit: undefined, filter: fixadas });
+          for await (const m of lista) juntar(m);
+          // Num tópico, as "primeiras" do iterMessages seriam as do grupo inteiro.
+          if (!peer.topico) for await (const m of client.iterMessages(inputPeer(Api, peer), { reverse: true, limit: 50 })) juntar(m);
+        } catch (e) {
+          // Como nos tópicos: sem o menu, o curso sai como sempre saiu. Sessão caída,
+          // flood e rede seguem, para a interface explicar.
+          const f = falhaDoErro(e);
+          if (f.tipo === 'nao-autorizado' || f.tipo === 'flood' || f.tipo === 'sem-conexao') throw e;
+          return [];
+        }
+        return [...porId.values()];
+      }),
+
     async *baixar(peer, msgId, offset, signal) {
       let renovar = false;
       // Bytes já entregues: a nova tentativa continua daqui, e não do offset

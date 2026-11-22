@@ -1,6 +1,9 @@
 import type { LessonDTO, MaterialDTO } from '../api/client';
 
-export type No = Pasta | { tipo: 'aula'; aula: LessonDTO; titulo: string } | { tipo: 'material'; material: MaterialDTO };
+export type No =
+  | Pasta
+  | { tipo: 'aula'; aula: LessonDTO; titulo: string; anexos: MaterialDTO[] }
+  | { tipo: 'material'; material: MaterialDTO };
 
 export interface Pasta {
   tipo: 'pasta';
@@ -13,27 +16,32 @@ export interface Pasta {
   materiais: number;
 }
 
+export type Origem = 'local' | 'drive' | 'telegram';
+
 const pastasDe = (relPath: string) => relPath.split('/').filter(Boolean).slice(0, -1);
 const nomeDe = (relPath: string) => relPath.split('/').filter(Boolean).pop() ?? relPath;
 // "02. Seu 1º Projeto Python - Automação…" e "02. Seu 1º Projeto Python - Automação… - Telegram @x.mp4" começam igual.
 const comparavel = (t: string) =>
   t
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 const comparar = new Intl.Collator('pt-BR', { numeric: true, sensitivity: 'base' }).compare;
 
-// O curso como as pastas dele: A > [B, C, D], em qualquer profundidade. A ordem
-// é a do servidor (order_index, que segue o número de cada pasta), então basta
-// pendurar cada aula no caminho dela. A pasta que embrulha o curso inteiro (ex.:
-// tudo dentro de "Docker/") não conta, senão tudo ficaria dentro de uma pasta só.
-// O título perde o prefixo de pasta que o deriveCourse dobrou nele ("B / C — Aula").
-// Os arquivos que não são vídeo ficam na pasta onde estão, junto das aulas (antes
-// iam para "Materiais adicionais", e uma pasta só de PDFs sumia da lista), e a
-// pasta com um vídeo só continua pasta: o nome dela é o do módulo.
 // Os tipos que viram a descrição da aula (o texto embaixo do vídeo).
 export const DESCRICAO = /\.(txt|md|markdown|pdf|docx)$/i;
+// Os documentos que podem ser de uma aula (descrição ou anexo). O .doc antigo o
+// visualizador não abre: liga à aula, mas só como anexo.
+export const DOCUMENTO = /\.(txt|md|markdown|pdf|docx?)$/i;
+// A pasta que guarda os arquivos de apoio ("Materiais", "Material de apoio", "Anexos"):
+// o arquivo dentro dela é das aulas da pasta de fora, não de uma pasta própria. Só
+// quando o nome começa assim (fora o número): "03 Ciência dos Materiais" é um módulo.
+const MATERIAIS = /^(materia(l|is)|apoio|anexos?)\b/i;
+const ehPastaDeMateriais = (pasta: string) => MATERIAIS.test(pasta.replace(/^\d+[\s.\-_]*/, ''));
+// Texto antes de Word, Word antes de PDF: o .txt costuma ser a descrição escrita, e
+// o PDF, os slides.
+const prioridadeDaDescricao = (relPath: string) => (/\.(txt|md|markdown)$/i.test(relPath) ? 0 : /\.docx$/i.test(relPath) ? 1 : 2);
 // "0000000123-Aula 1.mp4" e "0000000124-Aula 1.txt" (Telegram) também são o mesmo nome.
 const baseDe = (relPath: string) => comparavel(nomeDe(relPath).replace(/\.[^.]+$/, '').replace(/^\d{10}-/, ''));
 
@@ -44,26 +52,30 @@ const semDescricao = (base: string) => base.replace(/descric(ao|oes)|description
 const numeroDaAula = (relPath: string): number | null => {
   const m = nomeDe(relPath)
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[̀-ͯ]/g, '')
     .match(/\baula\s*[-_.#]?\s*0*(\d+)/i);
   return m ? Number(m[1]) : null;
 };
 
 /**
- * O arquivo de texto com o mesmo nome do vídeo ("A.mp4" e "A.txt", ao lado dele,
- * dentro de uma pasta como "materiais/" ou "materiais/A/", ou em qualquer lugar do
- * curso se só uma aula se chama assim) é a descrição da aula:
- * aparece embaixo do vídeo, e não como item da lista. Um por aula. Na falta do
- * mesmo nome, vale o nome sem a palavra "Descrição" e, por último, o mesmo
- * "Aula N" na mesma pasta (quando só uma aula da pasta tem esse número).
+ * Os arquivos que são de uma aula. Um documento (txt, md, pdf, doc, docx) é da aula
+ * quando cita ela: o mesmo nome do vídeo, o nome sem a palavra "Descrição" ou, por
+ * último, o mesmo "Aula N". Ele é procurado na pasta dele, na pasta de fora de uma
+ * pasta de materiais ("Mod/Materiais/x.pdf" é de "Mod"; "Materiais/Mod/x.pdf"
+ * também), uma e duas pastas acima e, se só uma aula do curso tem aquele nome ou
+ * aquele número, no curso todo. Os arquivos guardados numa pasta com o nome da aula
+ * ("Módulo/materiais/02. Seu 1º Projeto/Gabarito.ipynb") também são dela.
+ * Da aula, o primeiro texto (txt/md, depois docx, depois pdf) é a descrição, que
+ * aparece embaixo do vídeo; os outros são anexos, logo abaixo dela na lista.
  */
-export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[]): Map<string, MaterialDTO> {
+export function ligacoesDasAulas(
+  aulas: LessonDTO[],
+  materiais: MaterialDTO[],
+): { descricoes: Map<string, MaterialDTO>; anexos: Map<string, MaterialDTO[]> } {
   const chaves: Array<(relPath: string) => string | null> = [
     (r) => baseDe(r),
     (r) => semDescricao(baseDe(r)) || null,
-    // Só texto: "Aula 1 - Slides.pdf" é material, não a descrição.
     (r) => {
-      if (!/\.(txt|md|markdown)$/i.test(r)) return null;
       const n = numeroDaAula(r);
       return n === null ? null : `aula#${n}`;
     },
@@ -79,102 +91,150 @@ export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[])
     }
     return porPasta;
   });
-  // Sem achar por perto, vale o nome no curso todo, se só uma aula tem esse nome
-  // ("Docker/Materiais de apoio/1/1.11. O que é Docker Hub.txt" é da aula
+  // Sem achar por perto, vale o nome (ou o "Aula N") no curso todo, se só uma aula o
+  // tem ("Docker/Materiais de apoio/1/1.11. O que é Docker Hub.txt" é da aula
   // "Docker/01 Primeiros passos/1.11. O que é Docker Hub.mp4").
-  const noCurso = new Map<string, LessonDTO | null>();
-  for (const l of aulas) {
-    const b = semDescricao(baseDe(l.relPath));
-    noCurso.set(b, noCurso.has(b) ? null : l);
-  }
-  const candidatos = materiais.filter((m) => DESCRICAO.test(m.relPath));
-  const descricoes = new Map<string, MaterialDTO>();
-  const usados = new Set<string>();
-  // A escolha feita no mapeamento (MapearCurso) vale antes de qualquer palpite pelo
-  // nome; "Nenhuma" ('') também: a aula fica sem descrição.
-  const escolhidas = new Set<string>();
+  const unicoNoCurso = (chave: (r: string) => string | null) => {
+    const mapa = new Map<string, LessonDTO | null>();
+    for (const l of aulas) {
+      const k = chave(l.relPath);
+      if (k) mapa.set(k, mapa.has(k) ? null : l);
+    }
+    return mapa;
+  };
+  const noCurso = [null, unicoNoCurso(chaves[1]), unicoNoCurso(chaves[2])];
+
   const porCaminho = new Map(materiais.map((m) => [m.relPath, m]));
+  const doMaterial = new Map<string, LessonDTO>();
+  const ligar = (aula: LessonDTO | null | undefined, m: MaterialDTO) => {
+    if (!aula || doMaterial.has(m.id)) return false;
+    doMaterial.set(m.id, aula);
+    return true;
+  };
+  // A escolha feita no mapeamento (MapearCurso) vale antes de qualquer palpite pelo
+  // nome; "Nenhuma" ('') também: a aula fica sem descrição (os arquivos dela, anexos).
+  const escolhida = new Map<string, MaterialDTO | null>();
   for (const l of aulas) {
     if (typeof l.descricao !== 'string') continue;
-    escolhidas.add(l.id);
     const m = l.descricao ? porCaminho.get(l.descricao) : undefined;
-    if (m && !usados.has(m.id)) {
-      descricoes.set(l.id, m);
-      usados.add(m.id);
-    }
+    if (m && ligar(l, m)) escolhida.set(l.id, m);
+    else escolhida.set(l.id, null);
   }
-  const ligar = (aula: LessonDTO | null | undefined, m: MaterialDTO) => {
-    if (!aula || descricoes.has(aula.id) || escolhidas.has(aula.id) || usados.has(m.id)) return;
-    descricoes.set(aula.id, m);
-    usados.add(m.id);
+
+  // As pastas onde procurar a aula, da mais perto para a mais longe.
+  const ondeProcurar = (relPath: string): string[] => {
+    const pastas = pastasDe(relPath);
+    const lugares = [pastas, pastas.filter((p) => !ehPastaDeMateriais(p)), pastas.slice(0, -1), pastas.slice(0, -2)];
+    if (pastas.length < 1) lugares.splice(2);
+    else if (pastas.length < 2) lugares.splice(3);
+    return [...new Set(lugares.map((p) => p.join('/')))];
   };
+  const candidatos = materiais.filter((m) => DOCUMENTO.test(m.relPath));
   // Uma passada por regra, da mais exata para a mais solta: o "A.txt" ganha do
-  // "Aula 1 - slides.pdf" mesmo que o PDF venha antes na lista.
+  // "Aula 1 - slides.pdf" mesmo que o PDF venha antes na lista. Todas as passadas por
+  // pasta vêm antes das do curso todo: o "Mod2/Aula 03.txt" é do "Mod2/Aula 03 -
+  // Intro.mp4" (mesmo "Aula 3" na pasta dele), e não do "Mod1/Aula 03.mp4", que só
+  // tem o mesmo nome em outra pasta.
   chaves.forEach((chave, i) => {
     for (const m of candidatos) {
+      if (doMaterial.has(m.id)) continue;
       const k = chave(m.relPath);
       if (!k) continue;
-      const pastas = pastasDe(m.relPath);
-      for (const subir of [0, 1, 2]) {
-        if (subir > pastas.length) break;
-        const aula = indices[i].get(`${pastas.slice(0, pastas.length - subir).join('/')}\n${k}`);
-        if (aula) {
-          ligar(aula, m);
-          break;
-        }
-      }
-    }
-    if (i === 1) {
-      for (const m of candidatos) {
-        const b = semDescricao(baseDe(m.relPath));
-        if (b.length >= 6) ligar(noCurso.get(b), m);
+      for (const pasta of ondeProcurar(m.relPath)) {
+        if (ligar(indices[i].get(`${pasta}\n${k}`), m)) break;
       }
     }
   });
-  return descricoes;
-}
+  chaves.forEach((chave, i) => {
+    const curso = noCurso[i];
+    if (!curso) return;
+    for (const m of candidatos) {
+      const k = chave(m.relPath);
+      // Um nome curto ("aula", "intro") daria ligação errada no curso todo.
+      if (k && (i === 2 || k.length >= 6)) ligar(curso.get(k), m);
+    }
+  });
 
-// O curso mapeado pela pessoa: os módulos dela, na ordem dela, e não as pastas do
-// disco (que nunca mudam). As aulas fora de módulo vêm antes; os arquivos que não
-// são a descrição de uma aula ficam juntos no fim, em "Arquivos", com as pastas deles.
-function arvoreMapeada(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[]): No[] {
-  const descricoes = new Set([...descricoesDasAulas(aulas, todosOsMateriais).values()].map((m) => m.id));
-  const nos: No[] = [];
-  const porModulo = new Map<string, Pasta>();
+  // Arquivos guardados numa pasta com o nome da aula, logo abaixo da pasta dela
+  // ("Módulo/02. Aula/arquivo") ou com uma pasta de materiais no meio
+  // ("Módulo/materiais/02. Aula/arquivo"), são dela, seja qual for o tipo.
+  const aulasPorPasta = new Map<string, Array<{ nome: string; aula: LessonDTO }>>();
   for (const l of aulas) {
-    const no: No = { tipo: 'aula', aula: l, titulo: l.title };
-    if (!l.module) {
-      nos.push(no);
-      continue;
-    }
-    let pasta = porModulo.get(l.module);
-    if (!pasta) {
-      pasta = { tipo: 'pasta', chave: `modulo:${l.module}`, nome: l.module, filhos: [], aulas: [], materiais: 0 };
-      porModulo.set(l.module, pasta);
-      nos.push(pasta);
-    }
-    pasta.filhos.push(no);
-    pasta.aulas.push(l);
+    const chave = pastasDe(l.relPath).join('/');
+    const lista = aulasPorPasta.get(chave) ?? [];
+    lista.push({ nome: comparavel(nomeDe(l.relPath)), aula: l });
+    aulasPorPasta.set(chave, lista);
   }
-  const restantes = todosOsMateriais.filter((m) => !descricoes.has(m.id));
-  if (restantes.length)
-    nos.push({ tipo: 'pasta', chave: 'arquivos-do-curso', nome: 'Arquivos', filhos: montarArvore([], restantes), aulas: [], materiais: restantes.length });
-  return nos;
+  for (const m of materiais) {
+    if (doMaterial.has(m.id)) continue;
+    const caminho = pastasDe(m.relPath);
+    const pastaDoArquivo = comparavel(caminho[caminho.length - 1] ?? '');
+    if (pastaDoArquivo.length < 4) continue;
+    for (const subir of [1, 2]) {
+      if (subir > caminho.length) break;
+      const acima = caminho.slice(0, caminho.length - subir).join('/');
+      const achada = aulasPorPasta.get(acima)?.find((a) => a.nome.startsWith(pastaDoArquivo));
+      if (achada) {
+        ligar(achada.aula, m);
+        break;
+      }
+    }
+  }
+
+  const daAula = new Map<string, MaterialDTO[]>();
+  for (const m of materiais) {
+    const l = doMaterial.get(m.id);
+    if (!l) continue;
+    const lista = daAula.get(l.id) ?? [];
+    lista.push(m);
+    daAula.set(l.id, lista);
+  }
+  const descricoes = new Map<string, MaterialDTO>();
+  const anexos = new Map<string, MaterialDTO[]>();
+  for (const [id, lista] of daAula) {
+    let descricao: MaterialDTO | undefined;
+    if (escolhida.has(id)) descricao = escolhida.get(id) ?? undefined;
+    else
+      descricao = lista
+        .filter((m) => DESCRICAO.test(m.relPath))
+        .sort((a, b) => prioridadeDaDescricao(a.relPath) - prioridadeDaDescricao(b.relPath))[0];
+    if (descricao) descricoes.set(id, descricao);
+    const resto = lista.filter((m) => m !== descricao).sort((a, b) => comparar(nomeDe(a.relPath), nomeDe(b.relPath)));
+    if (resto.length) anexos.set(id, resto);
+  }
+  return { descricoes, anexos };
 }
 
-export function montarArvore(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[] = []): No[] {
-  if (aulas.some((l) => l.mapeada)) return arvoreMapeada(aulas, todosOsMateriais);
-  const descricoes = new Set([...descricoesDasAulas(aulas, todosOsMateriais).values()].map((m) => m.id));
-  const materiais = todosOsMateriais.filter((m) => !descricoes.has(m.id));
-  const pastas = [...aulas.map((l) => pastasDe(l.relPath)), ...materiais.map((m) => pastasDe(m.relPath))];
+/** O arquivo que é a descrição de cada aula (ver ligacoesDasAulas). */
+export function descricoesDasAulas(aulas: LessonDTO[], materiais: MaterialDTO[]): Map<string, MaterialDTO> {
+  return ligacoesDasAulas(aulas, materiais).descricoes;
+}
+
+// O curso como as pastas dele: A > [B, C, D], em qualquer profundidade. Local e
+// Drive seguem as pastas do disco (rel_path); o Telegram, que não tem pastas, segue o
+// módulo ("A/B"), que é o tópico ou o que a pessoa montou no mapeamento. A ordem é a
+// do servidor (order_index), então basta pendurar cada aula no caminho dela. A pasta
+// que embrulha o curso inteiro (tudo dentro de "Docker/") não conta, senão tudo
+// ficaria dentro de uma pasta só; no Telegram não há embrulho: o módulo único que a
+// pessoa criou é dela.
+// Os arquivos de uma aula ficam com ela (descrição embaixo do vídeo, anexos logo
+// abaixo na lista); os outros ficam na pasta onde estão, depois das aulas, e a pasta
+// só de arquivos ("Arquivos gerais") vai para o fim, depois das pastas com aula.
+export function montarArvore(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[] = [], origem: Origem = 'local'): No[] {
+  const { descricoes, anexos } = ligacoesDasAulas(aulas, todosOsMateriais);
+  const ligados = new Set([...descricoes.values(), ...[...anexos.values()].flat()].map((m) => m.id));
+  const materiais = todosOsMateriais.filter((m) => !ligados.has(m.id));
+  const caminhoDe = (l: LessonDTO) => (origem === 'telegram' ? (l.module?.split('/').filter(Boolean) ?? []) : pastasDe(l.relPath));
+  // Um nível só: "Curso/02 DascIA/01 Fund" perde o "Curso", mas o "02 DascIA" é um
+  // módulo de verdade, mesmo sendo o único.
   let comum = 0;
-  while (pastas.length && pastas.every((p) => p.length > comum + 1 && p[comum] === pastas[0][comum])) comum++;
+  if (origem !== 'telegram') {
+    const pastas = [...aulas.map(caminhoDe), ...materiais.map((m) => pastasDe(m.relPath))];
+    if (pastas.length && pastas.every((p) => p.length > 1 && p[0] === pastas[0][0])) comum = 1;
+  }
   const raiz: Pasta = { tipo: 'pasta', chave: '', nome: '', filhos: [], aulas: [], materiais: 0 };
   const porChave = new Map<string, Pasta>();
-  // A pasta das aulas segue a ordem do servidor (no Telegram, a dos tópicos). A
-  // que só tem arquivos entra entre as irmãs pela ordem natural do nome: "03
-  // Material" não vai para o fim, depois da "05".
-  const pastaDe = (caminho: string[], aoPassar: (p: Pasta) => void, ordenar: boolean): Pasta => {
+  const pastaDe = (caminho: string[], aoPassar: (p: Pasta) => void): Pasta => {
     let atual = raiz;
     for (let n = comum; n < caminho.length; n++) {
       const chave = caminho.slice(0, n + 1).join('/');
@@ -182,69 +242,46 @@ export function montarArvore(aulas: LessonDTO[], todosOsMateriais: MaterialDTO[]
       if (!pasta) {
         pasta = { tipo: 'pasta', chave, nome: caminho[n], filhos: [], aulas: [], materiais: 0 };
         porChave.set(chave, pasta);
-        const depois = ordenar ? atual.filhos.findIndex((f) => f.tipo === 'pasta' && comparar(f.nome, caminho[n]) > 0) : -1;
-        if (depois < 0) atual.filhos.push(pasta);
-        else atual.filhos.splice(depois, 0, pasta);
+        atual.filhos.push(pasta);
       }
       aoPassar(pasta);
       atual = pasta;
     }
     return atual;
   };
-  aulas.forEach((l) => {
-    const caminho = pastasDe(l.relPath);
-    const pasta = pastaDe(caminho, (p) => p.aulas.push(l), false);
-    const prefixo = `${caminho.slice(1).join(' / ')} — `;
-    const titulo = caminho.length > 1 && l.title.startsWith(prefixo) ? l.title.slice(prefixo.length) : l.title;
-    pasta.filhos.push({ tipo: 'aula', aula: l, titulo });
-  });
-  // Arquivos guardados numa pasta com o nome da aula ("Módulo/materiais/02. Seu 1º
-  // Projeto/Gabarito.ipynb", ao lado de "Módulo/02. Seu 1º Projeto….mp4") são dessa
-  // aula: entram logo depois dela, na pasta dela, e a pasta "materiais" não aparece.
-  const aulasPorPasta = new Map<string, Array<{ nome: string; no: No }>>();
-  const percorrer = (nos: No[]) => {
-    for (const no of nos) {
-      if (no.tipo === 'pasta') percorrer(no.filhos);
-      else if (no.tipo === 'aula') {
-        const chave = pastasDe(no.aula.relPath).join('/');
-        const lista = aulasPorPasta.get(chave) ?? [];
-        lista.push({ nome: comparavel(nomeDe(no.aula.relPath)), no });
-        aulasPorPasta.set(chave, lista);
-      }
-    }
-  };
-  percorrer(raiz.filhos);
-  const aulaDaPasta = (caminho: string[]): { caminho: string[]; no: No } | null => {
-    const pastaDoArquivo = comparavel(caminho[caminho.length - 1] ?? '');
-    if (pastaDoArquivo.length < 4) return null;
-    // A pasta da aula pode estar logo acima ("Módulo/02. Aula/arquivo") ou com uma
-    // pasta de materiais no meio ("Módulo/materiais/02. Aula/arquivo").
-    for (const subir of [1, 2]) {
-      const acima = caminho.slice(0, caminho.length - subir);
-      const achada = aulasPorPasta.get(acima.join('/'))?.find((a) => a.nome.startsWith(pastaDoArquivo));
-      if (achada) return { caminho: acima, no: achada.no };
-    }
-    return null;
-  };
+  for (const l of aulas) {
+    const anexosDaAula = anexos.get(l.id) ?? [];
+    const pasta = pastaDe(caminhoDe(l), (p) => {
+      p.aulas.push(l);
+      p.materiais += anexosDaAula.length;
+    });
+    // Curso ainda não re-escaneado: o título vem com as pastas coladas ("B / C — Aula").
+    const prefixo = `${pastasDe(l.relPath).slice(1).join(' / ')} — `;
+    const titulo = pastasDe(l.relPath).length > 1 && l.title.startsWith(prefixo) ? l.title.slice(prefixo.length) : l.title;
+    pasta.filhos.push({ tipo: 'aula', aula: l, titulo, anexos: anexosDaAula });
+  }
+  for (const m of materiais) pastaDe(pastasDe(m.relPath), (p) => p.materiais++).filhos.push({ tipo: 'material', material: m });
 
-  // O arquivo entra entre as aulas da pasta pela ordem do nome, como no Finder.
-  materiais.forEach((m) => {
-    const daAula = aulaDaPasta(pastasDe(m.relPath));
-    if (daAula) {
-      const pasta = pastaDe(daAula.caminho, (p) => p.materiais++, false);
-      let i = pasta.filhos.indexOf(daAula.no) + 1;
-      while (pasta.filhos[i]?.tipo === 'material') i++;
-      pasta.filhos.splice(i, 0, { tipo: 'material', material: m });
-      return;
-    }
-    const pasta = pastaDe(pastasDe(m.relPath), (p) => p.materiais++, true);
-    const nome = nomeDe(m.relPath);
-    const depois = pasta.filhos.findIndex(
-      (f) => f.tipo !== 'pasta' && comparar(nomeDe(f.tipo === 'aula' ? f.aula.relPath : f.material.relPath), nome) > 0,
-    );
-    if (depois < 0) pasta.filhos.push({ tipo: 'material', material: m });
-    else pasta.filhos.splice(depois, 0, { tipo: 'material', material: m });
-  });
+  // Em cada pasta: as subpastas com aula e as aulas juntas, na ordem em que entraram
+  // (a do servidor, que é a do "Próxima" no player: uma aula solta entre duas
+  // subpastas fica entre elas); depois os arquivos soltos e, por fim, as pastas só de
+  // arquivos, esses dois pela ordem natural do nome ("03 Material" depois de "02", e
+  // não entre as aulas).
+  const grupo = (no: No) => (no.tipo === 'pasta' ? (no.aulas.length ? 0 : 3) : no.tipo === 'aula' ? 0 : 2);
+  const nomeDoNo = (no: No) => (no.tipo === 'pasta' ? no.nome : no.tipo === 'material' ? nomeDe(no.material.relPath) : '');
+  const ordenar = (pasta: Pasta) => {
+    pasta.filhos = pasta.filhos
+      .map((no, i) => ({ no, i }))
+      .sort((a, b) => {
+        const g = grupo(a.no) - grupo(b.no);
+        if (g) return g;
+        if (grupo(a.no) >= 2) return comparar(nomeDoNo(a.no), nomeDoNo(b.no)) || a.i - b.i;
+        return a.i - b.i;
+      })
+      .map((x) => x.no);
+    for (const f of pasta.filhos) if (f.tipo === 'pasta') ordenar(f);
+  };
+  ordenar(raiz);
   return raiz.filhos;
 }
 
