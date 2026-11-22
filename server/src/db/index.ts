@@ -3,6 +3,7 @@ import type { DatabaseSync as TipoDoBanco } from 'node:sqlite';
 import { SCHEMA_V1 } from './schema';
 import { compararCaminhos, compararNomes } from '../scan/natural-sort';
 import { deriveCourse } from '../scan/derive';
+import { parciaisAntes, type Parciais } from '../armazenamento';
 
 // node:sqlite entra por require(), e não por import estático, para o aviso de
 // "feature experimental" poder ser silenciado (ver quiet.ts).
@@ -535,8 +536,13 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
       const semTitulo = db.prepare('SELECT rel_path, title FROM lessons WHERE course_id=? AND titulo_editado IS NULL');
       const gravarTitulo = db.prepare('UPDATE lessons SET title=? WHERE course_id=? AND rel_path=?');
       const reorganizar: string[] = [];
+      const parciais: Record<string, Parciais> = {};
       for (const curso of cursos) {
         if (temMapeada.get(curso.id)) {
+          // Onde os downloads interrompidos estão agora (no caminho do mapeamento),
+          // antes de o mapeamento sair: sem isso o `.part` não seria mais achado e o
+          // download recomeçaria do zero.
+          if (curso.source === 'drive') parciais[curso.id] = parciaisAntes(db, curso.id);
           const aulas = aulasDo.all(curso.id) as Aula[];
           const derivado = deriveCourse(aulas.map((a) => ({ relPath: a.rel_path, sizeBytes: a.size_bytes, mtime: a.mtime })));
           for (const l of derivado.lessons) gravarAula.run(l.module, l.moduleOrder, l.orderIndex, curso.id, l.relPath);
@@ -563,6 +569,7 @@ export function migrate(db: Db, ate: number = ULTIMA_VERSAO): void {
       db.exec("UPDATE courses SET mapa_pendente=0 WHERE source IN ('local','drive')");
       if (reorganizar.length > 0) {
         db.prepare("INSERT INTO settings (key, value) VALUES ('mapa.reorganizar', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(reorganizar));
+        db.prepare("INSERT INTO settings (key, value) VALUES ('mapa.parciais', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(parciais));
       }
       pragma(db, 'user_version = 17');
     });

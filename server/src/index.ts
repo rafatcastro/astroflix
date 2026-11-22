@@ -11,7 +11,7 @@ import { mensagemDeBoot } from './banner';
 import { hasFfmpeg } from './media/ffmpeg';
 import { linhaDaUrl, linhaDeDownload, pathComExtras } from './desktop';
 import { corrigirCaminhos, moverPastaDeDados } from './pasta-de-dados';
-import { pastaDeArmazenamento, reorganizarBaixados } from './armazenamento';
+import { pastaDeArmazenamento, reorganizarBaixados, type Parciais } from './armazenamento';
 
 // Antes do loadConfig: se não deu para mover a pasta antiga, ele tem de apontar para ela.
 const mudanca = moverPastaDeDados();
@@ -50,6 +50,15 @@ if (paraReorganizar) {
   // voltar sem mexer em nada, e a chave apagada deixava esses downloads para sempre
   // no caminho do mapeamento antigo: o id fica para a próxima abertura. Curso sem
   // pasta de download (nunca baixou) ou já excluído não tem o que esperar.
+  // Onde estavam os downloads interrompidos de cada curso, tirado pela v17 antes de
+  // desfazer o mapeamento (sem isso, o `.part` no caminho antigo seria esquecido).
+  let parciais: Record<string, Parciais> = {};
+  try {
+    const linha = db.prepare("SELECT value FROM settings WHERE key='mapa.parciais'").get() as { value: string } | undefined;
+    if (linha) parciais = JSON.parse(linha.value) as Record<string, Parciais>;
+  } catch {
+    // Chave estragada: os `.part` do caminho antigo recomeçam do zero.
+  }
   const raiz = pastaDeArmazenamento(db, config);
   const pastaDe = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?');
   const faltam: string[] = [];
@@ -60,14 +69,19 @@ if (paraReorganizar) {
       continue;
     }
     try {
-      reorganizarBaixados(db, config, id);
+      reorganizarBaixados(db, config, id, false, parciais[id]);
     } catch (err) {
       console.error(`Não deu para reorganizar os downloads do curso ${id}:`, err);
       faltam.push(id);
     }
   }
-  if (faltam.length > 0) db.prepare("UPDATE settings SET value=? WHERE key='mapa.reorganizar'").run(JSON.stringify(faltam));
-  else db.prepare("DELETE FROM settings WHERE key='mapa.reorganizar'").run();
+  if (faltam.length > 0) {
+    db.prepare("UPDATE settings SET value=? WHERE key='mapa.reorganizar'").run(JSON.stringify(faltam));
+    const resto = Object.fromEntries(faltam.filter((id) => parciais[id]).map((id) => [id, parciais[id]]));
+    db.prepare("UPDATE settings SET value=? WHERE key='mapa.parciais'").run(JSON.stringify(resto));
+  } else {
+    db.prepare("DELETE FROM settings WHERE key IN ('mapa.reorganizar', 'mapa.parciais')").run();
+  }
 }
 const app = buildApp(config, db, {
   retomarDownloads: true,

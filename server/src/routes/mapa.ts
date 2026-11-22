@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { transaction, type Db } from '../db';
 import type { AppConfig } from '../config';
 import { cleanTitle } from '../scan/derive';
-import { reorganizarBaixados } from '../armazenamento';
+import { parciaisAntes, reorganizarBaixados, type Parciais } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
 
 // O mapeamento do curso do Telegram (MapearCurso.tsx): a pessoa divide as aulas
@@ -77,14 +77,16 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
   // O que já foi baixado vai para a estrutura nova. Como no re-escaneio
   // (routes/migration.ts): os downloads do curso param enquanto isso (um `.part`
   // sendo gravado não pode trocar de lugar) e o "Baixar" continua depois.
-  const organizar = async (id: string) => {
-    if (!reorganizarBaixados(db, config, id, true)) return 0;
+  // `antes`: onde estavam os downloads interrompidos, tirado antes de gravar o
+  // mapeamento novo (senão o `.part` do caminho antigo não seria mais achado).
+  const organizar = async (id: string, antes: Parciais) => {
+    if (!reorganizarBaixados(db, config, id, true, antes)) return 0;
     const e = drive?.baixador.estado(id);
     const continuar = !!e && (e.ativo || e.naFila || e.tentarEm !== null);
     drive?.baixador.cancelar(id);
     await drive?.baixador.soltar(id);
     try {
-      return reorganizarBaixados(db, config, id);
+      return reorganizarBaixados(db, config, id, false, antes);
     } finally {
       if (continuar) drive?.baixador.baixarCurso(id);
     }
@@ -110,6 +112,7 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
     const materiais = new Set((db.prepare('SELECT rel_path FROM materials WHERE course_id=?').all(id) as Array<{ rel_path: string }>).map((m) => m.rel_path));
     const titulo = db.prepare('UPDATE lessons SET title=?, titulo_editado=? WHERE id=?');
     const descricao = db.prepare('UPDATE lessons SET descricao_rel=? WHERE id=?');
+    const antes = parciaisAntes(db, id);
 
     transaction(db, () => {
       for (const m of modulos) {
@@ -131,7 +134,7 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
         modulos.map((m) => ({ nome: nomeDoModulo(m.nome), ids: m.aulas.map((a) => a?.id).filter((x) => aulas.has(x)) })),
       );
     });
-    return { ok: true, movidos: await organizar(id) };
+    return { ok: true, movidos: await organizar(id, antes) };
   });
 
   // "Agora não" na tela que abre depois de importar: o curso fica como as pastas dele.
@@ -179,7 +182,8 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
       for (const g of grupos) g.ids = g.ids.filter((x) => x !== p.id);
       grupoDe(nomeDoModulo(p.modulo)).ids.push(p.id);
     }
+    const antes = parciaisAntes(db, id);
     transaction(db, () => gravarOrdem(db, id, grupos));
-    return { ok: true, movidos: await organizar(id) };
+    return { ok: true, movidos: await organizar(id, antes) };
   });
 }

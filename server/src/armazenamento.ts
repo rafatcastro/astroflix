@@ -587,7 +587,31 @@ export function adotarConvertido(db: Db, item: Pick<ItemBaixavel, 'tipo' | 'id' 
  * de um download que parou também vai, para continuar de onde estava.
  * `simular` só conta, sem mover (para saber se vale pausar os downloads).
  */
-export function reorganizarBaixados(db: Db, config: AppConfig, courseId: string, simular = false): number {
+/** As partes do caminho de cada item na pasta do curso, por `tipo:id` (ver parciaisAntes). */
+export type Parciais = Record<string, string[]>;
+
+/**
+ * Onde o download interrompido de cada item que ainda não terminou estaria agora
+ * (as partes do caminho dentro da pasta do curso, sem o `.part`). Tirada ANTES de
+ * mudar o mapeamento: depois, o banco já dá o caminho novo e o `.part` do antigo
+ * (`NN - Módulo/NN - Título.ext.part`) não seria mais achado; o download recomeçava
+ * do zero e o `.part` ficava esquecido na pasta. Só usa o banco: a migração v17,
+ * que não tem a config, também a tira.
+ */
+export function parciaisAntes(db: Db, courseId: string): Parciais {
+  const parciais: Parciais = {};
+  const baixado = db.prepare('SELECT 1 FROM baixados WHERE tipo=? AND item_id=?');
+  for (const tipo of ['aula', 'material'] as const) {
+    const tabela = tipo === 'aula' ? 'lessons' : 'materials';
+    for (const l of db.prepare(`SELECT id, rel_path FROM ${tabela} WHERE course_id=?`).all(courseId) as Array<{ id: string; rel_path: string }>) {
+      if (baixado.get(tipo, l.id)) continue;
+      parciais[`${tipo}:${l.id}`] = partesNoCurso(db, { tipo, id: l.id, courseId, relPath: l.rel_path, remoteId: '', tamanho: 0 });
+    }
+  }
+  return parciais;
+}
+
+export function reorganizarBaixados(db: Db, config: AppConfig, courseId: string, simular = false, antes?: Parciais): number {
   if (!config.downloadsDir || pastaConectada(db, courseId)) return 0;
   const raiz = pastaDeArmazenamento(db, config);
   const mapeada = db.prepare('SELECT pasta FROM pastas_baixadas WHERE course_id=? AND raiz=?').get(courseId, raiz) as { pasta: string } | undefined;
@@ -639,10 +663,16 @@ export function reorganizarBaixados(db: Db, config: AppConfig, courseId: string,
       atualizar.run(agora, tipo, l.id);
       provisorios.push({ item, antes: r.arquivo, agora, convertido: !!r.convertido });
     } else {
-      // Download que parou no meio, gravado no lugar antigo (na raiz do curso, sem módulo).
-      const antigo = path.join(mapeada.pasta, sanear(path.basename(l.rel_path))) + '.part';
+      // Download que parou no meio: no caminho de antes da mudança (o mapeamento
+      // antigo, quando quem chama o tirou com parciaisAntes) ou no lugar mais antigo
+      // de todos (na raiz do curso, sem módulo).
       const novo = `${destinoDe(db, config, item)}.part`;
-      if (antigo === novo || !fs.existsSync(antigo) || fs.existsSync(novo)) continue;
+      const candidatos = [
+        ...(antes?.[`${tipo}:${l.id}`] ? [path.join(mapeada.pasta, ...antes[`${tipo}:${l.id}`]) + '.part'] : []),
+        path.join(mapeada.pasta, sanear(path.basename(l.rel_path))) + '.part',
+      ];
+      const antigo = candidatos.find((c) => c !== novo && dentro(c, mapeada.pasta) && fs.existsSync(c));
+      if (!antigo || fs.existsSync(novo)) continue;
       movidos++;
       if (simular) continue;
       mover(antigo, novo);

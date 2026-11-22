@@ -423,7 +423,7 @@ re-apontar preserva o histórico.
   profundidade (`arvore.ts`; só a pasta que embrulha tudo sai, um nível), porque o mapeamento antigo
   desfigurava quem já tinha uma organização boa em pastas. A v17 desfez os mapeados desses cursos
   (recalculou módulo e ordem pelo `deriveCourse`, tirou as pastas dos títulos não editados) e, no boot,
-  reorganiza os baixados do Drive para o caminho de origem (`settings` `mapa.reorganizar`, `index.ts`).
+  reorganiza os baixados do Drive para o caminho de origem (`settings` `mapa.reorganizar`, `index.ts`); o download interrompido também vai, porque a v17 guarda antes onde estava o `.part` (`parciaisAntes` → `mapa.parciais`).
   **Só o Telegram mapeia**, e só no import do curso novo (não o lote nem a playlist): `courses.mapa_pendente`
   faz a página abrir, quando a leitura termina, a tela em que a pessoa cria módulos e **submódulos**
   ("+ Submódulo"), arrasta as aulas (ou marca várias, com Shift, e move), renomeia e liga um arquivo de texto
@@ -434,7 +434,7 @@ re-apontar preserva o histórico.
   `AulasNovas.tsx` para escolher o módulo (vai para o fim dele). **A pasta de origem nunca muda**: só o
   "Baixar" vira pastas, uma por nível: `NN - A/NN - B/NN - Título.ext` (`pastasDoModulo` e `partesNoCurso`
   em `armazenamento.ts`), com a descrição ao lado e o mesmo nome. Mudar o mapeamento move o que já foi
-  baixado (`reorganizarBaixados`, em duas passadas, com os downloads do curso pausados). Sobe para a
+  baixado (`reorganizarBaixados`, em duas passadas, com os downloads do curso pausados), inclusive o `.part` do que parou no meio: o caminho antigo é tirado com `parciaisAntes` antes de gravar o mapeamento novo. Sobe para a
   conta em `aulas.mapeada`/`aulas.descricao_rel` (rodar o `schema.sql` de novo); sem as colunas, a
   aula sobe sem elas e o mapeamento fica só nesta máquina.
 - `cache_aulas` e `capas_estado` (v14) são só desta máquina, sem gatilho da nuvem: o cache
