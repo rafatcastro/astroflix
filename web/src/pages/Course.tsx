@@ -7,6 +7,7 @@ import { getPref, setPref } from '../lib/prefs';
 import { api, materialUrl } from '../api/client';
 import type { LessonDTO, MapaModulo, MaterialDTO } from '../api/client';
 import MapearCurso from '../components/MapearCurso';
+import ModelarPorTexto, { type Proposta } from '../components/ModelarPorTexto';
 import AulasNovas from '../components/AulasNovas';
 import LessonGrid from '../components/LessonGrid';
 import { montarArvore, type No } from '../lib/arvore';
@@ -68,6 +69,10 @@ export default function Course() {
   // O mapeamento (MapearCurso): 'auto' quando abre sozinho no curso recém-importado,
   // 'manual' pelo menu ⋯ (que chega aqui com ?mapear=1, inclusive do cartão).
   const [mapeando, setMapeando] = useState<null | 'auto' | 'manual'>(null);
+  // "Organizar por texto…" (menu ⋯, ?mapear=texto): a janela do texto e a proposta
+  // do Claude, que abre a tela de mapeamento já montada.
+  const [porTexto, setPorTexto] = useState(false);
+  const [proposta, setProposta] = useState<Proposta | undefined>(undefined);
   const [params, setParams] = useSearchParams();
   const abriuSozinho = useRef(false);
   // "Depois" no popup das aulas novas: volta na próxima visita ao curso.
@@ -81,7 +86,10 @@ export default function Course() {
   const doTelegram = data?.source === 'telegram';
   useEffect(() => {
     if (!params.get('mapear') || !data) return;
-    if (doTelegram) setMapeando('manual');
+    if (doTelegram) {
+      if (params.get('mapear') === 'texto') setPorTexto(true);
+      else setMapeando('manual');
+    }
     const resto = new URLSearchParams(params);
     resto.delete('mapear');
     setParams(resto, { replace: true });
@@ -400,10 +408,12 @@ export default function Course() {
   const salvarMapa = async (modulos: MapaModulo[]) => {
     const r = await api.salvarMapa(id, modulos);
     setMapeando(null);
+    setProposta(undefined);
     depoisDeMapear(r.movidos);
   };
   const pularMapa = () => {
     setMapeando(null);
+    setProposta(undefined);
     void api.pularMapa(id).then(() => qc.invalidateQueries({ queryKey: ['course', id] }));
   };
 
@@ -713,7 +723,28 @@ export default function Course() {
         </>
       )}
       {mapeando && data.source === 'telegram' && (
-        <MapearCurso curso={data} primeiraVez={mapeando === 'auto'} onSalvar={salvarMapa} onPular={pularMapa} onFechar={() => setMapeando(null)} />
+        <MapearCurso
+          curso={data}
+          primeiraVez={mapeando === 'auto'}
+          proposta={proposta}
+          onSalvar={salvarMapa}
+          onPular={pularMapa}
+          onFechar={() => {
+            setMapeando(null);
+            setProposta(undefined);
+          }}
+        />
+      )}
+      {porTexto && data.source === 'telegram' && (
+        <ModelarPorTexto
+          courseId={id}
+          onFechar={() => setPorTexto(false)}
+          onProposta={(p) => {
+            setPorTexto(false);
+            setProposta(p);
+            setMapeando('manual');
+          }}
+        />
       )}
       {!mapeando && !novasDepois && aulasNovas.length > 0 && !data.importacao?.carregando && (
         <AulasNovas

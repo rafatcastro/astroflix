@@ -426,6 +426,13 @@ export default function CourseMenu({
                 Organizar módulos e aulas…
               </button>
             )}
+            {/* O Claude Code da pessoa monta os módulos a partir de um texto (o menu do
+                canal, a ementa); a proposta abre na mesma tela, para conferir e salvar. */}
+            {course.source === 'telegram' && (
+              <button type="button" className={item} onClick={() => { close(); navigate(`/course/${course.id}?mapear=texto`); }}>
+                Organizar por texto…
+              </button>
+            )}
             <button type="button" className={item} onClick={() => setFlow('rename')}>Renomear…</button>
             <button type="button" className={item} onClick={() => { setNewColName(''); setFlow('collection'); }}>Mover para categoria…</button>
             <button type="button" className={item} onClick={() => setFlow('confirmReset')}>Zerar progresso…</button>

@@ -429,7 +429,13 @@ re-apontar preserva o histórico.
   ("+ Submódulo"), arrasta as aulas (ou marca várias, com Shift, e move), renomeia e liga um arquivo de texto
   como descrição (`lessons.descricao_rel`; `''` = nenhuma, nem a adivinhada pelo nome). As rotas `/mapa` e
   `/mapa/aulas` respondem 400 `so-telegram` nos outros. O menu ⋯ ("Organizar módulos e aulas…", `?mapear=1`)
-  reabre. O `module` é o **caminho** `"A/B"` (até 5 níveis). `lessons.mapeada` = módulo, ordem e título são da
+  reabre. **"Organizar por texto…"** (menu ⋯, `?mapear=texto`, `ModelarPorTexto.tsx`): a pessoa cola o índice do
+  curso ou escreve como quer os módulos, e `POST /api/courses/:id/mapa/texto` pergunta ao **Claude Code** dela
+  (`claude.ts`: `claude -p` com saída estruturada, `--model sonnet`, numa pasta vazia, sem ferramentas, MCP,
+  configurações nem plugins, que levavam ~100 mil tokens a cada pedido; o binário é procurado também em
+  `~/.local/bin` e `~/.claude/local`, fora do PATH do app aberto pelo Dock). As aulas vão numeradas (1..N), não pelos
+  ids; a resposta não é gravada: abre na tela de mapeamento já montada, para conferir e salvar. Sem o Claude Code,
+  424 `sem-claude` e a janela explica como instalar. O `module` é o **caminho** `"A/B"` (até 5 níveis). `lessons.mapeada` = módulo, ordem e título são da
   pessoa: o re-escaneio não os recalcula, e a aula que chega depois (`mapeada=0`, ordem 50000+) abre o popup
   `AulasNovas.tsx` para escolher o módulo (vai para o fim dele). **A pasta de origem nunca muda**: só o
   "Baixar" vira pastas, uma por nível: `NN - A/NN - B/NN - Título.ext` (`pastasDoModulo` e `partesNoCurso`

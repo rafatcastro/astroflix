@@ -5,6 +5,7 @@ import type { AppConfig } from '../config';
 import { cleanTitle } from '../scan/derive';
 import { parciaisAntes, reorganizarBaixados, type Parciais } from '../armazenamento';
 import type { ServicosDrive } from '../drive/servicos';
+import { FalhaClaude, perguntarAoClaude } from '../claude';
 
 // O mapeamento do curso do Telegram (MapearCurso.tsx): a pessoa divide as aulas
 // em módulos e submódulos, arrasta, renomeia e liga um arquivo como descrição. O
@@ -135,6 +136,92 @@ export async function mapaRoutes(app: FastifyInstance, opts: { db: Db; config: A
       );
     });
     return { ok: true, movidos: await organizar(id, antes) };
+  });
+
+  // "Organizar por texto…" (menu ⋯): a pessoa escreve ou cola um texto (o menu do
+  // canal, a ementa, "junte as aulas 1 a 5 em Introdução") e o Claude Code dela
+  // propõe os módulos, a ordem e os títulos. Nada é gravado aqui: a proposta abre na
+  // tela de mapeamento, para a pessoa conferir e salvar (um erro do Claude não
+  // bagunça o curso sem ela ver). As aulas vão numeradas (1..N), e não pelos ids,
+  // para o Claude não ter de copiar UUIDs; o que ele não citar fica fora dos módulos.
+  app.post('/api/courses/:id/mapa/texto', async (req, reply) => {
+    const id = (req.params as { id: string }).id;
+    if (!existe(id)) return reply.code(404).send({ error: 'not_found' });
+    if (!doTelegram(id)) return reply.code(400).send({ error: 'so-telegram' });
+    const texto = String((req.body as { texto?: unknown } | undefined)?.texto ?? '').trim().slice(0, 50_000);
+    if (!texto) return reply.code(400).send({ error: 'texto-vazio' });
+
+    const aulas = db
+      .prepare('SELECT id, rel_path, title, module FROM lessons WHERE course_id=? AND missing=0 ORDER BY order_index')
+      .all(id) as Array<{ id: string; rel_path: string; title: string; module: string | null }>;
+    if (!aulas.length) return reply.code(400).send({ error: 'sem-aulas' });
+    const lista = aulas
+      .map((l, i) => {
+        const arquivo = path.posix.basename(l.rel_path).replace(/^\d{10}-/, '');
+        return `${i + 1}. ${l.title} | arquivo: ${arquivo}${l.module ? ` | módulo atual: ${l.module}` : ''}`;
+      })
+      .join('\n');
+    const prompt = `Você organiza as aulas de um curso em vídeo em módulos, seguindo as instruções da pessoa.
+
+INSTRUÇÕES DA PESSOA (pode ser o índice do curso, uma ementa ou um pedido livre):
+"""
+${texto}
+"""
+
+AULAS DO CURSO (número. título atual | arquivo | módulo atual), na ordem de postagem:
+${lista}
+
+Responda com os módulos na ordem em que devem aparecer. Cada módulo tem "nome" e "aulas" (os números das aulas, na ordem em que devem tocar). Para um submódulo, use "Módulo/Submódulo" no nome (até 5 níveis). Use os nomes de módulo do texto da pessoa quando houver. Em cada aula, "titulo" só quando o texto der um nome melhor para ela; senão omita. Cada aula aparece no máximo uma vez. Aulas que o texto não permite situar ficam de fora (não invente módulos para elas).`;
+    const schema = {
+      type: 'object',
+      properties: {
+        modulos: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              nome: { type: 'string' },
+              aulas: {
+                type: 'array',
+                items: { type: 'object', properties: { n: { type: 'integer' }, titulo: { type: 'string' } }, required: ['n'] },
+              },
+            },
+            required: ['nome', 'aulas'],
+          },
+        },
+      },
+      required: ['modulos'],
+    };
+
+    let resposta: { modulos?: Array<{ nome?: unknown; aulas?: Array<{ n?: unknown; titulo?: unknown }> }> };
+    try {
+      resposta = await perguntarAoClaude(prompt, schema);
+    } catch (e) {
+      if (e instanceof FalhaClaude) return reply.code(e.tipo === 'sem-claude' ? 424 : 502).send({ error: e.tipo, mensagem: e.message });
+      throw e;
+    }
+
+    const usadas = new Set<number>();
+    const modulos: Array<{ nome: string | null; aulas: Array<{ id: string; titulo: string }> }> = [];
+    for (const m of Array.isArray(resposta?.modulos) ? resposta.modulos : []) {
+      const nome = nomeDoModulo(m?.nome);
+      if (!nome || !Array.isArray(m.aulas)) continue;
+      const dele: Array<{ id: string; titulo: string }> = [];
+      for (const a of m.aulas) {
+        const n = typeof a?.n === 'number' ? a.n : NaN;
+        if (!Number.isInteger(n) || n < 1 || n > aulas.length || usadas.has(n)) continue;
+        usadas.add(n);
+        const titulo = typeof a.titulo === 'string' ? a.titulo.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+        dele.push({ id: aulas[n - 1].id, titulo: titulo || aulas[n - 1].title });
+      }
+      // Dois módulos com o mesmo nome viram um só, como no salvar.
+      const igual = modulos.find((x) => x.nome === nome);
+      if (igual) igual.aulas.push(...dele);
+      else if (dele.length) modulos.push({ nome, aulas: dele });
+    }
+    if (!modulos.length) return reply.code(502).send({ error: 'resposta-invalida', mensagem: 'O Claude não montou nenhum módulo com esse texto.' });
+    const fora = aulas.filter((_, i) => !usadas.has(i + 1)).map((l) => ({ id: l.id, titulo: l.title }));
+    return { modulos: [{ nome: null, aulas: fora }, ...modulos] };
   });
 
   // "Agora não" na tela que abre depois de importar: o curso fica como as pastas dele.

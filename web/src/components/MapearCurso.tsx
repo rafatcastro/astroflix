@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { CourseDetail, MapaModulo, MaterialDTO } from '../api/client';
 import { DESCRICAO, descricoesDasAulas } from '../lib/arvore';
 import TextField from './TextField';
+import type { Proposta } from './ModelarPorTexto';
 
 // O mapeamento do curso do Telegram: abre sozinho depois de importar e pelo menu ⋯
 // ("Organizar módulos e aulas"). O canal não tem pastas, então é aqui que o curso
@@ -92,9 +93,27 @@ const comoCaminho = (nome: string) => nome.split('/').join(' › ');
 // A barra separa os níveis: dentro de um nome, vira hífen (também no servidor).
 const semBarra = (t: string) => t.replace(/\//g, '-');
 
-function gruposIniciais(curso: CourseDetail): Grupo[] {
-  const aulas = curso.modules.flatMap((m) => m.lessons);
-  const adivinhadas = descricoesDasAulas(aulas, curso.materials);
+function gruposIniciais(curso: CourseDetail, proposta?: Proposta): Grupo[] {
+  const doCurso = curso.modules.flatMap((m) => m.lessons);
+  const adivinhadas = descricoesDasAulas(doCurso, curso.materials);
+  // Com a proposta do Claude ("Organizar por texto"), as aulas vêm na ordem e nos
+  // módulos dela, com os títulos que ela deu; a que ficou fora (a sumida, que não
+  // vai para o Claude) entra no fim de "Fora dos módulos".
+  let aulas = doCurso;
+  if (proposta) {
+    const porId = new Map(doCurso.map((l) => [l.id, l]));
+    const vistas = new Set<string>();
+    aulas = [];
+    for (const m of [...proposta.filter((x) => x.nome === null), ...proposta.filter((x) => x.nome !== null)]) {
+      for (const a of m.aulas) {
+        const l = porId.get(a.id);
+        if (!l || vistas.has(a.id)) continue;
+        vistas.add(a.id);
+        aulas.push({ ...l, module: m.nome, title: a.titulo || l.title });
+      }
+    }
+    for (const l of doCurso) if (!vistas.has(l.id)) aulas.push({ ...l, module: null });
+  }
   const grupos: Grupo[] = [{ chave: novaChave(), nome: null, parte: '', pai: null, aulas: [] }];
   const porCaminho = new Map<string, Grupo>();
   // O módulo e cada pai dele, mesmo que o pai não tenha aula própria.
@@ -143,15 +162,18 @@ export default function MapearCurso({
   onSalvar,
   onPular,
   onFechar,
+  proposta,
 }: {
   curso: CourseDetail;
+  /** A proposta do Claude (Organizar por texto): a tela já abre montada por ela. */
+  proposta?: Proposta;
   /** Abriu sozinho depois de importar: o botão secundário é "Agora não". */
   primeiraVez: boolean;
   onSalvar: (modulos: MapaModulo[]) => Promise<void>;
   onPular: () => void;
   onFechar: () => void;
 }) {
-  const [grupos, setGrupos] = useState<Grupo[]>(() => gruposIniciais(curso));
+  const [grupos, setGrupos] = useState<Grupo[]>(() => gruposIniciais(curso, proposta));
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [ultimaMarcada, setUltimaMarcada] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string[] | null>(null);
@@ -159,7 +181,8 @@ export default function MapearCurso({
   const [novoModulo, setNovoModulo] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [mexeu, setMexeu] = useState(false);
+  // A proposta ainda não salva conta como mexida: sair pede confirmação.
+  const [mexeu, setMexeu] = useState(!!proposta);
   const campoNovo = useRef<HTMLInputElement>(null);
   // O submódulo recém-criado: o nome dele ganha o foco, para já digitar.
   const [focar, setFocar] = useState<string | null>(null);

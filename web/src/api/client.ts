@@ -632,6 +632,21 @@ export const api = {
   /** O mapeamento inteiro do curso: módulos na ordem, com as aulas, os títulos e as descrições. */
   salvarMapa: (courseId: string, modulos: MapaModulo[]) =>
     jsonFetch<{ ok: true; movidos: number }>(`/api/courses/${courseId}/mapa`, { method: 'PUT', body: JSON.stringify({ modulos }) }),
+  /**
+   * A proposta do Claude Code para os módulos, a partir de um texto da pessoa
+   * (nada é gravado: abre na tela de mapeamento). O erro leva o código
+   * ('sem-claude', 'falhou', 'demorou', 'resposta-invalida') e, se houver, a mensagem do Claude.
+   */
+  modelarPorTexto: async (courseId: string, texto: string): Promise<{ modulos: Array<{ nome: string | null; aulas: Array<{ id: string; titulo: string }> }> }> => {
+    const res = await fetch(`/api/courses/${courseId}/mapa/texto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto }),
+    });
+    const corpo = (await res.json().catch(() => ({}))) as { error?: string; mensagem?: string };
+    if (!res.ok) throw Object.assign(new Error(corpo.error ?? `${res.status}`), { mensagem: corpo.mensagem });
+    return corpo as unknown as { modulos: Array<{ nome: string | null; aulas: Array<{ id: string; titulo: string }> }> };
+  },
   pularMapa: (courseId: string) => jsonFetch<void>(`/api/courses/${courseId}/mapa/pular`, { method: 'POST' }),
   /** As aulas novas de um curso mapeado, cada uma para o fim do módulo escolhido (null = fora dos módulos). */
   mapearAulasNovas: (courseId: string, aulas: Array<{ id: string; modulo: string | null }>) =>
