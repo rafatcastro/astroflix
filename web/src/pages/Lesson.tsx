@@ -16,6 +16,7 @@ import { ArrowLeft, Camera, SkipBack, SkipForward, Check, Repeat, HelpCircle, X,
 import FlashcardsPanel from '../components/FlashcardsPanel';
 import { BloqueioDaPausa, WidgetPomodoro } from '../components/Pomodoro';
 import { usePomodoro } from '../lib/pomodoro';
+import { CaixaConcluida } from '../components/CaixaConcluida';
 
 type SaveState = 'idle' | 'saved' | 'error';
 type Notice = { kind: 'success' | 'error'; text: string };
@@ -975,7 +976,7 @@ export default function Lesson() {
                 lesson.completed ? 'bg-green-500/15 text-green-400' : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
               }`}
             >
-              <Check size={18} />
+              <CaixaConcluida feito={lesson.completed} size={18} />
               {lesson.completed ? 'Concluída' : 'Concluir'}
             </button>
             <IconButton label="Aula anterior (P)" disabled={!lesson.prevLessonId} onClick={() => lesson.prevLessonId && goTo(lesson.prevLessonId)}>

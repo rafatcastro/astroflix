@@ -8,6 +8,7 @@ import { formatDuration } from '../lib/format';
 import { caminhoDaAula, montarArvore, type No } from '../lib/arvore';
 import { ChevronRight } from './icons';
 import { CapaAula } from './CapaAula';
+import { CaixaConcluida, moduloConcluido } from './CaixaConcluida';
 
 // Lista de aulas ao lado do vídeo (estilo YouTube): fica sempre à vista, então
 // trocar de aula não pede abrir painel nem sair da tela cheia. A aula atual vem
@@ -89,6 +90,7 @@ export default function PlaylistSidebar({
       if (no.tipo === 'pasta') {
         const aberto = abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
+        const moduloFeito = moduloConcluido(no.aulas);
         const id = `pasta-${no.chave}`;
         return (
           <section key={no.chave}>
@@ -106,8 +108,9 @@ export default function PlaylistSidebar({
                 size={14}
                 className={`shrink-0 text-neutral-500 transition-transform motion-reduce:transition-none ${aberto ? 'rotate-90' : ''}`}
               />
+              {no.aulas.length > 0 && <CaixaConcluida feito={moduloFeito} size={13} />}
               <span className="min-w-0 flex-1 truncate font-medium text-neutral-300">{no.nome}</span>
-              <span className="shrink-0 text-neutral-500">
+              <span className={`shrink-0 ${moduloFeito ? 'text-green-400' : 'text-neutral-500'}`}>
                 {no.aulas.length ? `${feitas}/${no.aulas.length}` : `${no.materiais} arquivo${no.materiais === 1 ? '' : 's'}`}
               </span>
             </button>
@@ -117,7 +120,7 @@ export default function PlaylistSidebar({
       }
       const l = no.aula;
       const atual = l.id === currentLessonId;
-      const estado = atual ? '▶' : l.completed ? '✓' : l.position > 0 ? '◐' : '';
+      const estado = atual ? '▶' : l.completed ? <CaixaConcluida feito /> : l.position > 0 ? '◐' : '';
       return (
         <Fragment key={l.id}>
           <button
@@ -130,7 +133,7 @@ export default function PlaylistSidebar({
               atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
             }`}
           >
-            <span className={`w-5 shrink-0 text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
+            <span className={`grid w-5 shrink-0 place-items-center text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
               {estado || posicao.get(l.id)}
             </span>
             <span className="relative shrink-0">

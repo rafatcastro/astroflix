@@ -22,7 +22,8 @@ import { mensagemErroTelegram } from '../api/telegramTextos';
 import HelpLink from '../components/HelpLink';
 import { IconeOffline } from '../components/IconeOffline';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
-import { ArrowLeft, Play, Check, List, LayoutGrid, Cards, ChevronRight } from '../components/icons';
+import { ArrowLeft, Play, List, LayoutGrid, Cards, ChevronRight } from '../components/icons';
+import { CaixaConcluida, moduloConcluido } from '../components/CaixaConcluida';
 import { CapaAula } from '../components/CapaAula';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
@@ -231,9 +232,9 @@ export default function Course() {
               <span className="hidden sm:inline">arquivo não encontrado</span>
             </span>
           ) : l.completed ? (
-            <span className="text-neutral-400" title="concluída">
-              <span className="sm:hidden">✓</span>
-              <span className="hidden sm:inline">✓ concluída</span>
+            <span className="inline-flex items-center gap-1.5 text-green-400" title="concluída">
+              <CaixaConcluida feito />
+              <span className="hidden sm:inline">concluída</span>
             </span>
           ) : l.position > 0 ? (
             <span className="text-neutral-400" title="em progresso">
@@ -248,7 +249,7 @@ export default function Course() {
           type="checkbox"
           checked={l.completed}
           onChange={(e) => onToggle(l.id, e.target.checked)}
-          className="h-4 w-4 accent-blue-600"
+          className="h-4 w-4 accent-green-500"
           aria-label="Marcar como concluída"
         />
       </label>
@@ -331,6 +332,7 @@ export default function Course() {
       fecharSoltas();
       const recolhido = recolhidosDoCurso.includes(no.chave);
       const concluidas = no.aulas.filter((l) => l.completed).length;
+      const moduloFeito = moduloConcluido(no.aulas);
       const id = `pasta-${no.chave}`;
       // Na playlist, o módulo de uma sub-playlist também recebe a aula arrastada.
       const ehSub = !!data.deLink && (data.subPlaylists ?? []).some((sp) => sp.pasta === no.chave);
@@ -354,8 +356,9 @@ export default function Course() {
                 size={16}
                 className={`shrink-0 text-neutral-500 transition-transform motion-reduce:transition-none ${recolhido ? '' : 'rotate-90'}`}
               />
+              {no.aulas.length > 0 && <CaixaConcluida feito={moduloFeito} size={profundidade ? 13 : 15} />}
               <span className="min-w-0 flex-1 truncate">{no.nome}</span>
-              <span className="shrink-0 text-xs font-normal text-neutral-500">
+              <span className={`shrink-0 text-xs font-normal ${moduloFeito ? 'text-green-400' : 'text-neutral-500'}`}>
                 {no.aulas.length ? `${concluidas}/${no.aulas.length}` : `${no.materiais} arquivo${no.materiais === 1 ? '' : 's'}`}
               </span>
             </button>
@@ -624,7 +627,7 @@ export default function Course() {
         </button>
       ) : (
         <div className="mt-5 flex items-center gap-2 rounded-xl bg-neutral-900 p-4 text-green-400">
-          <Check size={18} /> Curso concluído
+          <CaixaConcluida feito size={18} /> Curso concluído
         </div>
       )}
 

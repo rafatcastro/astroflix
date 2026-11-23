@@ -19,6 +19,7 @@ import FfmpegBanner from '../components/FfmpegBanner';
 import Banner from '../components/Banner';
 import { Check, Play, Settings as SettingsIcon } from '../components/icons';
 import { CapaAula } from '../components/CapaAula';
+import { CaixaConcluida } from '../components/CaixaConcluida';
 
 // Parede de capas responsiva sem cliffs de breakpoint: as colunas se ajustam ao
 // espaço, mantendo o tamanho do card constante (auto-fill).
@@ -123,7 +124,7 @@ function CourseCard({
             </div>
           )}
           <div className="mt-1.5 text-xs text-neutral-300">
-            {pct === 100 ? <span className="text-green-400">✓ Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
+            {pct === 100 ? <span className="inline-flex items-center gap-1.5 text-green-400"><CaixaConcluida feito size={13} /> Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
           </div>
           {archived && onUnarchive && !selectable && (
             <button
@@ -192,7 +193,7 @@ function CourseRow({
         <div className="break-words font-medium text-neutral-50">{c.title}</div>
         {parada && <div className="mt-0.5 break-words text-xs text-neutral-300">{parada}</div>}
         <div className="mt-1 text-xs text-neutral-400">
-          {pct === 100 ? <span className="text-green-400">✓ Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
+          {pct === 100 ? <span className="inline-flex items-center gap-1.5 text-green-400"><CaixaConcluida feito size={13} /> Concluído</span> : `${c.completedLessons}/${c.totalLessons} aulas · ${pct}%`}
         </div>
         {pct > 0 && pct < 100 && (
           <div className="mt-1.5 h-1 max-w-xs rounded-full bg-neutral-800">

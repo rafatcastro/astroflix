@@ -7,6 +7,7 @@ import { KIND_LABEL } from './MaterialsSection';
 import { tipoDeVisualizacao } from './VisualizadorArquivo';
 import { IconeOffline } from './IconeOffline';
 import { CapaAula } from './CapaAula';
+import { CaixaConcluida } from './CaixaConcluida';
 
 // Aula ou arquivo (PDF, imagem, anexo) da pasta, na ordem em que estão nela.
 const ehArquivo = (it: LessonDTO | MaterialDTO): it is MaterialDTO => 'kind' in it;
@@ -69,7 +70,7 @@ export default function LessonGrid({
               </div>
               <div className="text-xs text-neutral-500 flex justify-between">
                 <span>{formatDuration(l.durationSec)}</span>
-                <span>{l.completed ? '✓' : l.position > 0 ? '▓' : '○'}</span>
+                <span className="inline-flex items-center">{l.completed ? <CaixaConcluida feito /> : l.position > 0 ? '▓' : '○'}</span>
               </div>
             </div>
           </Link>
@@ -81,7 +82,7 @@ export default function LessonGrid({
               type="checkbox"
               checked={l.completed}
               onChange={(e) => onToggleComplete(l.id, e.target.checked)}
-              className="w-4 h-4"
+              className="w-4 h-4 accent-green-500"
               aria-label="Marcar como concluída"
             />
           </label>
