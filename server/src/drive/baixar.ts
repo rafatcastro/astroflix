@@ -232,6 +232,15 @@ export function criarBaixador(deps: {
   const amostras = new Map<string, Array<{ t: number; b: number }>>();
   const JANELA_MS = 6000;
   const tentativas = new Map<string, number>();
+  // Cursos cujo arquivo em andamento cresceu antes de a tentativa falhar.
+  const andou = new Set<string>();
+  const tamanhoDe = (f: string) => {
+    try {
+      return fs.statSync(f).size;
+    } catch {
+      return 0;
+    }
+  };
   const religar = new Map<string, NodeJS.Timeout>();
 
   const lerPendentes = (): string[] => {
@@ -434,9 +443,13 @@ export function criarBaixador(deps: {
         atual = { item: it, ac };
         estado.arquivo = path.basename(destino);
         parciais.set(courseId, `${destino}.part`);
+        const parteAntes = tamanhoDe(`${destino}.part`);
         try {
           await baixarItem(it, destino, ac.signal);
         } catch (e) {
+          // Para a contagem de tentativas: um vídeo grande que cai no meio mas
+          // avançou não é o mesmo que não sair do lugar.
+          if (tamanhoDe(`${destino}.part`) > parteAntes) andou.add(courseId);
           // Interrompido para a aula aberta: volta a este arquivo, do `.part`.
           if (ac.signal.reason === PASSAR_NA_FRENTE && !signal.aborted) continue;
           throw e;
@@ -458,6 +471,7 @@ export function criarBaixador(deps: {
     if (!estado) return;
     const ac = new AbortController();
     cursoAtual = { id, ac };
+    andou.delete(id);
     estado.naFila = false;
     const feitosAntes = estado.feitos;
     try {
@@ -477,7 +491,7 @@ export function criarBaixador(deps: {
     // andou alguma coisa desde a última falha, a contagem recomeça.
     const espera = estado.erro ? ESPERA_POR_FALHA[estado.erro] : undefined;
     if (espera) {
-      const n = estado.feitos > feitosAntes ? 1 : (tentativas.get(id) ?? 0) + 1;
+      const n = estado.feitos > feitosAntes || andou.has(id) ? 1 : (tentativas.get(id) ?? 0) + 1;
       tentativas.set(id, n);
       if (n <= MAX_TENTATIVAS) {
         estado.tentarEm = Date.now() + espera;

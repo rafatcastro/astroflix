@@ -4,8 +4,21 @@ import type { Db } from '../db/index';
 import { APP_VERSION } from '../bundled';
 import { BLOCO } from './blocos';
 
-/** Blocos de 512 KB em andamento ao mesmo tempo num download do Telegram. */
-const PEDIDOS_SIMULTANEOS = 8;
+// Quantos blocos de 1 MB cada conexão de download tem em andamento. Uma conexão
+// só, mesmo com 8 pedidos nela, ficava presa à janela do TCP e ao limite que o Telegram dá por conexão: com Premium, o curso
+// continuava lento. O Telegram Desktop abre várias sessões por DC para baixar;
+// aqui é o mesmo (CONEXOES_DOWNLOAD, em blocos.ts). O "Baixar" usa todas; tocar a
+// aula, uma (cada seek descartaria o que estava em andamento).
+const PEDIDOS_POR_CONEXAO = 4;
+// Conexão extra parada por este tempo é fechada.
+const SOLTAR_CONEXAO_MS = 60_000;
+// Abrir a conexão (e, noutro DC, exportar o login) sem rede ficaria preso para sempre.
+const LIMITE_CONECTAR_MS = 20_000;
+// Erro passageiro num bloco (timeout, conexão caída, flood curto): tenta de novo
+// ali mesmo, sem jogar fora o arquivo nem esperar o religar do curso inteiro.
+const TENTATIVAS_POR_BLOCO = 6;
+// Flood maior que isto vira falha: a fila espera com o aviso na tela.
+const FLOOD_MAX_ESPERA_SEG = 90;
 import type { ClienteTelegram, Convite, DialogoTelegram, GrupoTelegram } from './cliente';
 import { credenciaisTelegram } from './credenciais';
 import type { EstadoLogin, ServicosTelegram } from './servicos';
@@ -127,10 +140,92 @@ function midiaDe(Api: typeof TiposApi, m: TiposApi.Message): MidiaTelegram | nul
   };
 }
 
+const dormir = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((r) => {
+    const t = setTimeout(r, ms);
+    signal.addEventListener('abort', () => (clearTimeout(t), r()), { once: true });
+  });
+
 function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void): ClienteTelegram {
   const { Api } = m.tg;
   type Arquivo = { local: TiposApi.TypeInputFileLocation; tamanho: number; dcId: number };
   const documentos = new Map<string, { msg: TiposApi.Message; doc: TiposApi.Document | null; arquivo: Arquivo; ate: number }>();
+
+  // As conexões extras de download, por DC e vaga. Cada uma é um MTProtoSender
+  // próprio (a mesma chave de login, outro socket), fora do pool do GramJS: o dele
+  // tem uma conexão por DC, e uma conexão dele que cai apagaria a chave do DC.
+  type Conexao = { sender: TiposSender; pronta: Promise<TiposSender>; soltar: ReturnType<typeof setTimeout> | null; usos: number };
+  type TiposSender = NonNullable<Parameters<TelegramClient['invokeWithSender']>[1]>;
+  const conexoes = new Map<string, Promise<Conexao>>();
+  let abrindo: Promise<void> = Promise.resolve();
+  const interno = client as unknown as {
+    _createExportedSender(dc: number): TiposSender;
+    _connectSender(s: TiposSender, dc: number): Promise<TiposSender>;
+  };
+  async function abrirConexao(dc: number, chave: string): Promise<Conexao> {
+    const novo = interno._createExportedSender(dc);
+    // Não é o sender principal (que repassa updates e reconecta os outros) e, se a
+    // chave dele quebrar, só ele sai: o GramJS apagaria a chave do DC inteiro.
+    const campos = novo as unknown as { _isMainSender: boolean; _onConnectionBreak?: (dc: number) => void };
+    campos._isMainSender = false;
+    campos._onConnectionBreak = () => {
+      conexoes.delete(chave);
+      void novo.disconnect().catch(() => undefined);
+    };
+    let desistiu = false;
+    const pronta = interno._connectSender(novo, dc);
+    // O _connectSender tenta para sempre sem rede: se ele voltar depois que
+    // desistimos, a conexão é fechada em vez de ficar sobrando.
+    pronta.then(
+      (s) => {
+        if (desistiu) void s.disconnect().catch(() => undefined);
+      },
+      () => undefined,
+    );
+    try {
+      await Promise.race([
+        pronta,
+        new Promise((_, rej) => setTimeout(() => rej(new FalhaTelegram('sem-conexao')), LIMITE_CONECTAR_MS)),
+      ]);
+    } catch (e) {
+      desistiu = true;
+      throw e;
+    }
+    return { sender: novo, pronta, soltar: null, usos: 0 };
+  }
+  async function conexaoDe(dc: number, vaga: number): Promise<Conexao> {
+    const chave = `${dc}:${vaga}`;
+    let p = conexoes.get(chave);
+    if (!p) {
+      // Uma de cada vez: noutro DC, abrir exporta o login, e o GramJS monta o
+      // ImportAuthorization num objeto compartilhado (_initRequest). Abertas juntas,
+      // uma conexão levava o token da outra e todo bloco dela dava AUTH_KEY_UNREGISTERED.
+      const vez = abrindo;
+      p = vez.then(() => abrirConexao(dc, chave));
+      abrindo = p.then(
+        () => undefined,
+        () => undefined,
+      );
+      conexoes.set(chave, p);
+      p.catch(() => conexoes.get(chave) === p && conexoes.delete(chave));
+    }
+    const c = await p;
+    if (c.soltar) clearTimeout(c.soltar);
+    c.soltar = setTimeout(() => {
+      if (conexoes.get(chave) === p) conexoes.delete(chave);
+      void c.sender.disconnect().catch(() => undefined);
+    }, SOLTAR_CONEXAO_MS);
+    return c;
+  }
+  function descartarConexao(dc: number, vaga: number, c: Conexao): void {
+    const chave = `${dc}:${vaga}`;
+    void conexoes.get(chave)?.then((atual) => {
+      if (atual !== c) return;
+      conexoes.delete(chave);
+      if (c.soltar) clearTimeout(c.soltar);
+      void c.sender.disconnect().catch(() => undefined);
+    });
+  }
 
   // Primeiro plano é o que a pessoa está esperando (importar, prévia, tocar a
   // aula). As capas vêm aos milhares e são enfeite: cada pedido delas espera não
@@ -478,44 +573,63 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         return [...porId.values()];
       }),
 
-    async *baixar(peer, msgId, offset, signal) {
+    async *baixar(peer, msgId, offset, signal, opcoes) {
+      const conexoes = Math.max(1, opcoes?.conexoes ?? 1);
       let renovar = false;
       // Bytes já entregues: a nova tentativa continua daqui, e não do offset
       // original — senão o player receberia blocos repetidos no meio do vídeo.
       // Como cada bloco tem BLOCO bytes (menos o último), a soma segue alinhada.
       let entregue = 0;
-      for (let tentativa = 0; tentativa < 2; tentativa++) {
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
         const { arquivo } = await documento(peer, msgId, renovar);
         const local = arquivo.local;
-        // Vários blocos pedidos de uma vez, entregues na ordem. O iterDownload do
-        // GramJS pede um, espera e só então pede o próximo: a velocidade ficava
-        // presa ao tempo de ida e volta de cada pedido, e um curso inteiro
-        // levava horas. O Telegram atende pedidos simultâneos na mesma conexão.
         const tamanho = arquivo.tamanho;
-        let sender = await client.getSender(arquivo.dcId);
-        const pedir = async (pos: number): Promise<Buffer> => {
+        // O arquivo pode morar noutro DC (FILE_MIGRATE): daí em diante, todos os blocos vão para lá.
+        let dc = arquivo.dcId;
+        const pedir = async (pos: number, vaga: number): Promise<Buffer> => {
           const req = new Api.upload.GetFile({ location: local, offset: bigInt(pos), limit: BLOCO, precise: false, cdnSupported: false });
           for (let t = 0; ; t++) {
+            if (signal.aborted) return Buffer.alloc(0);
+            const conexao = await conexaoDe(dc, vaga % conexoes);
             try {
-              const r = await client.invokeWithSender(req, sender);
+              const r = await client.invokeWithSender(req, conexao.sender);
               if (!(r instanceof Api.upload.File)) throw new Error('CDN');
               return Buffer.from(r.bytes);
             } catch (e) {
-              const dc = (e as { newDc?: number }).newDc;
-              const timeout = (e as { errorMessage?: string }).errorMessage === 'TIMEOUT';
-              if (t < 2 && (dc || timeout)) {
-                if (dc) sender = await client.getSender(dc);
+              const err = e as { newDc?: number; errorMessage?: string; seconds?: number };
+              if (err.newDc) {
+                dc = err.newDc;
                 continue;
               }
-              throw e;
+              const msg = err.errorMessage ?? '';
+              if (t >= TENTATIVAS_POR_BLOCO || signal.aborted) throw e;
+              if (/^FLOOD(_PREMIUM)?_WAIT/.test(msg)) {
+                if ((err.seconds ?? 0) > FLOOD_MAX_ESPERA_SEG) throw e;
+                await dormir(((err.seconds ?? 1) + 1) * 1000, signal);
+                continue;
+              }
+              // Chave recusada numa conexão extra: é ela que está ruim (a sessão
+              // vale, o documento() acabou de passar pela principal). Abre outra.
+              if (/^AUTH_KEY_(UNREGISTERED|INVALID)$|^SESSION_REVOKED$/.test(msg) && t < 2) {
+                descartarConexao(dc, vaga % conexoes, conexao);
+                continue;
+              }
+              // Erro do Telegram que não é passageiro (referência vencida, arquivo apagado): sobe.
+              const passageiro = msg === 'TIMEOUT' || /^-?5\d\d$|INTERNAL|_TOO_MUCH|RPC_CALL_FAIL|RPC_MCGET_FAIL/.test(msg) || !msg;
+              if (!passageiro) throw e;
+              // Sem errorMessage é a conexão que caiu: abre outra no lugar.
+              if (!msg) descartarConexao(dc, vaga % conexoes, conexao);
+              await dormir(Math.min(500 * 2 ** t, 8000), signal);
             }
           }
         };
         const fila: Promise<Buffer>[] = [];
         let proximo = offset + entregue;
+        let vaga = 0;
+        const emAndamento = conexoes * PEDIDOS_POR_CONEXAO;
         const encher = () => {
-          while (fila.length < PEDIDOS_SIMULTANEOS && proximo < tamanho) {
-            const p = pedir(proximo);
+          while (fila.length < emAndamento && proximo < tamanho) {
+            const p = pedir(proximo, vaga++);
             p.catch(() => undefined); // quem não for esperado (cancelou, falhou antes) não vira rejeição solta
             fila.push(p);
             proximo += BLOCO;
@@ -535,8 +649,8 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         } catch (e) {
           if (signal.aborted) return;
           const f = falhaDoErro(e);
-          // Referência vencida no meio da aula: busca a mensagem de novo, uma vez.
-          if (f.tipo === 'removido' && tentativa === 0) {
+          // Referência vencida no meio da aula: busca a mensagem de novo e continua do mesmo byte.
+          if (f.tipo === 'removido' && tentativa < 2) {
             renovar = true;
             continue;
           }

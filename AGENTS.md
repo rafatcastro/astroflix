@@ -213,9 +213,12 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   vale mais que os tópicos: só conta uma mensagem com 3 ou mais tags que batem com as legendas dos
   vídeos (empate = a mais nova). O título da aula sai sem as hashtags que começam com letra
   (`#D004` é endereço no menu; o `#12` de "Aula #12" fica); legenda só de hashtags usa o nome do arquivo.
-  `blocos` alinha o `Range` em blocos de 512 KB, `status` traduz os erros RPC, `stream` repassa
+  `blocos` alinha o `Range` em blocos de 1 MB, `status` traduz os erros RPC, `stream` repassa
   o vídeo e `baixar` entra na mesma fila de download do Drive (`fonteDoTelegram`; retomar volta ao
-  último bloco inteiro). Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
+  último bloco inteiro). O "Baixar" abre `CONEXOES_DOWNLOAD` (8) conexões próprias por DC, uma de cada
+  vez (o GramJS embaralha o token do login exportado se abrirem juntas), com 4 blocos em cada; tocar usa
+  uma. Flood curto, timeout e conexão caída tentam de novo o bloco ali mesmo; o curso só conta tentativa
+  perdida quando o `.part` não cresceu. Login por QR com estado em memória (`/api/telegram/login`). `routes/telegram.ts` e
   `scan/scan-telegram.ts` espelham o Drive. O `telegram_peer` do curso guarda o access hash: sem
   ele, um canal privado não é achado depois de reiniciar.
 - `links/`: **importar por link** (Adicionar → "De um link", `LinkModal.tsx`). Cola o link de uma página

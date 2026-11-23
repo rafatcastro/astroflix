@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { Db } from '../db';
 import type { BaixarArquivo } from '../drive/baixar';
 import { peerDoCurso } from '../scan/scan-telegram';
-import { BLOCO } from './blocos';
+import { BLOCO, CONEXOES_DOWNLOAD } from './blocos';
 import type { ClienteTelegram } from './cliente';
 import type { ServicosTelegram } from './servicos';
 import { FalhaTelegram, type PeerTelegram } from './tipos';
@@ -27,7 +27,7 @@ export const baixarDoTelegram =
     signal?.addEventListener('abort', parar);
     const saida = fs.createWriteStream(parcial, { flags: inicio ? 'a' : 'w' });
     try {
-      for await (const bloco of cliente.baixar(peer, Number(remoteId), inicio, ac.signal)) {
+      for await (const bloco of cliente.baixar(peer, Number(remoteId), inicio, ac.signal, { conexoes: CONEXOES_DOWNLOAD })) {
         if (signal?.aborted) throw signal.reason;
         if (!saida.write(bloco)) await new Promise<void>((r) => saida.once('drain', () => r()));
       }

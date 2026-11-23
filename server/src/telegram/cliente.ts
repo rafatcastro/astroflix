@@ -57,7 +57,7 @@ export interface ClienteTelegram {
    */
   textos?(peer: PeerTelegram): Promise<MensagemTelegram[]>;
   /** Blocos de BLOCO bytes a partir de `offset` (múltiplo de BLOCO), até o fim do arquivo ou o abort. */
-  baixar(peer: PeerTelegram, msgId: number, offset: number, signal: AbortSignal): AsyncIterable<Buffer>;
+  baixar(peer: PeerTelegram, msgId: number, offset: number, signal: AbortSignal, opcoes?: { conexoes?: number }): AsyncIterable<Buffer>;
   /**
    * Lê de uma vez (até 100) as mensagens cujas miniaturas vão ser pedidas: um
    * pedido ao Telegram no lugar de um por capa. Opcional (os clientes falsos não têm).
