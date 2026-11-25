@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import DialogoCategoria from '../components/DialogoCategoria';
 import { CampoBusca } from '../components/CampoBusca';
 import { ResultadosDaBusca } from '../components/BuscaGeral';
+import { ContinuarDeOnde } from '../components/ContinuarDeOnde';
 import { EstudoDeHoje, PainelEstudo } from '../components/Pomodoro';
 import { Plus, Settings as SettingsIcon } from '../components/icons';
 import { getPref, setPref } from '../lib/prefs';
@@ -168,6 +169,7 @@ export default function Categorias() {
         <ResultadosDaBusca busca={busca} cursos={cursos ?? []} docs={docs ?? []} cats={cats ?? []} />
       ) : (
       <>
+      <ContinuarDeOnde cursos={cursos ?? []} cats={cats ?? []} />
       <PainelEstudo />
 
       {isLoading && <p className="text-sm text-neutral-500">Carregando…</p>}

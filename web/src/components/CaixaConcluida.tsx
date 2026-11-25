@@ -21,6 +21,28 @@ export function CaixaConcluida({ feito, size = 14, className = '' }: { feito: bo
   );
 }
 
+// A caixa que marca e desmarca (listas de aulas): a área de toque é maior que o
+// quadrado, para não errar o clique numa lista apertada.
+export function BotaoConcluida({ feito, onMudar, size = 16 }: { feito: boolean; onMudar: (feito: boolean) => void; size?: number }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={feito}
+      aria-label={feito ? 'Desmarcar como concluída' : 'Marcar como concluída'}
+      title={feito ? 'Desmarcar como concluída' : 'Marcar como concluída'}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onMudar(!feito);
+      }}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded hover:bg-neutral-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+    >
+      <CaixaConcluida feito={feito} size={size} />
+    </button>
+  );
+}
+
 // O módulo está concluído quando todos os vídeos .mp4 de dentro estão: os outros
 // formatos (gravações soltas, .mkv que não toca) não seguram o módulo aberto.
 export function moduloConcluido(aulas: LessonDTO[]): boolean {

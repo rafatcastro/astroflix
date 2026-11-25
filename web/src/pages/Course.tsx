@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, useEffect, type DragEvent, type MouseEvent, type ReactNode } from 'react';
+import { useCallback, useDeferredValue, useRef, useState, useEffect, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCourse, useSetComplete } from '../api/hooks';
@@ -10,7 +10,7 @@ import MapearCurso from '../components/MapearCurso';
 import ModelarPorTexto, { type Proposta } from '../components/ModelarPorTexto';
 import AulasNovas from '../components/AulasNovas';
 import LessonGrid from '../components/LessonGrid';
-import { filtrarArvore, montarArvore, type No } from '../lib/arvore';
+import { arvoreDoCurso, buscarNaArvore, type No } from '../lib/arvore';
 import { CampoBusca } from '../components/CampoBusca';
 import { KIND_LABEL } from '../components/MaterialsSection';
 import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from '../components/VisualizadorArquivo';
@@ -24,7 +24,7 @@ import HelpLink from '../components/HelpLink';
 import { IconeOffline } from '../components/IconeOffline';
 import { caminhoDaCategoria, SEM, useNomeCategoria } from '../components/CabecalhoCategoria';
 import { ArrowLeft, Play, List, LayoutGrid, Cards, ChevronRight } from '../components/icons';
-import { CaixaConcluida, moduloConcluido } from '../components/CaixaConcluida';
+import { BotaoConcluida, CaixaConcluida, moduloConcluido } from '../components/CaixaConcluida';
 import { CapaAula } from '../components/CapaAula';
 
 function pickContinue(lessons: LessonDTO[]): LessonDTO | null {
@@ -82,6 +82,8 @@ export default function Course() {
   const [busca, setBusca] = useState('');
   // Outro curso: a busca do anterior não vale aqui.
   useEffect(() => setBusca(''), [id]);
+  // A lista acompanha a digitação sem segurar o campo.
+  const buscaAdiada = useDeferredValue(busca.trim());
   useEffect(() => {
     abriuSozinho.current = false;
     setNovasDepois(false);
@@ -210,8 +212,9 @@ export default function Course() {
       );
     },
   });
-  const buscando = busca.trim() !== '';
-  const arvore = filtrarArvore(montarArvore(allLessons, data.materials, data.source), busca);
+  // Buscando, só as aulas e arquivos achados, sem as pastas: o que a pessoa quer é a aula.
+  const achados = buscaAdiada ? buscarNaArvore(arvoreDoCurso(data), buscaAdiada) : null;
+  const arvore = achados ? achados.achados : arvoreDoCurso(data);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
       key={l.id}
@@ -219,12 +222,13 @@ export default function Course() {
       onContextMenu={abrirMenuAula ? (e) => abrirMenuAula(l, e) : undefined}
       {...arrasteDaAula(l)}
     >
+      {/* A caixa de concluída fica à esquerda, onde o olho começa a linha. */}
+      <BotaoConcluida feito={l.completed} onMudar={(v) => onToggle(l.id, v)} />
       <Link
         to={`/lesson/${l.id}`}
         className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
       >
         <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-16 shrink-0 rounded" loading="lazy" />
-        <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate">{titulo}</span>
           {l.baixada === true && <IconeOffline />}
@@ -249,15 +253,6 @@ export default function Course() {
           ) : null}
         </span>
       </Link>
-      <label className="grid h-11 w-11 shrink-0 place-items-center" title="Marcar como concluída">
-        <input
-          type="checkbox"
-          checked={l.completed}
-          onChange={(e) => onToggle(l.id, e.target.checked)}
-          className="h-4 w-4 accent-green-500"
-          aria-label="Marcar como concluída"
-        />
-      </label>
     </div>
   );
   // O arquivo que não é vídeo é um item da lista como a aula, no mesmo formato:
@@ -335,8 +330,7 @@ export default function Course() {
         continue;
       }
       fecharSoltas();
-      // Buscando, tudo o que sobrou fica aberto: a aula achada não pode ficar escondida.
-      const recolhido = !buscando && recolhidosDoCurso.includes(no.chave);
+      const recolhido = recolhidosDoCurso.includes(no.chave);
       const concluidas = no.aulas.filter((l) => l.completed).length;
       const moduloFeito = moduloConcluido(no.aulas);
       const id = `pasta-${no.chave}`;
@@ -685,10 +679,18 @@ export default function Course() {
       </div>
 
       <div className="mt-6 space-y-2">
-        {buscando && !arvore.length ? (
-          <p className="py-8 text-center text-sm text-neutral-500">Nenhuma aula com “{busca.trim()}” neste curso.</p>
+        {achados && !achados.total ? (
+          <p className="py-8 text-center text-sm text-neutral-500">Nenhuma aula com “{buscaAdiada}” neste curso.</p>
         ) : (
-          nivel(arvore, 0)
+          <>
+            {achados && (
+              <p className="text-xs text-neutral-500">
+                {achados.total} encontrad{achados.total === 1 ? 'a' : 'as'}
+                {achados.total > achados.achados.length && `, mostrando ${achados.achados.length}; digite mais para afunilar`}
+              </p>
+            )}
+            {nivel(arvore, 0)}
+          </>
         )}
       </div>
 

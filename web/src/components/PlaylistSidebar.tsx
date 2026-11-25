@@ -1,15 +1,15 @@
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
-import { useCourse } from '../api/hooks';
+import { Fragment, useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useCourse, useSetComplete } from '../api/hooks';
 import { api, materialUrl, type MaterialDTO } from '../api/client';
 import { cliqueFora } from '../lib/desktop';
 import { KIND_LABEL } from './MaterialsSection';
 import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from './VisualizadorArquivo';
 import { formatDuration } from '../lib/format';
-import { caminhoDaAula, filtrarArvore, montarArvore, type No } from '../lib/arvore';
+import { arvoreDoCurso, buscarNaArvore, caminhoDaAula, type No } from '../lib/arvore';
 import { CampoBusca } from './CampoBusca';
 import { ChevronRight } from './icons';
 import { CapaAula } from './CapaAula';
-import { CaixaConcluida, moduloConcluido } from './CaixaConcluida';
+import { BotaoConcluida, CaixaConcluida, moduloConcluido } from './CaixaConcluida';
 
 // Lista de aulas ao lado do vídeo (estilo YouTube): fica sempre à vista, então
 // trocar de aula não pede abrir painel nem sair da tela cheia. A aula atual vem
@@ -27,14 +27,16 @@ export default function PlaylistSidebar({
 }) {
   const { data } = useCourse(courseId);
   const atualRef = useRef<HTMLButtonElement>(null);
-  const todas = data ? data.modules.flatMap((m) => m.lessons) : [];
-  const arvore = montarArvore(todas, data?.materials ?? [], data?.source);
+  const arvore = data ? arvoreDoCurso(data) : [];
+  const setComplete = useSetComplete(courseId);
   const [visualizado, setVisualizado] = useState<Visualizado>(null);
   const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const caminhoAtual = caminhoDaAula(arvore, currentLessonId).join('\n');
   const [abertos, setAbertos] = useState<string[]>([]);
   const [busca, setBusca] = useState('');
-  const buscando = busca.trim() !== '';
+  // A lista acompanha a digitação sem segurar o campo: cada letra não espera a lista redesenhar.
+  const buscaAdiada = useDeferredValue(busca.trim());
+  const buscando = buscaAdiada !== '';
 
   useEffect(() => {
     setAbertos(caminhoAtual ? caminhoAtual.split('\n') : []);
@@ -53,11 +55,8 @@ export default function PlaylistSidebar({
   });
 
   if (!data) return <p className="p-3 text-sm text-neutral-500">Carregando…</p>;
-  const posicao = new Map(todas.map((l, i) => [l.id, i + 1]));
-  // A coluna da esquerda cabe o maior número do curso: com milhares de aulas (Telegram),
-  // "3984" numa coluna de 20 px invadia a capa.
-  const larguraDoNumero = `${String(todas.length).length + 0.5}ch`;
-  const visiveis = filtrarArvore(arvore, busca);
+  const achados = buscando ? buscarNaArvore(arvore, buscaAdiada) : null;
+  const visiveis = achados ? achados.achados : arvore;
   const alternar = (chave: string) =>
     setAbertos((a) => (a.includes(chave) ? a.filter((c) => c !== chave) : [...a, chave]));
 
@@ -95,8 +94,7 @@ export default function PlaylistSidebar({
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
       if (no.tipo === 'material') return linhaDoMaterial(no.material, profundidade);
       if (no.tipo === 'pasta') {
-        // Buscando, tudo o que sobrou fica aberto: a aula achada não pode ficar escondida numa pasta fechada.
-        const aberto = buscando || abertos.includes(no.chave);
+        const aberto = abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
         const moduloFeito = moduloConcluido(no.aulas);
         const id = `pasta-${no.chave}`;
@@ -128,22 +126,19 @@ export default function PlaylistSidebar({
       }
       const l = no.aula;
       const atual = l.id === currentLessonId;
-      const estado = atual ? '▶' : l.completed ? <CaixaConcluida feito /> : l.position > 0 ? '◐' : '';
+      // A caixa de concluída fica fora do botão da aula (botão dentro de botão não
+      // existe): marcar não abre a aula.
       return (
         <Fragment key={l.id}>
+          <div style={recuo} className={`flex w-full items-center gap-1 pr-3 ${atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'}`}>
+          <BotaoConcluida feito={l.completed} onMudar={(v) => setComplete.mutate({ id: l.id, completed: v })} />
           <button
             ref={atual ? atualRef : undefined}
             type="button"
             onClick={() => onJump(l.id)}
             aria-current={atual ? 'true' : undefined}
-            style={recuo}
-            className={`flex w-full items-center gap-2 py-2 pr-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 ${
-              atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
-            }`}
+            className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600"
           >
-            <span style={{ minWidth: larguraDoNumero }} className={`grid w-5 shrink-0 place-items-center text-center text-xs tabular-nums ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
-              {estado || posicao.get(l.id)}
-            </span>
             <span className="relative shrink-0">
               <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-24 rounded" loading="lazy" />
               {l.durationSec != null && (
@@ -156,6 +151,7 @@ export default function PlaylistSidebar({
               {no.titulo}
             </span>
           </button>
+          </div>
           {/* Os anexos da aula, logo abaixo dela, um nível para dentro. */}
           {no.anexos.map((m) => linhaDoMaterial(m, profundidade + 1))}
         </Fragment>
@@ -167,10 +163,18 @@ export default function PlaylistSidebar({
       <div className="p-3 pb-1">
         <CampoBusca valor={busca} onMudar={setBusca} />
       </div>
-      {buscando && !visiveis.length ? (
-        <p className="p-3 text-sm text-neutral-500">Nenhuma aula com “{busca.trim()}” neste curso.</p>
+      {achados && !achados.total ? (
+        <p className="p-3 text-sm text-neutral-500">Nenhuma aula com “{buscaAdiada}” neste curso.</p>
       ) : (
-        nivel(visiveis, 0)
+        <>
+          {achados && (
+            <p className="px-3 pb-1 pt-2 text-xs text-neutral-500">
+              {achados.total} encontrad{achados.total === 1 ? 'a' : 'as'}
+              {achados.total > achados.achados.length && `, mostrando ${achados.achados.length}; digite mais para afunilar`}
+            </p>
+          )}
+          {nivel(visiveis, 0)}
+        </>
       )}
       {visualizado && <VisualizadorArquivo viewer={visualizado} onFechar={fecharVisualizador} />}
     </div>

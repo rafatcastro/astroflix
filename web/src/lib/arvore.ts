@@ -306,25 +306,48 @@ const paraBusca = (t: string) =>
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
 
+// Montar a árvore liga arquivos às aulas comparando nomes, o que pesa com milhares de
+// aulas; refeita a cada tecla da busca, deixava o campo travando. O curso que veio do
+// servidor é o mesmo objeto até a próxima atualização, então serve de chave.
+const arvores = new WeakMap<object, { origem: Origem | undefined; nos: No[] }>();
+export function arvoreDoCurso(curso: { modules: { lessons: LessonDTO[] }[]; materials: MaterialDTO[]; source?: Origem }): No[] {
+  const guardada = arvores.get(curso);
+  if (guardada && guardada.origem === curso.source) return guardada.nos;
+  const nos = montarArvore(
+    curso.modules.flatMap((m) => m.lessons),
+    curso.materials,
+    curso.source,
+  );
+  arvores.set(curso, { origem: curso.source, nos });
+  return nos;
+}
+
+/** O máximo de resultados mostrados: com uma letra só, milhares de linhas travavam a tela. */
+export const MAX_ACHADOS = 200;
+
 /**
- * Só o que bate com a busca, mantendo as pastas do caminho (a pessoa vê de que
- * módulo é a aula achada). Cada palavra precisa aparecer, em qualquer ordem: "aula 3
- * python" acha "Python - Aula 3". A pasta cujo nome bate entra inteira.
+ * Só as aulas e arquivos que batem com a busca, numa lista sem as pastas (o que a
+ * pessoa quer é achar a aula, não ver a estrutura). Cada palavra precisa aparecer,
+ * em qualquer ordem: "aula 3 python" acha "Python - Aula 3".
  */
-export function filtrarArvore(nos: No[], busca: string): No[] {
+export function buscarNaArvore(nos: No[], busca: string): { achados: No[]; total: number } {
   const palavras = paraBusca(busca).split(/\s+/).filter(Boolean);
-  if (!palavras.length) return nos;
+  const achados: No[] = [];
+  let total = 0;
   const bate = (t: string) => {
     const n = paraBusca(t);
     return palavras.every((p) => n.includes(p));
   };
-  const filtrar = (lista: No[]): No[] =>
-    lista.flatMap((no): No[] => {
-      if (no.tipo === 'aula') return bate(no.titulo) ? [no] : [];
-      if (no.tipo === 'material') return bate(no.material.name) ? [no] : [];
-      if (bate(no.nome)) return [no];
-      const filhos = filtrar(no.filhos);
-      return filhos.length ? [{ ...no, filhos }] : [];
-    });
-  return filtrar(nos);
+  const andar = (lista: No[]) => {
+    for (const no of lista) {
+      if (no.tipo === 'pasta') andar(no.filhos);
+      else if (no.tipo === 'aula' ? bate(no.titulo) : bate(no.material.name)) {
+        total++;
+        if (achados.length < MAX_ACHADOS) achados.push(no.tipo === 'aula' ? { ...no, anexos: [] } : no);
+      }
+      if (no.tipo === 'aula') for (const m of no.anexos) if (bate(m.name)) { total++; if (achados.length < MAX_ACHADOS) achados.push({ tipo: 'material', material: m }); }
+    }
+  };
+  if (palavras.length) andar(nos);
+  return { achados, total };
 }
