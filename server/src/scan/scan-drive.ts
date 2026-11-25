@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { guardarLinkDeCapa } from '../drive/capas';
 import type { Db } from '../db';
 import type { AppConfig } from '../config';
 import type { ClienteDrive } from '../drive/api';
@@ -124,10 +125,14 @@ export function importacaoDrive(id: string): { carregando: boolean; erro: string
 // (aguardarCapas); em produção ninguém espera por elas.
 const capasEmAndamento = new Set<Promise<void>>();
 
-function dispararCapas(db: Db, deps: DepsIngestao, courseId: string, capas: Map<string, string>): void {
-  const p = baixarCapasFaltando(db, deps, courseId, capas).catch(() => {});
-  capasEmAndamento.add(p);
-  void p.finally(() => capasEmAndamento.delete(p));
+// As capas não são mais baixadas no import: a listagem já trouxe o link de cada
+// miniatura, que fica em memória para a tela pedir ao Drive na hora (drive/capas.ts).
+function dispararCapas(db: Db, _deps: DepsIngestao, courseId: string, capas: Map<string, string>): void {
+  const aulas = db.prepare('SELECT id, rel_path FROM lessons WHERE course_id=?').all(courseId) as Array<{ id: string; rel_path: string }>;
+  for (const a of aulas) {
+    const link = capas.get(a.rel_path);
+    if (link) guardarLinkDeCapa(a.id, link);
+  }
 }
 
 /** Para os testes: espera as leituras em segundo plano e as capas terminarem. */

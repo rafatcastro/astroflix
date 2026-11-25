@@ -170,7 +170,7 @@ export function buildApp(
   app.register(lessonsRoutes, { db, config, drive });
   app.register(streamRoutes, { db, config, drive, telegram, capas });
   app.register(infoRoutes);
-  app.register(thumbsRoutes, { db, config, capas });
+  app.register(thumbsRoutes, { db, config, capas, drive });
   app.register(migrationRoutes, { db, config, drive, telegram });
   app.register(settingsRoutes, { db });
   app.register(collectionsRoutes, { db });
