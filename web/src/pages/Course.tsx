@@ -218,7 +218,7 @@ export default function Course() {
         to={`/lesson/${l.id}`}
         className="flex min-w-0 flex-1 items-center gap-3 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
       >
-        <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-16 shrink-0 rounded bg-neutral-800 object-cover" loading="lazy" />
+        <CapaAula src={api.lessonThumbUrl(l.id)} className="aspect-video w-16 shrink-0 rounded" loading="lazy" />
         <span className="w-8 shrink-0 text-center text-xs text-neutral-600">{l.missing ? '—' : l.orderIndex + 1}</span>
         <span className="flex min-w-0 flex-1 items-center gap-1.5">
           <span className="truncate">{titulo}</span>
@@ -611,7 +611,7 @@ export default function Course() {
           <div className="relative aspect-video w-24 shrink-0 overflow-hidden rounded-lg bg-neutral-800 sm:w-44">
             <CapaAula
               src={api.lessonThumbUrl(cont.id)}
-              className="absolute inset-0 h-full w-full object-cover"
+              className="absolute inset-0"
             />
           </div>
           <div className="min-w-0 flex-1">

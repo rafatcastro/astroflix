@@ -60,7 +60,7 @@ export default function LessonGrid({
           <Link to={`/lesson/${l.id}`}>
             {/* Tocar pela rede é o normal da aula remota: nada de cinza. Só a que falta no disco fica apagada. */}
             <div className={`relative aspect-video overflow-hidden bg-neutral-800 ${l.missing ? 'opacity-40' : ''}`}>
-              <CapaAula src={api.lessonThumbUrl(l.id)} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+              <CapaAula src={api.lessonThumbUrl(l.id)} className="absolute inset-0" loading="lazy" />
               {l.missing && <span className="absolute left-1 top-1 rounded bg-amber-900/80 px-1 text-[10px] text-amber-200">não encontrada</span>}
             </div>
             <div className="p-2">
