@@ -9,7 +9,14 @@ import { BLOCO } from './blocos';
 // continuava lento. O Telegram Desktop abre várias sessões por DC para baixar;
 // aqui é o mesmo (CONEXOES_DOWNLOAD, em blocos.ts). O "Baixar" usa todas; tocar a
 // aula, uma (cada seek descartaria o que estava em andamento).
-const PEDIDOS_POR_CONEXAO = 4;
+// Eram 4: com 8 conexões, 32 MB em voo por arquivo, o dobro do que o tdlib usa
+// com Premium (8 sessões, 16 MB). O excesso só fazia o Telegram responder com flood.
+const PEDIDOS_POR_CONEXAO = 2;
+// Bloco sem resposta: o GramJS não tem limite de tempo por pedido, e as conexões
+// extras não recebem ping. Um pedido preso num socket meio morto parava o arquivo
+// inteiro (os blocos são entregues em ordem), e a tela mostrava "1 KB/s" para sempre.
+// Passou disto, a conexão é trocada e o bloco pedido de novo.
+const LIMITE_BLOCO_MS = 20_000;
 // Conexão extra parada por este tempo é fechada.
 const SOLTAR_CONEXAO_MS = 60_000;
 // Abrir a conexão (e, noutro DC, exportar o login) sem rede ficaria preso para sempre.
@@ -590,27 +597,41 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
           const req = new Api.upload.GetFile({ location: local, offset: bigInt(pos), limit: BLOCO, precise: false, cdnSupported: false });
           for (let t = 0; ; t++) {
             if (signal.aborted) return Buffer.alloc(0);
-            const conexao = await conexaoDe(dc, vaga % conexoes);
+            let conexao: Conexao | null = null;
+            let limite: ReturnType<typeof setTimeout> | undefined;
             try {
-              const r = await client.invokeWithSender(req, conexao.sender);
+              // Dentro do try: conexão que não abriu em 20 s é erro passageiro do
+              // bloco, não motivo para jogar fora o arquivo inteiro.
+              conexao = await conexaoDe(dc, vaga % conexoes);
+              // sender.send, e não client.invokeWithSender: este dorme calado em todo
+              // FLOOD_WAIT/FLOOD_PREMIUM_WAIT de até 60 s (floodSleepThreshold), com os
+              // 16 blocos em voo dormindo juntos, e o limite de tempo abaixo cortaria o sono.
+              const r = await Promise.race([
+                conexao.sender.send(req),
+                new Promise<never>((_, rej) => {
+                  limite = setTimeout(() => rej({ errorMessage: 'TIMEOUT', travou: true }), LIMITE_BLOCO_MS);
+                }),
+              ]);
               if (!(r instanceof Api.upload.File)) throw new Error('CDN');
               return Buffer.from(r.bytes);
             } catch (e) {
-              const err = e as { newDc?: number; errorMessage?: string; seconds?: number };
+              const err = e as { newDc?: number; errorMessage?: string; seconds?: number; travou?: boolean };
               if (err.newDc) {
                 dc = err.newDc;
                 continue;
               }
               const msg = err.errorMessage ?? '';
+              if (err.travou && conexao) descartarConexao(dc, vaga % conexoes, conexao);
               if (t >= TENTATIVAS_POR_BLOCO || signal.aborted) throw e;
-              if (/^FLOOD(_PREMIUM)?_WAIT/.test(msg)) {
+              // O GramJS troca a mensagem do flood por "FLOOD" e guarda o tempo em seconds.
+              if (typeof err.seconds === 'number' && /^FLOOD/.test(msg)) {
                 if ((err.seconds ?? 0) > FLOOD_MAX_ESPERA_SEG) throw e;
                 await dormir(((err.seconds ?? 1) + 1) * 1000, signal);
                 continue;
               }
               // Chave recusada numa conexão extra: é ela que está ruim (a sessão
               // vale, o documento() acabou de passar pela principal). Abre outra.
-              if (/^AUTH_KEY_(UNREGISTERED|INVALID)$|^SESSION_REVOKED$/.test(msg) && t < 2) {
+              if (/^AUTH_KEY_(UNREGISTERED|INVALID)$|^SESSION_REVOKED$/.test(msg) && t < 2 && conexao) {
                 descartarConexao(dc, vaga % conexoes, conexao);
                 continue;
               }
@@ -618,8 +639,10 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
               const passageiro = msg === 'TIMEOUT' || /^-?5\d\d$|INTERNAL|_TOO_MUCH|RPC_CALL_FAIL|RPC_MCGET_FAIL/.test(msg) || !msg;
               if (!passageiro) throw e;
               // Sem errorMessage é a conexão que caiu: abre outra no lugar.
-              if (!msg) descartarConexao(dc, vaga % conexoes, conexao);
+              if (!msg && conexao) descartarConexao(dc, vaga % conexoes, conexao);
               await dormir(Math.min(500 * 2 ** t, 8000), signal);
+            } finally {
+              clearTimeout(limite);
             }
           }
         };

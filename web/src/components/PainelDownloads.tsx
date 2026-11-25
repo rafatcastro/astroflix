@@ -31,7 +31,9 @@ function Item({ e }: { e: DownloadCurso }) {
   let linha: string;
   if (e.naFila) linha = 'Na fila';
   else if (e.ativo)
-    linha = e.velocidade == null ? 'Começando…' : `${formatBytes(e.velocidade)}/s${restante != null ? ` · ${formatRestante(restante)}` : ''}`;
+    // Velocidade 0 é bloco esperando resposta (a medida anda de 1 MB em 1 MB):
+    // formatBytes daria "1 KB/s", que parecia um download lento, e não parado.
+    linha = e.velocidade == null ? 'Começando…' : e.velocidade === 0 ? (e.origem === 'telegram' ? 'Aguardando o Telegram…' : 'Aguardando…') : `${formatBytes(e.velocidade)}/s${restante != null ? ` · ${formatRestante(restante)}` : ''}`;
   else if (pronto) linha = 'Concluído';
   else if (e.erro && e.tentarEm)
     linha = `${e.origem === 'telegram' ? mensagemErroTelegram(e.erro) : mensagemErroDrive(e.erro)} Tentando de novo em ${Math.max(1, Math.round((e.tentarEm - Date.now()) / 1000))} s.`;

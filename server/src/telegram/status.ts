@@ -37,7 +37,9 @@ export function falhaDoErro(e: unknown): FalhaTelegram {
   if (e instanceof FalhaTelegram) return e;
   const err = e as { errorMessage?: unknown; seconds?: unknown; code?: unknown; message?: unknown } | null;
   const codigo = typeof err?.errorMessage === 'string' ? err.errorMessage : '';
-  if (codigo.startsWith('FLOOD_WAIT') || codigo.startsWith('FLOOD_PREMIUM_WAIT')) {
+  // O FloodWaitError do GramJS (FLOOD_WAIT_X e FLOOD_PREMIUM_WAIT_X) chega com
+  // errorMessage "FLOOD" e o tempo em seconds: só o prefixo nunca casava.
+  if (codigo.startsWith('FLOOD_WAIT') || codigo.startsWith('FLOOD_PREMIUM_WAIT') || (codigo === 'FLOOD' && typeof err?.seconds === 'number')) {
     return new FalhaTelegram('flood', typeof err?.seconds === 'number' ? err.seconds : undefined);
   }
   for (const [re, tipo] of POR_CODIGO) if (re.test(codigo)) return new FalhaTelegram(tipo);
