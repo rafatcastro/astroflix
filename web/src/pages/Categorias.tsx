@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, type Collection } from '../api/client';
@@ -6,6 +6,8 @@ import { useCollections, useCourses } from '../api/hooks';
 import { caminhoDaCategoria, SEM } from '../components/CabecalhoCategoria';
 import ConfirmDialog from '../components/ConfirmDialog';
 import DialogoCategoria from '../components/DialogoCategoria';
+import { CampoBusca } from '../components/CampoBusca';
+import { ResultadosDaBusca } from '../components/BuscaGeral';
 import { EstudoDeHoje, PainelEstudo } from '../components/Pomodoro';
 import { Plus, Settings as SettingsIcon } from '../components/icons';
 import { getPref, setPref } from '../lib/prefs';
@@ -39,6 +41,25 @@ export default function Categorias() {
   const [excluindo, setExcluindo] = useState<Collection | null>(null);
   const [nomeandoSem, setNomeandoSem] = useState(false);
   const [apagandoSem, setApagandoSem] = useState(false);
+
+  // A busca é lembrada enquanto o app está aberto: voltar de uma aula achada
+  // devolve os mesmos resultados, em vez do menu vazio.
+  const [busca, setBusca] = useState(() => sessionStorage.getItem('inicio.busca') ?? '');
+  useEffect(() => sessionStorage.setItem('inicio.busca', busca), [busca]);
+  const buscando = busca.trim() !== '';
+  const campoBusca = useRef<HTMLInputElement>(null);
+  // "/" leva ao campo, como no YouTube e no GitHub: buscar sem tirar a mão do teclado.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const alvo = e.target as HTMLElement | null;
+      if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable)) return;
+      e.preventDefault();
+      campoBusca.current?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
 
   const [mostrarSem, setMostrarSem] = useState(() => getPref<boolean>('inicio.mostrarSemCategoria', false));
   useEffect(() => {
@@ -135,6 +156,18 @@ export default function Categorias() {
         </div>
       </header>
 
+      <CampoBusca
+        valor={busca}
+        onMudar={setBusca}
+        inputRef={campoBusca}
+        placeholder="Buscar em todos os cursos, aulas e PDFs  ( / )"
+        className="mb-8"
+      />
+
+      {buscando ? (
+        <ResultadosDaBusca busca={busca} cursos={cursos ?? []} docs={docs ?? []} cats={cats ?? []} />
+      ) : (
+      <>
       <PainelEstudo />
 
       {isLoading && <p className="text-sm text-neutral-500">Carregando…</p>}
@@ -185,6 +218,9 @@ export default function Categorias() {
             Uma pós, um concurso, um idioma. Dentro dela você adiciona os cursos, os PDFs e as questões.
           </p>
         </div>
+      )}
+
+      </>
       )}
 
       {menu && (

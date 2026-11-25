@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { Lupa, X } from './icons';
 
 // O campo que filtra as aulas do curso (página do curso e lateral do player).
@@ -6,15 +7,20 @@ export function CampoBusca({
   valor,
   onMudar,
   className = '',
+  placeholder = 'Buscar aulas deste curso',
+  inputRef,
 }: {
   valor: string;
   onMudar: (v: string) => void;
   className?: string;
+  placeholder?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   return (
     <div className={`relative ${className}`}>
       <Lupa size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
       <input
+        ref={inputRef}
         type="search"
         value={valor}
         onChange={(e) => onMudar(e.target.value)}
@@ -24,8 +30,8 @@ export function CampoBusca({
             onMudar('');
           }
         }}
-        placeholder="Buscar aulas deste curso"
-        aria-label="Buscar aulas deste curso"
+        placeholder={placeholder}
+        aria-label={placeholder}
         className="h-10 w-full rounded-lg border border-neutral-800 bg-neutral-900 pl-9 pr-9 text-sm text-neutral-100 placeholder:text-neutral-500 focus:border-blue-600 focus:outline-none [&::-webkit-search-cancel-button]:hidden"
       />
       {valor && (

@@ -33,6 +33,7 @@ import { flashcardsRoutes } from './routes/flashcards';
 import { configSupabase, criarClienteSupabase, type ClienteSupabase } from './nuvem/cliente';
 import { criarServicosConta } from './nuvem/conta';
 import { estudoRoutes } from './routes/estudo';
+import { buscaRoutes } from './routes/busca';
 import { criarSincronizador, type Sincronizador } from './nuvem/sincronizar';
 import { contaRoutes } from './routes/conta';
 import { documentosRoutes } from './routes/documentos';
@@ -188,6 +189,7 @@ export function buildApp(
   app.register(linksRoutes, { db, config });
   app.register(extensaoRoutes, { db, config });
   app.register(mapaRoutes, { db, config, drive });
+  app.register(buscaRoutes, { db });
   // [ROUTES]
 
   if (opts?.retomarDownloads) {

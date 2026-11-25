@@ -457,7 +457,14 @@ export interface ResumoEstudo {
   porCategoria: Record<string, NumerosEstudo>;
 }
 
+export interface AulaAchada {
+  id: string; titulo: string; modulo: string | null;
+  cursoId: string; curso: string; categoriaId: string | null;
+  duracaoSec: number | null; concluida: boolean;
+}
+
 export const api = {
+  buscarAulas: (q: string) => jsonFetch<{ aulas: AulaAchada[]; total: number }>(`/api/busca/aulas?q=${encodeURIComponent(q)}`),
   estudoResumo: () => jsonFetch<ResumoEstudo>('/api/estudo/resumo'),
   registrarPomodoro: (b: { categoriaId: string | null; inicio: string; fim: string; minutos: number }) =>
     jsonFetch<{ id: string }>('/api/estudo/pomodoros', { method: 'POST', body: JSON.stringify(b) }),
