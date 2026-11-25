@@ -10,7 +10,8 @@ import MapearCurso from '../components/MapearCurso';
 import ModelarPorTexto, { type Proposta } from '../components/ModelarPorTexto';
 import AulasNovas from '../components/AulasNovas';
 import LessonGrid from '../components/LessonGrid';
-import { montarArvore, type No } from '../lib/arvore';
+import { filtrarArvore, montarArvore, type No } from '../lib/arvore';
+import { CampoBusca } from '../components/CampoBusca';
 import { KIND_LABEL } from '../components/MaterialsSection';
 import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from '../components/VisualizadorArquivo';
 import { cliqueFora } from '../lib/desktop';
@@ -78,6 +79,9 @@ export default function Course() {
   const abriuSozinho = useRef(false);
   // "Depois" no popup das aulas novas: volta na próxima visita ao curso.
   const [novasDepois, setNovasDepois] = useState(false);
+  const [busca, setBusca] = useState('');
+  // Outro curso: a busca do anterior não vale aqui.
+  useEffect(() => setBusca(''), [id]);
   useEffect(() => {
     abriuSozinho.current = false;
     setNovasDepois(false);
@@ -206,7 +210,8 @@ export default function Course() {
       );
     },
   });
-  const arvore = montarArvore(allLessons, data.materials, data.source);
+  const buscando = busca.trim() !== '';
+  const arvore = filtrarArvore(montarArvore(allLessons, data.materials, data.source), busca);
   const linhaDaAula = (l: LessonDTO, titulo: string) => (
     <div
       key={l.id}
@@ -330,7 +335,8 @@ export default function Course() {
         continue;
       }
       fecharSoltas();
-      const recolhido = recolhidosDoCurso.includes(no.chave);
+      // Buscando, tudo o que sobrou fica aberto: a aula achada não pode ficar escondida.
+      const recolhido = !buscando && recolhidosDoCurso.includes(no.chave);
       const concluidas = no.aulas.filter((l) => l.completed).length;
       const moduloFeito = moduloConcluido(no.aulas);
       const id = `pasta-${no.chave}`;
@@ -640,7 +646,7 @@ export default function Course() {
         </div>
       </div>
 
-      <div className="mt-6 flex items-center gap-3 text-sm">
+      <div className="mt-6 flex flex-wrap items-center gap-3 text-sm">
         <div className="inline-flex overflow-hidden rounded-lg border border-neutral-800">
           <button
             type="button"
@@ -675,9 +681,16 @@ export default function Course() {
             />
           </label>
         )}
+        <CampoBusca valor={busca} onMudar={setBusca} className="min-w-[14rem] flex-1 sm:ml-auto sm:max-w-xs" />
       </div>
 
-      <div className="mt-6 space-y-2">{nivel(arvore, 0)}</div>
+      <div className="mt-6 space-y-2">
+        {buscando && !arvore.length ? (
+          <p className="py-8 text-center text-sm text-neutral-500">Nenhuma aula com “{busca.trim()}” neste curso.</p>
+        ) : (
+          nivel(arvore, 0)
+        )}
+      </div>
 
       {visualizado && <VisualizadorArquivo viewer={visualizado} onFechar={fecharVisualizador} />}
       </div>

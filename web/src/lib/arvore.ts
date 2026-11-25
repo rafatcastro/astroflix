@@ -298,3 +298,33 @@ export function caminhoDaAula(nos: No[], id: string): string[] {
   }
   return [];
 }
+
+// A busca ignora acento e maiúscula: "introducao" acha "Introdução".
+const paraBusca = (t: string) =>
+  t
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+
+/**
+ * Só o que bate com a busca, mantendo as pastas do caminho (a pessoa vê de que
+ * módulo é a aula achada). Cada palavra precisa aparecer, em qualquer ordem: "aula 3
+ * python" acha "Python - Aula 3". A pasta cujo nome bate entra inteira.
+ */
+export function filtrarArvore(nos: No[], busca: string): No[] {
+  const palavras = paraBusca(busca).split(/\s+/).filter(Boolean);
+  if (!palavras.length) return nos;
+  const bate = (t: string) => {
+    const n = paraBusca(t);
+    return palavras.every((p) => n.includes(p));
+  };
+  const filtrar = (lista: No[]): No[] =>
+    lista.flatMap((no): No[] => {
+      if (no.tipo === 'aula') return bate(no.titulo) ? [no] : [];
+      if (no.tipo === 'material') return bate(no.material.name) ? [no] : [];
+      if (bate(no.nome)) return [no];
+      const filhos = filtrar(no.filhos);
+      return filhos.length ? [{ ...no, filhos }] : [];
+    });
+  return filtrar(nos);
+}

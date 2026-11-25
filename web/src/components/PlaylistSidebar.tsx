@@ -5,7 +5,8 @@ import { cliqueFora } from '../lib/desktop';
 import { KIND_LABEL } from './MaterialsSection';
 import { VisualizadorArquivo, tipoDeVisualizacao, type Visualizado } from './VisualizadorArquivo';
 import { formatDuration } from '../lib/format';
-import { caminhoDaAula, montarArvore, type No } from '../lib/arvore';
+import { caminhoDaAula, filtrarArvore, montarArvore, type No } from '../lib/arvore';
+import { CampoBusca } from './CampoBusca';
 import { ChevronRight } from './icons';
 import { CapaAula } from './CapaAula';
 import { CaixaConcluida, moduloConcluido } from './CaixaConcluida';
@@ -32,6 +33,8 @@ export default function PlaylistSidebar({
   const fecharVisualizador = useCallback(() => setVisualizado(null), []);
   const caminhoAtual = caminhoDaAula(arvore, currentLessonId).join('\n');
   const [abertos, setAbertos] = useState<string[]>([]);
+  const [busca, setBusca] = useState('');
+  const buscando = busca.trim() !== '';
 
   useEffect(() => {
     setAbertos(caminhoAtual ? caminhoAtual.split('\n') : []);
@@ -51,6 +54,10 @@ export default function PlaylistSidebar({
 
   if (!data) return <p className="p-3 text-sm text-neutral-500">Carregando…</p>;
   const posicao = new Map(todas.map((l, i) => [l.id, i + 1]));
+  // A coluna da esquerda cabe o maior número do curso: com milhares de aulas (Telegram),
+  // "3984" numa coluna de 20 px invadia a capa.
+  const larguraDoNumero = `${String(todas.length).length + 0.5}ch`;
+  const visiveis = filtrarArvore(arvore, busca);
   const alternar = (chave: string) =>
     setAbertos((a) => (a.includes(chave) ? a.filter((c) => c !== chave) : [...a, chave]));
 
@@ -88,7 +95,8 @@ export default function PlaylistSidebar({
       const recuo = { paddingLeft: `${0.75 + profundidade * 0.75}rem` };
       if (no.tipo === 'material') return linhaDoMaterial(no.material, profundidade);
       if (no.tipo === 'pasta') {
-        const aberto = abertos.includes(no.chave);
+        // Buscando, tudo o que sobrou fica aberto: a aula achada não pode ficar escondida numa pasta fechada.
+        const aberto = buscando || abertos.includes(no.chave);
         const feitas = no.aulas.filter((l) => l.completed).length;
         const moduloFeito = moduloConcluido(no.aulas);
         const id = `pasta-${no.chave}`;
@@ -133,7 +141,7 @@ export default function PlaylistSidebar({
               atual ? 'bg-blue-600/25' : 'hover:bg-neutral-800/70'
             }`}
           >
-            <span className={`grid w-5 shrink-0 place-items-center text-center text-xs ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
+            <span style={{ minWidth: larguraDoNumero }} className={`grid w-5 shrink-0 place-items-center text-center text-xs tabular-nums ${l.completed && !atual ? 'text-green-400' : 'text-neutral-500'}`}>
               {estado || posicao.get(l.id)}
             </span>
             <span className="relative shrink-0">
@@ -156,7 +164,14 @@ export default function PlaylistSidebar({
 
   return (
     <div>
-      {nivel(arvore, 0)}
+      <div className="p-3 pb-1">
+        <CampoBusca valor={busca} onMudar={setBusca} />
+      </div>
+      {buscando && !visiveis.length ? (
+        <p className="p-3 text-sm text-neutral-500">Nenhuma aula com “{busca.trim()}” neste curso.</p>
+      ) : (
+        nivel(visiveis, 0)
+      )}
       {visualizado && <VisualizadorArquivo viewer={visualizado} onFechar={fecharVisualizador} />}
     </div>
   );

@@ -118,6 +118,15 @@ export function HelpCircle(p: IconProps) {
   );
 }
 
+export function Lupa(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
+    </Svg>
+  );
+}
+
 export function X(p: IconProps) {
   return (
     <Svg {...p}>
