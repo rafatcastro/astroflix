@@ -13,6 +13,8 @@ import HelpDrawer from './components/HelpDrawer';
 import AtualizacaoInicial from './components/AtualizacaoInicial';
 import PortaoConta from './components/PortaoConta';
 import { PomodoroProvider } from './lib/pomodoro';
+import { TocandoProvider } from './lib/tocando';
+import BarraTocando from './components/BarraTocando';
 
 function NaCategoria({ pagina }: { pagina: (cat: string) => JSX.Element }) {
   const { cat = 'sem' } = useParams();
@@ -25,6 +27,8 @@ export default function App() {
       <PortaoConta>
       {/* O pomodoro vive acima das rotas: trocar de tela não para o timer. */}
       <PomodoroProvider>
+      {/* A aula tocando também vive acima das rotas: a barra de baixo aparece em toda tela. */}
+      <TocandoProvider>
       <Routes>
         <Route path="/" element={<Categorias />} />
         {/* Dentro de uma categoria: a key remonta a página ao trocar de categoria. */}
@@ -38,6 +42,8 @@ export default function App() {
         <Route path="/pdfs" element={<Navigate to={caminhoDaCategoria(ultimaCategoria(), 'pdfs')} replace />} />
         <Route path="/pdf/:id" element={<LeitorPdf />} />
       </Routes>
+      <BarraTocando />
+      </TocandoProvider>
       </PomodoroProvider>
       </PortaoConta>
       {/* Fora das rotas: a ajuda abre por cima de qualquer tela sem desmontar a

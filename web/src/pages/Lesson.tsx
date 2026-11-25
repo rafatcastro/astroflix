@@ -15,6 +15,7 @@ import { ATALHOS } from '../help/content';
 import { ArrowLeft, Camera, SkipBack, SkipForward, Check, Repeat, HelpCircle, X, Expand, Cards } from '../components/icons';
 import FlashcardsPanel from '../components/FlashcardsPanel';
 import { BloqueioDaPausa, WidgetPomodoro } from '../components/Pomodoro';
+import { useTocando } from '../lib/tocando';
 import { usePomodoro } from '../lib/pomodoro';
 import { CaixaConcluida } from '../components/CaixaConcluida';
 
@@ -59,7 +60,8 @@ export default function Lesson() {
   // compartilhado nem ordem de listeners para acertar.
   const [searchParams] = useSearchParams();
   const ajudaAberta = searchParams.has('ajuda');
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const tocando = useTocando();
   const furthestRef = useRef(0);
   const lastSaveRef = useRef(0);
   const mountedRef = useRef(true);
@@ -200,6 +202,65 @@ export default function Lesson() {
     [id],
   );
 
+  // Um vídeo por vez. Cada aula ganha um <video> novo (a key leva o id) e o da aula
+  // anterior é solto aqui: pausa, perde o src e o load() fecha a conexão do stream.
+  // Sem isso o WebKit mantinha o vídeo desmontado baixando (às vezes tocando o som),
+  // e a aula nova ficava girando sem conexão livre com o servidor.
+  const prenderVideo = useCallback((v: HTMLVideoElement | null) => {
+    const antigo = videoRef.current;
+    videoRef.current = v;
+    if (!antigo || antigo === v) return;
+    const aulaId = antigo.dataset.aula;
+    if (aulaId && antigo.currentTime > 0) {
+      // A posição sai do próprio vídeo que está saindo, com o id dele.
+      fetch(`/api/lessons/${aulaId}/progress`, {
+        method: 'PATCH',
+        keepalive: true,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          position_sec: antigo.currentTime,
+          furthest_sec: Math.max(furthestRef.current, antigo.currentTime),
+          duration_sec: Number.isFinite(antigo.duration) ? antigo.duration : null,
+        }),
+      }).catch(() => {});
+    }
+    furthestRef.current = 0;
+    antigo.pause();
+    antigo.removeAttribute('src');
+    antigo.load();
+  }, []);
+
+  // A barra de baixo (em todas as telas) mostra esta aula e toca/pausa por este vídeo.
+  const publicarTocando = useCallback(() => {
+    if (!lesson) return;
+    const v = videoRef.current;
+    tocando.publicar({
+      id: lesson.id,
+      titulo: lesson.title,
+      curso: lesson.courseTitle,
+      cursoId: lesson.courseId,
+      modulo: lesson.module,
+      posicaoSec: v?.currentTime || lesson.position || 0,
+      duracaoSec: v && Number.isFinite(v.duration) ? v.duration : (lesson.durationSec ?? null),
+      tocando: !!v && !v.paused,
+    });
+  }, [lesson, tocando.publicar]);
+  useEffect(() => {
+    publicarTocando();
+  }, [publicarTocando]);
+  const { registrarControles } = tocando;
+  useEffect(() => {
+    registrarControles({
+      alternar: () => {
+        const v = videoRef.current;
+        if (!v) return;
+        if (v.paused) void v.play().catch(() => {});
+        else v.pause();
+      },
+    });
+    return () => registrarControles(null);
+  }, [registrarControles]);
+
   const goTo = useCallback(
     (lessonId: string) => {
       save();
@@ -307,6 +368,7 @@ export default function Lesson() {
       mandarAssistido(false);
     }
     furthestRef.current = Math.max(furthestRef.current, v.currentTime);
+    publicarTocando();
     const now = Date.now();
     if (now - lastSaveRef.current > 5000) {
       lastSaveRef.current = now;
@@ -322,7 +384,8 @@ export default function Lesson() {
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('beforeunload', onUnload);
     return () => {
-      save({ keepalive: true });
+      // Salvar ao sair fica com prenderVideo: aqui o videoRef já aponta para o vídeo
+      // da aula nova, e a posição dela (0) ia para a aula anterior.
       document.removeEventListener('visibilitychange', onHide);
       window.removeEventListener('beforeunload', onUnload);
     };
@@ -903,8 +966,9 @@ export default function Lesson() {
             />
           ) : (
           <video
-            key={videoKey}
-            ref={videoRef}
+            key={`${id}:${videoKey}`}
+            ref={prenderVideo}
+            data-aula={id}
             src={`/api/lessons/${id}/stream`}
             className="aspect-video max-h-[calc(100vh-12rem)] w-full bg-black object-contain"
             controls
@@ -920,8 +984,10 @@ export default function Lesson() {
             onPlay={() => {
               ultimoTique.current = Date.now();
               if (emPausaRef.current) videoRef.current?.pause();
+              publicarTocando();
             }}
             onPause={() => {
+              publicarTocando();
               ultimoTique.current = 0;
               mandarAssistido(true);
               save();

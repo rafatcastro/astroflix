@@ -84,8 +84,11 @@ body { margin: 0; background: rgb(var(--n-950)); color: rgb(var(--n-100)); }
   .aspect-video { position: relative; }
   .aspect-video::before { content: ''; display: block; padding-top: 56.25%; }
 }
-.h-screen { height: 100vh; height: 100dvh; }
-.min-h-screen { min-height: 100vh; min-height: 100dvh; }
+/* --barra-tocando: a altura da barra da aula tocando (BarraTocando.tsx), que fica
+   fixa embaixo; as telas de altura cheia (o player) encolhem para não ficar atrás dela. */
+.h-screen { height: calc(100vh - var(--barra-tocando, 0px)); height: calc(100dvh - var(--barra-tocando, 0px)); }
+.min-h-screen { min-height: calc(100vh - var(--barra-tocando, 0px)); min-height: calc(100dvh - var(--barra-tocando, 0px)); }
+body { padding-bottom: var(--barra-tocando, 0px); }
 .max-h-\[85dvh\] { max-height: 85vh; max-height: 85dvh; }
 
 /* ---- Painel de ajuda ----

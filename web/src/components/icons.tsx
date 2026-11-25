@@ -118,6 +118,15 @@ export function HelpCircle(p: IconProps) {
   );
 }
 
+export function Pause(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" />
+      <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" />
+    </Svg>
+  );
+}
+
 export function Lupa(p: IconProps) {
   return (
     <Svg {...p}>
