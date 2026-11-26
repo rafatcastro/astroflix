@@ -593,6 +593,16 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         const tamanho = arquivo.tamanho;
         // O arquivo pode morar noutro DC (FILE_MIGRATE): daí em diante, todos os blocos vão para lá.
         let dc = arquivo.dcId;
+        // Interrompido (a pessoa abriu uma aula de outro curso, ou mandou parar): larga
+        // os blocos em voo na hora. Sem isso, o "passar na frente" esperava o bloco da
+        // vez responder, e com o Telegram parado a aula aberta (um .ts do Drive, que
+        // só toca depois de baixar e converter) ficava esperando para sempre.
+        const interrompido = new Promise<never>((_, rej) => {
+          const f = () => rej({ errorMessage: 'ABORTADO' });
+          if (signal.aborted) f();
+          else signal.addEventListener('abort', f, { once: true });
+        });
+        interrompido.catch(() => undefined);
         const pedir = async (pos: number, vaga: number): Promise<Buffer> => {
           const req = new Api.upload.GetFile({ location: local, offset: bigInt(pos), limit: BLOCO, precise: false, cdnSupported: false });
           for (let t = 0; ; t++) {
@@ -608,6 +618,7 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
               // 16 blocos em voo dormindo juntos, e o limite de tempo abaixo cortaria o sono.
               const r = await Promise.race([
                 conexao.sender.send(req),
+                interrompido,
                 new Promise<never>((_, rej) => {
                   limite = setTimeout(() => rej({ errorMessage: 'TIMEOUT', travou: true }), LIMITE_BLOCO_MS);
                 }),
@@ -661,7 +672,7 @@ function envolver(client: TelegramClient, m: Modulos, aoPerderSessao: () => void
         try {
           encher();
           while (fila.length) {
-            const bloco = await fila.shift()!;
+            const bloco = await Promise.race([fila.shift()!, interrompido]);
             if (signal.aborted) return;
             entregue += bloco.length;
             if (bloco.length) yield bloco;
