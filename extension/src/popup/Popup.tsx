@@ -1,4 +1,5 @@
-// O popup: pareia com o Astroflix (a chave das Configurações), lista as playlists
+// O popup: conecta ao Astroflix (a chave vem do arquivo que o app grava na pasta da
+// extensão; colar a das Configurações é só o recurso de quem a carregou de outro lugar), lista as playlists
 // e manda a aula aberta para a escolhida. O "Importar várias aulas" só dispara o
 // trabalho, que roda no background.js: o popup fecha quando perde o foco.
 import { useEffect, useRef, useState } from 'react';
@@ -73,7 +74,7 @@ export function Popup() {
               setTela('parear');
             }}
           >
-            Trocar a chave
+            Colar uma chave
           </a>
         </p>
       )}
@@ -97,7 +98,8 @@ function Pareamento({ porta, avisar, aoParear }: { porta: number | null; avisar:
   return (
     <section>
       <p className="aviso">
-        No Astroflix, abra <b>Configurações → Extensão do navegador</b>, copie a chave e cole aqui. O app precisa estar aberto.
+        Não deu para conectar sozinho: esta extensão não foi instalada pelo app. O jeito fácil é instalar pelo Astroflix, em{' '}
+        <b>Configurações → Extensão do navegador</b>. Ou copie a chave de lá e cole aqui.
       </p>
       <label htmlFor="chave">Chave</label>
       <input

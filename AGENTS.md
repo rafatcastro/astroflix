@@ -266,8 +266,8 @@ SQLite. A SPA React conversa com ele por uma API JSON.
   User-Agent); o popup escolhe a playlist, o título (o h1 da página) e o vídeo, e manda para
   `POST /api/extensao/playlists/:id/itens`. O item leva os `cabecalhos` para o yt-dlp. O `extension/dist` (o
   `build:servidor` compila a extensão antes) entra no build (`EXTENSAO` em `bundled.ts`, por
-  `gerar-bundled.mjs`, só texto) e Configurações → Extensão do navegador a grava em `DATA_DIR/extensao`
-  (o nome antigo fica: o Chrome guarda o caminho de quem já carregou) e abre `chrome://extensions` ("Carregar sem compactação"). **Segurança:**
+  `gerar-bundled.mjs`) e Configurações → Extensão do navegador a grava em `DATA_DIR/extensao`
+  (o nome antigo fica: o Chrome guarda o caminho de quem já carregou) e abre `chrome://extensions` ("Carregar sem compactação"). Junto vai `astroflix.json` com a chave: o popup a lê de dentro da própria pasta (`chaveDoApp`) e conecta sozinho, sem colar nada; colar a chave ("Chave manual" nas Configurações) fica para quem carregou de outra pasta. Ao abrir, o app regrava a pasta se a versão embutida mudou e sempre regrava o `astroflix.json` (`atualizarExtensaoInstalada`). O `EXTENSAO` vai em base64 (os ícones são PNG; o desenho-fonte é `extension/icone.svg`). **Segurança:**
   a guarda deixa passar `chrome-extension://` só em `/api/extensao/*` (`ehExtensao`), e essas rotas
   exigem `X-Astroflix-Chave` (`routes/extensao.ts`, gerada em `settings` e mostrada nas Configurações).
   A extensão procura o app de 7777 a 7797. O download relê o manifesto a cada vídeo e grava só o item

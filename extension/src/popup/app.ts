@@ -44,13 +44,32 @@ export type ErroDoApp = 'sem-app' | 'chave-errada' | 'precisa-entrar';
 
 export const ERROS: Record<string, string> = {
   'sem-app': 'O Astroflix não respondeu. Abra o app e tente de novo.',
-  'chave-errada': 'Chave errada. Copie de novo em Configurações → Extensão do navegador.',
+  'chave-errada': 'A chave não confere. Reinstale a extensão pelo app (Configurações → Extensão do navegador) ou cole a chave de lá.',
   'precisa-entrar': 'Entre na sua conta no Astroflix primeiro.',
 };
 
+/**
+ * A chave que o app grava dentro da pasta da extensão (astroflix.json) ao instalá-la
+ * e a cada abertura. Com ela o popup conecta sozinho; null quando a extensão foi
+ * carregada de outro lugar (extension/dist, em desenvolvimento).
+ */
+export async function chaveDoApp(): Promise<string | null> {
+  try {
+    const res = await fetch(chrome.runtime.getURL('astroflix.json'), { cache: 'no-store' });
+    if (!res.ok) return null;
+    const c = (await res.json()) as { chave?: unknown };
+    return typeof c.chave === 'string' && c.chave ? c.chave : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function lerConfig(): Promise<Config> {
   const c = (await chrome.storage.local.get(['porta', 'chave', 'ultimaPlaylist'])) as Partial<Config>;
-  return { porta: c.porta ?? null, chave: c.chave ?? null, ultimaPlaylist: c.ultimaPlaylist ?? null };
+  // A do arquivo vence a guardada: é a que o app aceita agora.
+  const doApp = await chaveDoApp();
+  if (doApp && doApp !== c.chave) await chrome.storage.local.set({ chave: doApp });
+  return { porta: c.porta ?? null, chave: doApp ?? c.chave ?? null, ultimaPlaylist: c.ultimaPlaylist ?? null };
 }
 
 export async function api<T = unknown>(cfg: Config, caminho: string, init: RequestInit = {}): Promise<T> {

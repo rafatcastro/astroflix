@@ -301,9 +301,10 @@ function SecaoTelegram({ onNotice }: { onNotice: (m: string) => void }) {
 }
 
 // A extensão do Chrome manda a aula aberta (logado no site) para uma playlist
-// do app. Aqui fica a chave de pareamento e o "Instalar", que grava a extensão
-// numa pasta e abre chrome://extensions para a pessoa carregar (fora da loja,
-// só por lá).
+// do app. Aqui fica o "Instalar", que grava a extensão numa pasta (com a chave
+// dentro, em astroflix.json, para ela conectar sozinha) e abre chrome://extensions
+// para a pessoa carregar (fora da loja, só por lá). A chave à mostra é só para quem
+// carregou a extensão de outra pasta.
 function SecaoExtensao({ onNotice }: { onNotice: (m: string) => void }) {
   const { data } = useQuery({ queryKey: ['extensao'], queryFn: api.linksExtensao });
   const [instalando, setInstalando] = useState(false);
@@ -337,19 +338,6 @@ function SecaoExtensao({ onNotice }: { onNotice: (m: string) => void }) {
         guarda o progresso.
       </p>
       <div className="space-y-2 rounded-lg bg-neutral-900 px-3 py-3 text-sm">
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-neutral-400">Chave</span>
-          <code className="min-w-0 flex-1 select-all truncate rounded bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-200">
-            {data?.chave ?? '…'}
-          </code>
-          <button
-            type="button"
-            onClick={() => void copiar()}
-            className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
-          >
-            Copiar
-          </button>
-        </div>
         <div className="flex items-center justify-between gap-2">
           <span className="text-neutral-400">{data?.instalada ? `Gravada em ${data.pasta}` : 'Ainda não instalada'}</span>
           <button
@@ -369,9 +357,25 @@ function SecaoExtensao({ onNotice }: { onNotice: (m: string) => void }) {
               carregada, clique em ↻ nela.
             </li>
             <li>Fixe o ícone do Astroflix na barra (o quebra-cabeça → alfinete).</li>
-            <li>Na primeira vez, clique no ícone e cole a chave acima.</li>
+            <li>Pronto: a extensão acha o app e conecta sozinha, sem chave.</li>
           </ol>
         )}
+        <details className="text-neutral-400">
+          <summary className="cursor-pointer select-none hover:text-neutral-200">Chave manual (extensão carregada de outra pasta)</summary>
+          <div className="mt-2 flex items-center gap-2">
+            <span className="shrink-0 text-neutral-400">Chave</span>
+            <code className="min-w-0 flex-1 select-all truncate rounded bg-neutral-950 px-2 py-1 font-mono text-xs text-neutral-200">
+              {data?.chave ?? '…'}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copiar()}
+              className="min-h-[44px] shrink-0 rounded px-3 text-neutral-300 hover:text-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            >
+              Copiar
+            </button>
+          </div>
+        </details>
       </div>
     </section>
   );

@@ -37,20 +37,49 @@ function chaveConfere(db: Db, req: FastifyRequest): boolean {
 
 const pastaDaExtensao = (config: AppConfig) => path.join(config.dataDir, 'extensao');
 
+// O arquivo que a extensão lê de dentro da própria pasta (chrome.runtime.getURL)
+// para achar a chave sozinha: antes a pessoa tinha de copiar a chave das
+// Configurações e colar no popup. Só quem carregou esta pasta no Chrome o lê.
+const ARQUIVO_DA_CHAVE = 'astroflix.json';
+
+function gravarChave(db: Db, pasta: string): void {
+  fs.writeFileSync(path.join(pasta, ARQUIVO_DA_CHAVE), JSON.stringify({ chave: chaveDaExtensao(db) }));
+}
+
 /** Grava a extensão embutida no build (a versão desta release) na pasta de dados. */
-function gravarExtensao(config: AppConfig): string {
+function gravarExtensao(db: Db, config: AppConfig): string {
   const pasta = pastaDaExtensao(config);
   fs.rmSync(pasta, { recursive: true, force: true });
-  for (const [rel, texto] of Object.entries(EXTENSAO)) {
+  for (const [rel, base64] of Object.entries(EXTENSAO)) {
     const destino = path.join(pasta, rel);
     fs.mkdirSync(path.dirname(destino), { recursive: true });
-    fs.writeFileSync(destino, texto);
+    fs.writeFileSync(destino, Buffer.from(base64, 'base64'));
   }
+  gravarChave(db, pasta);
   return pasta;
+}
+
+/**
+ * Ao abrir: quem já tem a extensão na pasta recebe a versão deste build (o Chrome
+ * de quem a carregou lê os arquivos dali) e o arquivo da chave, que as versões
+ * antigas não gravavam. Sem isso, quem atualizou o app continuava tendo de colar a chave.
+ */
+function atualizarExtensaoInstalada(db: Db, config: AppConfig): void {
+  const pasta = pastaDaExtensao(config);
+  const manifesto = path.join(pasta, 'manifest.json');
+  if (!fs.existsSync(manifesto) || !EXTENSAO['manifest.json']) return;
+  try {
+    const embutido = Buffer.from(EXTENSAO['manifest.json'], 'base64').toString('utf8');
+    if (fs.readFileSync(manifesto, 'utf8') !== embutido) gravarExtensao(db, config);
+    else gravarChave(db, pasta);
+  } catch {
+    /* pasta sem permissão: fica como está, o popup ainda aceita a chave colada */
+  }
 }
 
 export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; config: AppConfig }): Promise<void> {
   const { db, config } = opts;
+  atualizarExtensaoInstalada(db, config);
 
   // ----- Para a interface do app (mesma origem) -----
 
@@ -65,7 +94,7 @@ export async function extensaoRoutes(app: FastifyInstance, opts: { db: Db; confi
   // (carregar uma extensão sem passar pela loja só se faz por lá).
   app.post('/api/links/extensao/instalar', async (_req, reply) => {
     if (!Object.keys(EXTENSAO).length) return reply.code(503).send({ error: 'sem-extensao-no-build' });
-    const pasta = gravarExtensao(config);
+    const pasta = gravarExtensao(db, config);
     abrirNoSistema(pasta);
     const exe = acharNavegador();
     if (exe) {

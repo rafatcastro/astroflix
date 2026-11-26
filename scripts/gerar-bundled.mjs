@@ -108,10 +108,10 @@ const supabase = lerSupabasePadrao();
 
 // A extensão do navegador, já compilada (extension/dist, pelo Vite + CRXJS): vai
 // junto para o app gravá-la numa pasta e a pessoa carregar no Chrome ("Instalar a
-// extensão", nas Configurações). Só texto: o build dela não gera imagens.
+// extensão", nas Configurações). Em base64, porque os ícones são PNG.
 const pastaExtensao = path.join(raiz, 'extension', 'dist');
 const extensao = fs.existsSync(pastaExtensao)
-  ? Object.fromEntries(listar(pastaExtensao).map(({ rel, completo }) => [rel, fs.readFileSync(completo, 'utf8')]))
+  ? Object.fromEntries(listar(pastaExtensao).map(({ rel, completo }) => [rel, fs.readFileSync(completo).toString('base64')]))
   : {};
 
 const entradas = arquivos.map(({ rel, completo }) => {
